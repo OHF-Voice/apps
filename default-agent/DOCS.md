@@ -14,7 +14,7 @@ Once installed, create a voice assistant with the discovered conversation agent 
 
 ### Custom Sentences
 
-Add your custom sentences to `/share/default-agent/custom_sentences/<language>`.
+Add your [custom sentences][] to `/share/default-agent/custom_sentences/<language>`.
 
 <!-- Links -->
 [wyoming]: https://www.home-assistant.io/integrations/wyoming/

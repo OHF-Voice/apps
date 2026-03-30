@@ -1,0 +1,35 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Start stt-tester service
+# ==============================================================================
+flags=()
+
+if bashio::config.true 'dev_intents'; then
+    repo_url='https://github.com/OHF-Voice/intents.git'
+    target_dir='/data/intents'
+
+    if [[ ! -d "${target_dir}/.git" ]]; then
+        echo 'Downloading development intents'
+        git clone --depth 1 --branch main "${repo_url}" "${target_dir}"
+    else
+        echo 'Syncing development intents'
+        cd "${target_dir}"
+        git fetch origin main --depth 1
+        git reset --hard origin/main
+    fi
+
+    flags+=('--intents-repo' "${target_dir}")
+fi
+
+if bashio::config.true 'debug_logging'; then
+    flags+=('--debug')
+fi
+
+exec python3 -m default_agent \
+    --uri 'tcp://0.0.0.0:10500' \
+    --zeroconf \
+    --hass-token "${SUPERVISOR_TOKEN}" \
+    --hass-api 'http://supervisor/core/api' \
+    --custom-sentences '/share/default-agent/custom_sentences' \
+    ${flags[@]}

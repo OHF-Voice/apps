@@ -1,0 +1,13 @@
+---
+configuration:
+  dev_intents:
+    name: Use development intents
+    description: >-
+      Use intents and sentences directly from the development repository.
+      These will be downloaded each time the app restarts.
+  debug_logging:
+    name: Debug logging
+    description: >-
+      Enable debug logging.
+network:
+  10500/tcp: default-agent Wyoming Protocol

@@ -1,0 +1,24 @@
+---
+version: 0.1.0
+slug: default-agent
+name: default-agent
+description: Assist agent
+url: https://github.com/OHF-Voice/apps/tree/master/default-agent
+arch:
+  - amd64
+  - aarch64
+init: false
+discovery:
+  - wyoming
+homeassistant_api: true
+options:
+  dev_intents: false
+  debug_logging: false
+schema:
+  dev_intents: bool
+  debug_logging: bool
+ports:
+  "10500/tcp": null
+map:
+  - share:rw
+homeassistant: 2026.4.0

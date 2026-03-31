@@ -1,5 +1,5 @@
 ---
-version: 0.1.0
+version: 0.1.1
 slug: default-agent
 name: default-agent
 description: Assist agent
@@ -21,4 +21,4 @@ ports:
   "10500/tcp": null
 map:
   - share:rw
-homeassistant: 2026.4.0
+homeassistant: 2026.3.0

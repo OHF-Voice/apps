@@ -9,8 +9,6 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 ENV DEFAULT_AGENT_VERSION=0.1.0
 
-COPY wheels/*.whl /wheels/
-
 RUN \
     apt-get update \
     && apt-get install -y --no-install-recommends \

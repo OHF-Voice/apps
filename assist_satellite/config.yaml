@@ -2,8 +2,8 @@
 version: 2.0.0
 slug: assist_satellite
 name: Assist Satellite
-description: Turn HA host into a voice assistant with a connected microphone and speaker
-url: https://github.com/OHF-Voice/apps/blob/main/assist_satellite
+description: Turn HA host into a voice assistant with a connected microphone and speaker 
+url: https://github.com/home-assistant/addons/blob/master/assist_satellite
 hassio_api: false
 arch:
   - amd64
@@ -16,13 +16,42 @@ map:
 options:
   name: ""
   port: 6053
+  wake_word: "okay_nabu"
+  stop_word: "stop"
   refractory_seconds: 2.0
+  enable_thinking_sound: false
+  wakeup_sound: "sounds/wake_word_triggered.flac"
+  processing_sound: "sounds/processing.wav"
+  timer_sound: "sounds/timer_finished.flac"
+  timer_max_ring_seconds: 900.0
+  mic_volume: 1.0
+  mic_noise_suppression: 0
+  mic_auto_gain: 0
   debug_logging: false
+  mute_sound: "sounds/mute_switch_on.flac"
+  unmute_sound: "sounds/mute_switch_off.flac"
+  preferences_file: "/share/assist_satellite/preferences.json"
+  download_dir: "/share/assist_satellite/local"
 schema:
   name: str?
   port: int
+  wake_word: str
+  stop_word: str
   refractory_seconds: float
+  enable_thinking_sound: bool
+  wakeup_sound: str
+  processing_sound: str
+  timer_sound: str
+  timer_max_ring_seconds: float
+  mic_volume: float
+  mic_noise_suppression: "int(0,4)"
+  mic_auto_gain: "int(0,31)"
   debug_logging: bool
+  mute_sound: str
+  unmute_sound: str
+  preferences_file: str
+  download_dir: str
 audio: true
 host_network: true
 homeassistant: 2026.3.0
+image: homeassistant/addon-assist_satellite

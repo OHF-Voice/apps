@@ -120,5 +120,5 @@ In case you've found a bug, please [open an issue on our GitHub][issue].
 
 [discord]: https://www.home-assistant.io/join-chat
 [forum]: https://community.home-assistant.io
-[issue]: hhttps://github.com/OHF-voice/apps/issues
+[issue]: https://github.com/OHF-voice/apps/issues
 [reddit]: https://reddit.com/r/homeassistant

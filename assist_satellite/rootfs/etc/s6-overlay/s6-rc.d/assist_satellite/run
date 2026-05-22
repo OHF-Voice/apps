@@ -47,4 +47,5 @@ exec python3 -m linux_voice_assistant \
     --unmute-sound "$(bashio::config 'unmute_sound')" \
     --preferences-file "$(bashio::config 'preferences_file')" \
     --download-dir "$(bashio::config 'download_dir')" \
+    --timer-max-ring-seconds "$(bashio::config 'timer_max_ring_seconds')" \
     "${extra_args[@]}"

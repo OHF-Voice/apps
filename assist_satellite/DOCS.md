@@ -45,10 +45,62 @@ Friendly name shown in Home Assistant. Leave empty to auto-generate from MAC add
 TCP port the ESPHome satellite server listens on (default: `6053`). Only change
 this if you run multiple satellites on the same host.
 
+### Option: `audio_input_device`
+
+Soundcard name or index for microphone input. Leave empty to use the system
+default. Enable `debug_logging` to list available devices in the log.
+
+### Option: `audio_output_device`
+
+mpv audio device name for sound output. Leave empty to use the system default.
+Enable `debug_logging` to list available devices in the log.
+
+### Option: `wake_word`
+
+ID of the wake word model (default: `okay_nabu`). Can also be changed at
+runtime from Home Assistant voice assistant settings.
+
+### Option: `stop_word`
+
+ID of the stop word model (default: `stop`).
+
 ### Option: `refractory_seconds`
 
 Minimum seconds between wake word activations to prevent double-triggers
 (default: `2.0`).
+
+### Option: `wakeup_sound`
+
+Sound file played when wake word is detected (default: `sounds/wake_word_triggered.flac`).
+
+### Option: `enable_thinking_sound`
+
+Play a short sound while the assistant processes a request (default: `false`).
+Can be toggled at runtime from the Home Assistant device page.
+
+### Option: `processing_sound`
+
+Sound played while assistant is processing (default: `sounds/processing.wav`).
+
+### Option: `timer_sound`
+
+Sound file played when timer finishes (default: `sounds/timer_finished.flac`).
+
+### Option: `timer_max_ring_seconds`
+
+Seconds after which the timer stops ringing (default: `900` which is 15 minutes).
+
+### Option: `mic_volume`
+
+Control microphone volume by fixed value (default: `1.0` which is the maximum)
+
+### Option: `mic_noise_suppression`
+
+Microphone noise suppression level (0 is disabled, 4 is max). Disabled by default.
+
+### Option: `mic_auto_gain`
+
+Automatic volume boost for microphone (0 is disabled, 31 dbfs is max). Disabled by default.
 
 ### Option: `debug_logging`
 
@@ -68,5 +120,5 @@ In case you've found a bug, please [open an issue on our GitHub][issue].
 
 [discord]: https://www.home-assistant.io/join-chat
 [forum]: https://community.home-assistant.io
-[issue]: https://github.com/OHF-voice/apps/issues
+[issue]: hhttps://github.com/OHF-voice/apps/issues
 [reddit]: https://reddit.com/r/homeassistant

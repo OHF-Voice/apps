@@ -6,17 +6,13 @@
 # ==============================================================================
 declare -a extra_args=()
 
-app_dir='/usr/src'
-sounds_dir="${app_dir}/sounds"
-share_dir='/share/assist_satellite'
-
 # Debug logging
 if bashio::config.true 'debug_logging'; then
     extra_args+=('--debug')
 fi
 
 # Thinking sound (processing sound played while assistant thinks)
-if bashio::config.true 'thinking_sound'; then
+if bashio::config.true 'enable_thinking_sound'; then
     extra_args+=('--enable-thinking-sound')
 fi
 
@@ -27,17 +23,29 @@ if [[ -n "${name}" ]]; then
     extra_args+=('--name' "${name}")
 fi
 
+declare auto_gain_control
+auto_gain_control="$(bashio::config 'mic_auto_gain')"
+if [[ -n "${auto_gain_control}" ]]; then
+    extra_args+=('--mic-auto-gain' "${auto_gain_control}")
+fi
+declare noise_suppression
+noise_suppression="$(bashio::config 'mic_noise_suppression')"
+if [[ -n "${noise_suppression}" ]]; then
+    extra_args+=('--mic-noise-suppression' "${noise_suppression}")
+fi
 exec python3 -m linux_voice_assistant \
     --port "$(bashio::config 'port')" \
-    --wake-model 'okay_nabu' \
+    --wake-model "$(bashio::config 'wake_word')" \
+    --stop-model "$(bashio::config 'stop_word')" \
     --refractory-seconds "$(bashio::config 'refractory_seconds')" \
-    --wake-word-dir "${app_dir}/wakewords" \
-    --wake-word-dir "${share_dir}/wakewords" \
-    --wakeup-sound "${sounds_dir}/wake_word_triggered.flac" \
-    --timer-finished-sound "${sounds_dir}/timer_finished.flac" \
-    --processing-sound "${sounds_dir}/processing.wav" \
-    --mute-sound "${sounds_dir}/mute_switch_on.flac" \
-    --unmute-sound "${sounds_dir}/mute_switch_off.flac" \
-    --preferences-file "${share_dir}/preferences.json" \
-    --download-dir "${share_dir}/local" \
+    --mic-volume "$(bashio::config 'mic_volume')" \
+    --wake-word-dir /usr/src/wakewords \
+    --wakeup-sound "$(bashio::config 'wakeup_sound')" \
+    --timer-finished-sound "$(bashio::config 'timer_sound')" \
+    --processing-sound "$(bashio::config 'processing_sound')" \
+    --mute-sound "$(bashio::config 'mute_sound')" \
+    --unmute-sound "$(bashio::config 'unmute_sound')" \
+    --preferences-file "$(bashio::config 'preferences_file')" \
+    --download-dir "$(bashio::config 'download_dir')" \
+    --timer-max-ring-seconds "$(bashio::config 'timer_max_ring_seconds')" \
     "${extra_args[@]}"

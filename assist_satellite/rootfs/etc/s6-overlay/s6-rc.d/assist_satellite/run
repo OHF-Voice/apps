@@ -1,0 +1,43 @@
+#!/command/with-contenv bashio
+# vim: ft=bash
+# shellcheck shell=bash
+# ==============================================================================
+# Start the Assist Satellite service (linux-voice-assistant)
+# ==============================================================================
+declare -a extra_args=()
+
+app_dir='/usr/src'
+sounds_dir="${app_dir}/sounds"
+share_dir='/share/assist_satellite'
+
+# Debug logging
+if bashio::config.true 'debug_logging'; then
+    extra_args+=('--debug')
+fi
+
+# Thinking sound (processing sound played while assistant thinks)
+if bashio::config.true 'thinking_sound'; then
+    extra_args+=('--enable-thinking-sound')
+fi
+
+# Optional friendly name (auto-generated from MAC if empty)
+declare name
+name="$(bashio::config 'name')"
+if [[ -n "${name}" ]]; then
+    extra_args+=('--name' "${name}")
+fi
+
+exec python3 -m linux_voice_assistant \
+    --port "$(bashio::config 'port')" \
+    --wake-model 'okay_nabu' \
+    --refractory-seconds "$(bashio::config 'refractory_seconds')" \
+    --wake-word-dir "${app_dir}/wakewords" \
+    --wake-word-dir "${share_dir}/wakewords" \
+    --wakeup-sound "${sounds_dir}/wake_word_triggered.flac" \
+    --timer-finished-sound "${sounds_dir}/timer_finished.flac" \
+    --processing-sound "${sounds_dir}/processing.wav" \
+    --mute-sound "${sounds_dir}/mute_switch_on.flac" \
+    --unmute-sound "${sounds_dir}/mute_switch_off.flac" \
+    --preferences-file "${share_dir}/preferences.json" \
+    --download-dir "${share_dir}/local" \
+    "${extra_args[@]}"

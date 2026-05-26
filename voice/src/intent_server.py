@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 from collections.abc import Mapping
 from typing import Any, Collection, Dict, List, Optional, Set
@@ -46,7 +47,6 @@ class Gemma4EventHandler(AsyncEventHandler):
         state: AppState,
         recognizer: Gemma4Recognizer,
         lang_intents: LanguageIntents,
-        name_resolver: NameResolver,
         # fuzzy_matcher: FuzzyMatcher,
         *args,
         **kwargs,
@@ -58,8 +58,11 @@ class Gemma4EventHandler(AsyncEventHandler):
         self.state = state
         self.recognizer = recognizer
         self.lang_intents = lang_intents
-        self.name_resolver = name_resolver
         # self.fuzzy_matcher = fuzzy_matcher
+
+        self.device_id: Optional[str] = None
+        self.satellite_id: Optional[str] = None
+        self.hass_info: Optional[InfoForRecognition] = None
 
         self._info_event: Optional[Event] = None
 
@@ -82,16 +85,17 @@ class Gemma4EventHandler(AsyncEventHandler):
             transcript = Transcript.from_event(event)
             _LOGGER.debug("Handling: %s", transcript)
 
-            device_id: Optional[str] = None
-            satellite_id: Optional[str] = None
+            # Reset
+            self.hass_info = None
+            self.device_id = None
+            self.satellite_id = None
             if transcript.context:
-                device_id = transcript.context.get("device_id")
-                satellite_id = transcript.context.get("satellite_id")
+                self.device_id = transcript.context.get("device_id")
+                self.satellite_id = transcript.context.get("satellite_id")
 
             try:
-                hass_info = await self.state.hass.get_info(device_id, satellite_id)
-                await self._handle_transcript_gemma(transcript, hass_info)
-                # await self._handle_transcript_fuzzy(transcript, hass_info)
+                await self._handle_transcript_gemma(transcript)
+                # await self._handle_transcript_fuzzy(transcript)
             except Exception:
                 _LOGGER.exception("Unexpected error during handling")
                 await self.write_event(
@@ -105,7 +109,7 @@ class Gemma4EventHandler(AsyncEventHandler):
         return True
 
     # async def _handle_transcript_fuzzy(
-    #     self, transcript: Transcript, hass_info: InfoForRecognition
+    #     self, transcript: Transcript
     # ) -> None:
     #     cand_match = self.fuzzy_matcher.match_candidate(
     #         transcript.text, language=transcript.language or "en"
@@ -178,9 +182,7 @@ class Gemma4EventHandler(AsyncEventHandler):
     #         ).event()
     #     )
 
-    async def _handle_transcript_gemma(
-        self, transcript: Transcript, hass_info: InfoForRecognition
-    ) -> None:
+    async def _handle_transcript_gemma(self, transcript: Transcript) -> None:
         language = transcript.language or "en"
         tool_calls, response_text = self.recognizer.get_tool_calls(
             transcript.text, language
@@ -191,13 +193,30 @@ class Gemma4EventHandler(AsyncEventHandler):
             )
             return
 
+        # Load name resolver
+        language_family = re.split(r"[_-]", language, maxsplit=1)[0]
+        if language_family == "en":
+            if self.state.resolver_en is None:
+                self.state.resolver_en = NameResolver(self.state.resolver_en_model)
+                self.state.resolver_en.load()
+
+            name_resolver = self.state.resolver_en
+        else:
+            if self.state.resolver_multilingual is None:
+                self.state.resolver_multilingual = NameResolver(
+                    self.state.resolver_multilingual_model
+                )
+                self.state.resolver_multilingual.load()
+
+            name_resolver = self.state.resolver_multilingual
+
         intent_events: List[Intent] = []
 
         for tool_name, tool_args in tool_calls:
             tool = self.state.tools[tool_name]
 
             try:
-                self._resolve_names(tool, tool_args, hass_info)
+                await self._resolve_names(tool, tool_args, name_resolver)
             except UnresolvedNameError:
                 _LOGGER.exception(
                     "Failed to resolve names: tool_name=%s, tool_args=%s",
@@ -209,8 +228,8 @@ class Gemma4EventHandler(AsyncEventHandler):
                 break
 
             if tool.intent:
-                intent_name, intent_slots = self._tool_call_to_intent(
-                    tool, tool_args, hass_info
+                intent_name, intent_slots = await self._tool_call_to_intent(
+                    tool, tool_args
                 )
             else:
                 intent_name, intent_slots = tool_name, tool_args
@@ -220,7 +239,7 @@ class Gemma4EventHandler(AsyncEventHandler):
                 if todo_entity_id.startswith("todo."):
                     todo_item = intent_slots["item"]
                     await self._resolve_todo_item(
-                        todo_item, todo_entity_id, intent_slots
+                        todo_item, todo_entity_id, intent_slots, name_resolver
                     )
 
             _LOGGER.debug("Intent: name=%s, slots=%s", intent_name, intent_slots)
@@ -256,27 +275,33 @@ class Gemma4EventHandler(AsyncEventHandler):
                 ).event()
             )
 
-    def _resolve_names(
-        self, tool: Tool, tool_args: TOOL_ARGS, hass_info: InfoForRecognition
+    async def _resolve_names(
+        self, tool: Tool, tool_args: TOOL_ARGS, name_resolver: NameResolver
     ) -> None:
         location: Optional[str] = tool_args.get("location")
         if location:
-            self._resolve_location(location, tool_args, hass_info)
+            await self._ensure_hass_info()
+            self._resolve_location(location, tool_args, name_resolver)
 
         entity_name: Optional[str] = tool_args.get("device_name") or tool_args.get(
             "list_name"
         )
         if entity_name:
-            self._resolve_entity(entity_name, tool.name_domains, tool_args, hass_info)
+            await self._ensure_hass_info()
+            self._resolve_entity(
+                entity_name, tool.name_domains, tool_args, name_resolver
+            )
 
     def _resolve_location(
-        self, location: str, tool_args: TOOL_ARGS, hass_info: InfoForRecognition
+        self, location: str, tool_args: TOOL_ARGS, name_resolver: NameResolver
     ) -> None:
+        assert self.hass_info is not None
+
         location_norm = normalize_name(location)
         location_names: Dict[str, str] = {}
         location_names_norm: Dict[str, str] = {}
 
-        for area in hass_info.areas.values():
+        for area in self.hass_info.areas.values():
             # Ensure area/floor ids are deconflicted
             mapped_id = f"area_{area.area_id}"
             for area_name in area.names:
@@ -285,7 +310,7 @@ class Gemma4EventHandler(AsyncEventHandler):
             for area_name_norm in area.names_norm:
                 if area_name_norm:
                     location_names_norm[area_name_norm] = mapped_id
-        for floor in hass_info.floors.values():
+        for floor in self.hass_info.floors.values():
             # Ensure area/floor ids are deconflicted
             mapped_id = f"floor_{floor.floor_id}"
             for floor_name in floor.names:
@@ -300,7 +325,7 @@ class Gemma4EventHandler(AsyncEventHandler):
             best_id = location_names_norm.get(location_norm)
 
         if not best_id:
-            best_name = self.name_resolver.best_candidate(
+            best_name = name_resolver.best_candidate(
                 location, list(location_names), threshold=_NAME_THRESHOLD
             )
             if best_name:
@@ -322,11 +347,11 @@ class Gemma4EventHandler(AsyncEventHandler):
         if best_id:
             location_type, location_id = best_id.split("_", maxsplit=1)
             if location_type == "area":
-                best_area = hass_info.areas[location_id]
+                best_area = self.hass_info.areas[location_id]
                 _LOGGER.debug("Resolved %s to %s", location, best_area)
                 tool_args[AREA_SLOT] = best_area.area_id
             elif location_type == "floor":
-                best_floor = hass_info.floors[location_id]
+                best_floor = self.hass_info.floors[location_id]
                 _LOGGER.debug("Resolved %s to %s", location, best_floor)
                 tool_args[FLOOR_SLOT] = best_floor.floor_id
         else:
@@ -341,13 +366,15 @@ class Gemma4EventHandler(AsyncEventHandler):
         entity_name: str,
         name_domains: Optional[Set[str]],
         tool_args: TOOL_ARGS,
-        hass_info: InfoForRecognition,
+        name_resolver: NameResolver,
     ) -> None:
+        assert self.hass_info is not None
+
         entity_norm = normalize_name(entity_name)
         entity_names: Dict[str, str] = {}
         entity_names_norm: Dict[str, str] = {}
 
-        entities: Collection[Entity] = hass_info.entities.values()
+        entities: Collection[Entity] = self.hass_info.entities.values()
         if name_domains:
             entities = [e for e in entities if e.domain in name_domains]
 
@@ -364,7 +391,7 @@ class Gemma4EventHandler(AsyncEventHandler):
             best_id = entity_names_norm.get(entity_norm)
 
         if not best_id:
-            best_name = self.name_resolver.best_candidate(
+            best_name = name_resolver.best_candidate(
                 entity_name, list(entity_names), threshold=_NAME_THRESHOLD
             )
             if best_name:
@@ -385,7 +412,7 @@ class Gemma4EventHandler(AsyncEventHandler):
                 _LOGGER.debug("Fuzzy match: %s -> %s", entity_name, best_name_norm)
 
         if best_id:
-            best_entity = hass_info.entities[best_id]
+            best_entity = self.hass_info.entities[best_id]
             _LOGGER.debug("Resolved %s to %s", entity_name, best_entity)
             tool_args[ENTITY_NAME_SLOT] = best_entity.entity_id
             tool_args[DOMAIN_SLOT] = best_entity.domain
@@ -399,6 +426,7 @@ class Gemma4EventHandler(AsyncEventHandler):
         item: str,
         entity_id: str,
         intent_slots: Dict[str, Any],
+        name_resolver: NameResolver,
     ) -> None:
         response = (
             await self.state.hass.call_service(
@@ -416,16 +444,14 @@ class Gemma4EventHandler(AsyncEventHandler):
         if not items:
             return
 
-        best_item = self.name_resolver.best_candidate(
+        best_item = name_resolver.best_candidate(
             item, [item["summary"] for item in items], threshold=_TODO_THRESHOLD
         )
         if best_item:
             _LOGGER.debug("Resolved todo item '%s' to '%s'", item, best_item)
             intent_slots["item"] = best_item
 
-    def _tool_call_to_intent(
-        self, tool: Tool, tool_args: TOOL_ARGS, hass_info: InfoForRecognition
-    ) -> TOOL_CALL:
+    async def _tool_call_to_intent(self, tool: Tool, tool_args: TOOL_ARGS) -> TOOL_CALL:
         assert tool.intent is not None
 
         intent_name = tool.intent.name
@@ -450,12 +476,24 @@ class Gemma4EventHandler(AsyncEventHandler):
 
         # Fill in area from context
         if tool.context_area and (not intent_slots.get(AREA_SLOT)):
+            await self._ensure_hass_info()
+            assert self.hass_info is not None
 
-            context_area_id = hass_info.current_area_id or self.state.default_area_id
+            context_area_id = (
+                self.hass_info.current_area_id or self.state.default_area_id
+            )
             if context_area_id:
                 intent_slots[AREA_SLOT] = context_area_id
 
         return (intent_name, intent_slots)
+
+    async def _ensure_hass_info(self) -> None:
+        if self.hass_info is not None:
+            return
+
+        self.hass_info = await self.state.hass.get_info(
+            self.device_id, self.satellite_id
+        )
 
     async def _write_info(self) -> None:
         if self._info_event is not None:

@@ -10,12 +10,15 @@ from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from huggingface_hub import hf_hub_download
 from llama_cpp import Llama
 
+from util import LRUCache
+
 TOOL_CALL_RE = re.compile(
     r"<\|tool_call>call:([a-zA-Z0-9_]+)\{(.*?)\}<tool_call\|>",
     re.DOTALL,
 )
 TOOL_ARGS = Dict[str, Any]
 TOOL_CALL = Tuple[str, TOOL_ARGS]
+MODEL_RESPONSE = Tuple[List[TOOL_CALL], str]
 
 
 DEFAULT_REPO = "ggml-org/gemma-4-E2B-it-GGUF"
@@ -37,6 +40,7 @@ class Gemma4Recognizer:
         filename: str = DEFAULT_FILENAME,
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
         user_prompt: str = DEFAULT_USER_PROMPT,
+        cache_size: int = 0,
         debug: bool = False,
     ) -> None:
         self.llm: Optional[Llama] = None
@@ -52,6 +56,10 @@ class Gemma4Recognizer:
         self.tool_choice: str = "auto"
         self.tools: Optional[List[Dict[str, Any]]] = None
         self.debug = debug
+
+        self.cache: Optional[LRUCache] = None
+        if cache_size > 0:
+            self.cache = LRUCache(cache_size)
 
         self.system_prompt = system_prompt
         self.system_message = {
@@ -99,6 +107,9 @@ class Gemma4Recognizer:
 
         if rebuild_state:
             _LOGGER.debug("Cache miss. Rebuilding state")
+            if self.cache is not None:
+                self.cache.clear()
+
             self.llm.create_chat_completion(
                 messages=[self.system_message],  # type: ignore
                 tools=self.tools,  # type: ignore
@@ -111,10 +122,16 @@ class Gemma4Recognizer:
 
             state_metadata_path.write_text(actual_tools_hash, encoding="utf-8")
 
-    def get_tool_calls(
-        self, text: str, language: str = "en"
-    ) -> Tuple[List[TOOL_CALL], str]:
+    def get_tool_calls(self, text: str, language: str = "en") -> MODEL_RESPONSE:
         assert self.llm, "Not loaded"
+
+        text = text.strip()
+        cache_key = f"{language}: {text}"
+        if self.cache is not None:
+            cached_response = self.cache.get(cache_key)
+            if cached_response is not None:
+                _LOGGER.debug("Returning cached response (key='%s')", cache_key)
+                return cached_response
 
         start_time = time.monotonic()
         response = cast(
@@ -140,7 +157,12 @@ class Gemma4Recognizer:
         _LOGGER.debug("Response in %s second(s): %s", end_time - start_time, response)
 
         content = response["choices"][0]["message"]["content"]
-        return (_parse_tool_calls(content), content)
+        model_response = (_parse_tool_calls(content), content)
+        if self.cache is not None:
+            _LOGGER.debug("Caching '%s' -> %s", cache_key, model_response)
+            self.cache.set(cache_key, model_response)
+
+        return model_response
 
 
 # -----------------------------------------------------------------------------

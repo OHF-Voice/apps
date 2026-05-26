@@ -540,6 +540,7 @@
   name_domains:
     - todo
 
+# NOTE: Shopping lists are deprecated
 # - tool:
 #     type: function
 #     function:

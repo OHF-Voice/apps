@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import logging
+import re
 from functools import partial
 from typing import Dict, List
 
@@ -27,8 +28,8 @@ async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--uri", required=True, help="unix:// or tcp://")
     #
-    parser.add_argument("--http-host")
-    parser.add_argument("--http-port", type=int, default=5000)
+    # parser.add_argument("--http-host")
+    # parser.add_argument("--http-port", type=int, default=5000)
     #
     parser.add_argument("--hass-token", required=True)
     parser.add_argument("--hass-api", default="http://homeassistant.local:8123")
@@ -38,11 +39,33 @@ async def main() -> None:
     #
     parser.add_argument("--tools", required=True, help="Path to tools YAML file")
     parser.add_argument(
+        "--tool-call-cache-size",
+        type=int,
+        default=100,
+        help="Number of sentences to remember for tool calls",
+    )
+    parser.add_argument(
         "--llama-state", required=True, help="Path to save llama.cpp state"
     )
     #
+    # parser.add_argument(
+    #     "--fuzzy-commands", required=True, help="Path to fuzzy commands YAML file"
+    # )
+    #
     parser.add_argument(
-        "--fuzzy-commands", required=True, help="Path to fuzzy commands YAML file"
+        "--resolver-en-model",
+        default="intfloat/e5-small-v2",
+        help="HuggingFace id of sentence transformers used for name resolution (English)",
+    )
+    parser.add_argument(
+        "--resolver-multilingual-model",
+        default="intfloat/multilingual-e5-small",
+        help="HuggingFace id of sentence transformers used for name resolution (multilingual)",
+    )
+    parser.add_argument(
+        "--resolver-language",
+        default="en",
+        help="Default language for name resolution (default: en)",
     )
     #
     parser.add_argument(
@@ -77,29 +100,31 @@ async def main() -> None:
     _LOGGER.debug("Loaded %s tool(s)", len(tools))
 
     # Load fuzzy commands
-    with open(args.fuzzy_commands, "r", encoding="utf-8") as fuzzy_commands_file:
-        yaml_commands = yaml.load(fuzzy_commands_file)
+    # with open(args.fuzzy_commands, "r", encoding="utf-8") as fuzzy_commands_file:
+    #     yaml_commands = yaml.load(fuzzy_commands_file)
 
     fuzzy_commands: List[FuzzyCommand] = []
-    for command_dict in yaml_commands:
-        fuzzy_commands.append(
-            FuzzyCommand(
-                intent_name=command_dict["intent"]["name"],
-                sentences=command_dict["sentences"],
-                intent_slots=command_dict["intent"].get("slots"),
-                context_area=command_dict.get("context_area"),
-                duration=command_dict.get("duration"),
-                number=command_dict.get("number"),
-            )
-        )
+    # for command_dict in yaml_commands:
+    #     fuzzy_commands.append(
+    #         FuzzyCommand(
+    #             intent_name=command_dict["intent"]["name"],
+    #             sentences=command_dict["sentences"],
+    #             intent_slots=command_dict["intent"].get("slots"),
+    #             context_area=command_dict.get("context_area"),
+    #             duration=command_dict.get("duration"),
+    #             number=command_dict.get("number"),
+    #         )
+    #     )
 
-    _LOGGER.debug("Loaded %s fuzzy command(s)", len(fuzzy_commands))
+    # _LOGGER.debug("Loaded %s fuzzy command(s)", len(fuzzy_commands))
 
     state = AppState(
         hass=HomeAssistant(token=args.hass_token, api_url=args.hass_api),
-        http_host=args.http_host,
-        http_port=args.http_port,
+        # http_host=args.http_host,
+        # http_port=args.http_port,
         tools=tools,
+        resolver_en_model=args.resolver_en_model,
+        resolver_multilingual_model=args.resolver_multilingual_model,
         fuzzy_commands=fuzzy_commands,
         fuzzy_candidates=[
             (s, i) for i, cmd in enumerate(fuzzy_commands) for s in cmd.sentences
@@ -107,13 +132,20 @@ async def main() -> None:
         default_area_id=args.default_area_id,
     )
 
-    recognizer = Gemma4Recognizer(state_path=args.llama_state)
+    recognizer = Gemma4Recognizer(
+        state_path=args.llama_state, cache_size=args.tool_call_cache_size
+    )
     recognizer.load([t.tool for t in tools.values()])
 
     lang_intents = LanguageIntents()
 
-    name_resolver = NameResolver()
-    name_resolver.load()
+    resolver_language_family = re.split(r"[_-]", args.resolver_language, maxsplit=1)[0]
+    if resolver_language_family == "en":
+        state.resolver_en = NameResolver(args.resolver_en_model)
+        state.resolver_en.load()
+    else:
+        state.resolver_multilingual = NameResolver(args.resolver_multilingual)
+        state.resolver_multilingual.load()
 
     # fuzzy_matcher = FuzzyMatcher()
     # fuzzy_matcher.model = name_resolver.model
@@ -130,7 +162,6 @@ async def main() -> None:
                 state,
                 recognizer,
                 lang_intents,
-                name_resolver,
                 # fuzzy_matcher,
             )
         )

@@ -9,5 +9,4 @@ python3 src/app.py \
     --tools 'tools.yaml' \
     --llama-state 'local/llama_state.bin' \
     --default-area-id 'office' \
-    --fuzzy-commands 'fuzzy_commands.yaml' \
     --debug

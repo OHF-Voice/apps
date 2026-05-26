@@ -1,8 +1,11 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 from hass_api import HomeAssistant
+
+if TYPE_CHECKING:
+    from name_resolver import NameResolver
 
 BASE_DIR = Path(__file__).parent
 
@@ -34,9 +37,16 @@ class FuzzyCommand:
 @dataclass
 class AppState:
     hass: HomeAssistant
-    http_host: str
-    http_port: int
+    # http_host: str
+    # http_port: int
     tools: Dict[str, Tool]
+
     fuzzy_commands: List[FuzzyCommand]
     fuzzy_candidates: List[Tuple[str, int]]
+
+    resolver_en_model: str
+    resolver_multilingual_model: str
+    resolver_en: "Optional[NameResolver]" = None
+    resolver_multilingual: "Optional[NameResolver]" = None
+
     default_area_id: Optional[str] = None

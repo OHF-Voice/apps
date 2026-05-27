@@ -168,7 +168,7 @@
         properties:
           color:
             type: string
-            description: Color name like red or blue (always in English)
+            description: Color name like red or blue. Always translate color names to English.
           location:
             type: string
             description: Location name. Only include if it's explicitly mentioned.
@@ -401,6 +401,8 @@
       {%- endif-%}
     slots:
       name: "{%- if name-%}{{name}}{% endif %}"
+      area: "{%- if area-%}{{area}}{% endif %}"
+      floor: "{%- if floor-%}{{floor}}{% endif %}"
   context_area: true
   name_domains:
     - media_player
@@ -442,6 +444,8 @@
       {%- endif-%}
     slots:
       name: "{%- if name-%}{{name}}{% endif %}"
+      area: "{%- if area-%}{{area}}{% endif %}"
+      floor: "{%- if floor-%}{{floor}}{% endif %}"
       volume_level: "{%- if action == 'set'-%}{{volume | int}}{% endif %}"
       volume_step: >-
         {%- if action == 'increase' -%}
@@ -493,6 +497,8 @@
     name: HassMediaSearchAndPlay
     slots:
       name: "{%- if name-%}{{name}}{% endif %}"
+      area: "{%- if area-%}{{area}}{% endif %}"
+      floor: "{%- if floor-%}{{floor}}{% endif %}"
       search_query: "{{search_query}}"
       media_class: "{%- if media_class and (media_class != 'other')-%}{{media_class}}{% endif %}"
   context_area: true

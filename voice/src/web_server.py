@@ -1,3 +1,4 @@
+import logging
 import threading
 
 from flask import Flask, render_template, url_for
@@ -30,6 +31,7 @@ def make_web_server(state: AppState) -> Flask:
 
 def run_web_server(state: AppState, flask_app: Flask) -> threading.Thread:
     def run_flask():
+        logging.getLogger("werkzeug").setLevel(logging.ERROR)
         flask_app.run(host=state.http_host, port=state.http_port, use_reloader=False)
 
     flask_thread = threading.Thread(target=run_flask, daemon=True)

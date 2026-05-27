@@ -1,0 +1,13 @@
+aiohttp
+flask[async]
+llama-cpp-python
+huggingface-hub
+ruamel.yaml
+home-assistant-intents
+numpy
+sentence-transformers
+wyoming>=1.9.0
+jinja2
+rapidfuzz
+ovos-number-parser
+ovos-date-parser

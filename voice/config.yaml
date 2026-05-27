@@ -1,8 +1,8 @@
 ---
-version: 0.1.0
+version: 0.1.0-5
 slug: voice
 name: Voice
-description: Voice
+description: Voice control for Home Assistant
 url: https://github.com/OHF-Voice/apps/tree/master/voice
 arch:
   - amd64
@@ -12,9 +12,23 @@ discovery:
   - wyoming
 homeassistant_api: true
 options:
+  llm_repo: "bartowski/google_gemma-4-E2B-it-GGUF"
+  llm_model: "google_gemma-4-E2B-it-Q5_K_M.gguf"
+  resolver_en_model: "intfloat/e5-small-v2"
+  resolver_multilingual_model: "intfloat/multilingual-e5-small"
+  include_names_in_tools: true
+  tool_call_cache_size: 100
+  hf_token: ""
   debug_logging: false
 schema:
+  llm_repo: str
+  llm_model: str
+  resolver_en_model: str
+  resolver_multilingual_model: str
+  include_names_in_tools: bool
+  tool_call_cache_size: int
+  hf_token: str
   debug_logging: bool
 ports:
-  "50051/tcp": null
+  "10500/tcp": null
 homeassistant: 2026.4.0

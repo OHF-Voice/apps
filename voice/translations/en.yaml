@@ -1,8 +1,41 @@
 ---
 configuration:
+  llm_repo:
+    name: Gemma4 repo id
+    description: >-
+      HuggingFace repository id for Gemma4 (GGUF).
+      Official repo: https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF
+  llm_model:
+    name: Gemma4 model
+    description: >-
+      Model filename for Gemma4 (GGUF).
+      Official model: gemma-4-E2B-it-Q8_0.gguf
+  resolver_en_model:
+    name: Resolver English model
+    description: >-
+      HuggingFace repository with English Sentence Transformers model.
+      Used when input text is English.
+  resolver_multilingual_model:
+    name: Resolver multilingual model
+    description: >-
+      HuggingFace repository with multilingual Sentence Transformers model.
+      Used when input text is not English.
+  include_names_in_tools:
+    name: Include names in tools
+    description: >-
+      Add location and exposed device names to the LLM tools.
+      This increases accuracy, but makes processing slower and increases RAM usage.
+  tool_call_cache_size:
+    name: Tool call cache size
+    description: >-
+      Number of sentences to remember tool calls for to avoid LLM overhead.
+  hf_token:
+    name: HuggingFace token
+    description: >-
+      API token for HuggingFace for faster model downloading.
   debug_logging:
     name: Debug logging
     description: >-
       Enable debug logging.
 network:
-  50051/tcp: voice Wyoming Protocol
+  10500/tcp: intent Wyoming Protocol

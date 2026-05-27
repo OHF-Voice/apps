@@ -16,7 +16,6 @@ from wyoming.server import AsyncEventHandler
 
 from const import AppState, Tool
 from gemma4_recognizer import TOOL_ARGS, TOOL_CALL, Gemma4Recognizer
-from hass_api import InfoForRecognition
 from lang_intents import LanguageIntents
 from name_resolver import NameResolver
 from util import normalize_name
@@ -62,7 +61,6 @@ class Gemma4EventHandler(AsyncEventHandler):
 
         self.device_id: Optional[str] = None
         self.satellite_id: Optional[str] = None
-        self.hass_info: Optional[InfoForRecognition] = None
 
         self._info_event: Optional[Event] = None
 
@@ -86,7 +84,6 @@ class Gemma4EventHandler(AsyncEventHandler):
             _LOGGER.debug("Handling: %s", transcript)
 
             # Reset
-            self.hass_info = None
             self.device_id = None
             self.satellite_id = None
             if transcript.context:
@@ -280,14 +277,12 @@ class Gemma4EventHandler(AsyncEventHandler):
     ) -> None:
         location: Optional[str] = tool_args.get("location")
         if location:
-            await self._ensure_hass_info()
             self._resolve_location(location, tool_args, name_resolver)
 
         entity_name: Optional[str] = tool_args.get("device_name") or tool_args.get(
             "list_name"
         )
         if entity_name:
-            await self._ensure_hass_info()
             self._resolve_entity(
                 entity_name, tool.name_domains, tool_args, name_resolver
             )
@@ -295,13 +290,11 @@ class Gemma4EventHandler(AsyncEventHandler):
     def _resolve_location(
         self, location: str, tool_args: TOOL_ARGS, name_resolver: NameResolver
     ) -> None:
-        assert self.hass_info is not None
-
         location_norm = normalize_name(location)
         location_names: Dict[str, str] = {}
         location_names_norm: Dict[str, str] = {}
 
-        for area in self.hass_info.areas.values():
+        for area in self.state.hass_info.areas.values():
             # Ensure area/floor ids are deconflicted
             mapped_id = f"area_{area.area_id}"
             for area_name in area.names:
@@ -310,7 +303,7 @@ class Gemma4EventHandler(AsyncEventHandler):
             for area_name_norm in area.names_norm:
                 if area_name_norm:
                     location_names_norm[area_name_norm] = mapped_id
-        for floor in self.hass_info.floors.values():
+        for floor in self.state.hass_info.floors.values():
             # Ensure area/floor ids are deconflicted
             mapped_id = f"floor_{floor.floor_id}"
             for floor_name in floor.names:
@@ -347,11 +340,11 @@ class Gemma4EventHandler(AsyncEventHandler):
         if best_id:
             location_type, location_id = best_id.split("_", maxsplit=1)
             if location_type == "area":
-                best_area = self.hass_info.areas[location_id]
+                best_area = self.state.hass_info.areas[location_id]
                 _LOGGER.debug("Resolved %s to %s", location, best_area)
                 tool_args[AREA_SLOT] = best_area.area_id
             elif location_type == "floor":
-                best_floor = self.hass_info.floors[location_id]
+                best_floor = self.state.hass_info.floors[location_id]
                 _LOGGER.debug("Resolved %s to %s", location, best_floor)
                 tool_args[FLOOR_SLOT] = best_floor.floor_id
         else:
@@ -368,13 +361,11 @@ class Gemma4EventHandler(AsyncEventHandler):
         tool_args: TOOL_ARGS,
         name_resolver: NameResolver,
     ) -> None:
-        assert self.hass_info is not None
-
         entity_norm = normalize_name(entity_name)
         entity_names: Dict[str, str] = {}
         entity_names_norm: Dict[str, str] = {}
 
-        entities: Collection[Entity] = self.hass_info.entities.values()
+        entities: Collection[Entity] = self.state.hass_info.entities.values()
         if name_domains:
             entities = [e for e in entities if e.domain in name_domains]
 
@@ -412,7 +403,7 @@ class Gemma4EventHandler(AsyncEventHandler):
                 _LOGGER.debug("Fuzzy match: %s -> %s", entity_name, best_name_norm)
 
         if best_id:
-            best_entity = self.hass_info.entities[best_id]
+            best_entity = self.state.hass_info.entities[best_id]
             _LOGGER.debug("Resolved %s to %s", entity_name, best_entity)
             tool_args[ENTITY_NAME_SLOT] = best_entity.entity_id
             tool_args[DOMAIN_SLOT] = best_entity.domain
@@ -475,25 +466,19 @@ class Gemma4EventHandler(AsyncEventHandler):
             }
 
         # Fill in area from context
-        if tool.context_area and (not intent_slots.get(AREA_SLOT)):
-            await self._ensure_hass_info()
-            assert self.hass_info is not None
-
-            context_area_id = (
-                self.hass_info.current_area_id or self.state.default_area_id
+        if (
+            tool.context_area
+            and (not intent_slots.get(AREA_SLOT))
+            and (not intent_slots.get(FLOOR_SLOT))
+        ):
+            current_area_id = await self.state.hass.get_current_area(
+                self.device_id, self.satellite_id
             )
+            context_area_id = current_area_id or self.state.default_area_id
             if context_area_id:
                 intent_slots[AREA_SLOT] = context_area_id
 
         return (intent_name, intent_slots)
-
-    async def _ensure_hass_info(self) -> None:
-        if self.hass_info is not None:
-            return
-
-        self.hass_info = await self.state.hass.get_info(
-            self.device_id, self.satellite_id
-        )
 
     async def _write_info(self) -> None:
         if self._info_event is not None:

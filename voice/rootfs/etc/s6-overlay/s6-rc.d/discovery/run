@@ -9,12 +9,12 @@ declare config
 bash -c \
     "until
         echo '{ \"type\": \"describe\" }' 
-            > /dev/tcp/localhost/50051; do sleep 0.5;
+            > /dev/tcp/localhost/10500; do sleep 0.5;
     done" > /dev/null 2>&1 || true;
 
 config=$(\
     bashio::var.json \
-        uri "tcp://$(hostname):50051" \
+        uri "tcp://$(hostname):10500" \
 )
 
 if bashio::discovery "wyoming" "${config}" > /dev/null; then

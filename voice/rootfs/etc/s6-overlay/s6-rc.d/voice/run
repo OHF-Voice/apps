@@ -11,6 +11,24 @@ if bashio::config.true 'debug_logging'; then
     flags+=('--debug')
 fi
 
+if bashio::config.true 'include_names_in_tools'; then
+    flags+=('--include-names-in-tools')
+fi
+
+export HF_HOME=/data/cache
+export HF_TOKEN="$(bashio::config 'hf_token')"
+
 exec python3 app.py \
-    --uri 'tcp://0.0.0.0:50051' \
+    --uri 'tcp://0.0.0.0:10500' \
+    --hass-token "${SUPERVISOR_TOKEN}" \
+    --hass-api 'http://supervisor/core/api' \
+    --http-host 0.0.0.0 \
+    --http-port 5000 \
+    --tools 'tools.yaml' \
+    --llama-state '/data/llama_state.bin' \
+    --recognizer-repo "$(bashio::config 'llm_repo')" \
+    --recognizer-filename "$(bashio::config 'llm_model')" \
+    --resolver-en-model "$(bashio::config 'resolver_en_model')" \
+    --resolver-multilingual-model "$(bashio::config 'resolver_multilingual_model')" \
+    --tool-call-cache-size "$(bashio::config 'tool_call_cache_size')" \
     ${flags[@]}

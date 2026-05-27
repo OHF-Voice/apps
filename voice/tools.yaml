@@ -96,7 +96,7 @@
     type: function
     function:
       name: lights_on_off
-      description: Turn the lights on or off in the current area or a named location
+      description: Turn all the lights on or off in the current area or a named location
       parameters:
         type: object
         properties:
@@ -107,7 +107,7 @@
               - "off"
           location:
             type: string
-            description: Location name like office or upstairs
+            description: Location name. Only include if it's explicitly mentioned.
         required:
           - action
   intent:
@@ -122,12 +122,14 @@
       area: "{%- if area-%}{{area}}{% endif %}"
       floor: "{%- if floor-%}{{floor}}{% endif %}"
   context_area: true
+  area_domains:
+    - light
 
 - tool:
     type: function
     function:
-      name: set_light_property
-      description: Set the brightness or color of the lights in the current area or a named location
+      name: set_light_brightness
+      description: Set the brightness of the lights in the current area or a named location
       parameters:
         type: object
         properties:
@@ -136,20 +138,56 @@
             minimum: 0
             maximum: 100
             description: Brightness percentage
+          location:
+            type: string
+            description: Location name. Only include if it's explicitly mentioned.
+          device_name:
+            type: string
+            description: Full name of the light. Only include if it's explicitly mentioned.
+        required:
+          - brightness
+  intent:
+    name: HassLightSet
+    slots:
+      name: "{%- if name-%}{{name}}{% endif %}"
+      brightness: "{{brightness}}"
+      area: "{%- if area-%}{{area}}{% endif %}"
+      floor: "{%- if floor-%}{{floor}}{% endif %}"
+  context_area: true
+  name_domains:
+    - light
+  requires_light_brightness: true
+
+- tool:
+    type: function
+    function:
+      name: set_light_color
+      description: Set the color of the lights in the current area or a named location
+      parameters:
+        type: object
+        properties:
           color:
             type: string
             description: Color name like red or blue (always in English)
           location:
             type: string
-            description: Location name like office or upstairs
+            description: Location name. Only include if it's explicitly mentioned.
+          device_name:
+            type: string
+            description: Full name of the light. Only include if it's explicitly mentioned.
+        required:
+          - color
   intent:
     name: HassLightSet
     slots:
-      brightness: "{{brightness | default(none)}}"
-      color: "{{color | default(none)}}"
+      name: "{%- if name-%}{{name}}{% endif %}"
+      color: "{{color}}"
       area: "{%- if area-%}{{area}}{% endif %}"
       floor: "{%- if floor-%}{{floor}}{% endif %}"
   context_area: true
+  name_domains:
+    - light
+  requires_light_color: true
 
 # -----------------------------------------------------------------------------
 # devices
@@ -163,7 +201,7 @@
     type: function
     function:
       name: device_on_off
-      description: Turn a device on or off by name
+      description: Turn a specific named device on or off
       parameters:
         type: object
         properties:
@@ -228,91 +266,98 @@
     - cover
     - valve
 
-# - tool:
-#     type: function
-#     function:
-#       name: lock_unlock
-#       description: Lock or unlock a device by name
-#       parameters:
-#         type: object
-#         properties:
-#           action:
-#             type: string
-#             enum:
-#               - lock
-#               - unlock
-#           device_name:
-#             type: string
-#             description: Full name of the device
-#         required:
-#           - action
-#           - device_name
-#   intent:
-#     name: >-
-#       {%- if action == 'lock'-%}
-#       HassTurnOn
-#       {%- elif action == 'unlock'-%}
-#       HassTurnOff
-#       {%- endif-%}
-#     slots:
-#       domain: lock
-#       name: "{{name}}"
-#   name_domains:
-#     - lock
+- tool:
+    type: function
+    function:
+      name: lock_unlock
+      description: Lock or unlock a device by name
+      parameters:
+        type: object
+        properties:
+          action:
+            type: string
+            enum:
+              - lock
+              - unlock
+          device_name:
+            type: string
+            description: Full name of the device
+        required:
+          - action
+          - device_name
+  intent:
+    name: >-
+      {%- if action == 'lock'-%}
+      HassTurnOn
+      {%- elif action == 'unlock'-%}
+      HassTurnOff
+      {%- endif-%}
+    slots:
+      domain: lock
+      name: "{{name}}"
+  name_domains:
+    - lock
 
-# - tool:
-#     type: function
-#     function:
-#       name: set_position
-#       description: Set the position of a device like a door or window by percentage
-#       parameters:
-#         type: object
-#         properties:
-#           device_name:
-#             type: string
-#             description: Full name of the device
-#           position:
-#             type: integer
-#             minimum: 0
-#             maximum: 100
-#             description: Position percentage
-#         required:
-#           - device_name
-#           - position
-#   intent:
-#     name: HassSetPosition
-#     slots:
-#       domain: "{{domain|default(none)}}"
-#       name: "{{name}}"
-#       position: "{{position}}"
-#   name_domains:
-#     - cover
-#     - valve
+- tool:
+    type: function
+    function:
+      name: set_position
+      description: Set the position of a device like a door or window by percentage
+      parameters:
+        type: object
+        properties:
+          device_name:
+            type: string
+            description: Full name of the device
+          position:
+            type: integer
+            minimum: 0
+            maximum: 100
+            description: Position percentage
+        required:
+          - device_name
+          - position
+  intent:
+    name: HassSetPosition
+    slots:
+      domain: "{{domain|default(none)}}"
+      name: "{{name}}"
+      position: "{{position}}"
+  name_domains:
+    - cover
+    - valve
+  name_features:
+    cover: 4 # CoverEntityFeature.SET_POSITION
+    valve: 4 # ValveEntityFeature.SET_POSITION
 
-# - tool:
-#     type: function
-#     function:
-#       name: set_speed
-#       description: Set the speed of a fan by percentage
-#       parameters:
-#         type: object
-#         properties:
-#           device_name:
-#             type: string
-#             description: Full name of the fan
-#           speed:
-#             type: integer
-#             minimum: 0
-#             maximum: 100
-#             description: Speed percentage
-#         required:
-#           - device_name
-#           - position
-#   intent:
-#     name: HassFanSetSpeed
-#     slots:
-#       name: "{{name}}"
-#       speed: "{{speed}}"
+- tool:
+    type: function
+    function:
+      name: set_speed
+      description: Set the speed of a fan by percentage
+      parameters:
+        type: object
+        properties:
+          device_name:
+            type: string
+            description: Full name of the fan as written
+          speed:
+            type: integer
+            minimum: 0
+            maximum: 100
+            description: Speed percentage
+        required:
+          - device_name
+          - position
+  intent:
+    name: HassFanSetSpeed
+    slots:
+      name: "{{name}}"
+      speed: "{{speed}}"
+  name_domains:
+    - fan
+  name_features:
+    fan: 1 # FanEntityFeature.SET_SPEED
 
 # -----------------------------------------------------------------------------
 # media
@@ -331,9 +376,12 @@
       parameters:
         type: object
         properties:
-          # device_name:
-          #   type: string
-          #   description: Full name of the media player
+          device_name:
+            type: string
+            description: Full name of the media player. Only include if it's explicitly mentioned.
+          location:
+            type: string
+            description: Location name. Only include if it's explicitly mentioned.
           action:
             type: string
             enum:
@@ -351,11 +399,13 @@
       {%- elif action == 'next'-%}
       HassMediaNext
       {%- endif-%}
-  #   slots:
-  #     name: "{%- if entity-%}{{name}}{% endif %}"
-  # name_domains:
-  #   - media_player
+    slots:
+      name: "{%- if name-%}{{name}}{% endif %}"
   context_area: true
+  name_domains:
+    - media_player
+  name_features:
+    media_player: 1 # MediaPlayerEntityFeature.PAUSE
 
 - tool:
     type: function
@@ -365,18 +415,18 @@
       parameters:
         type: object
         properties:
-          # device_name:
-          #   type: string
-          #   description: Full name of the media player
+          device_name:
+            type: string
+            description: Full name of the media player. Only include if it's explicitly mentioned.
+          location:
+            type: string
+            description: Location name. Only include if it's explicitly mentioned.
           action:
             type: string
             enum:
               - increase
               - decrease
               - set
-          # target:
-          #   type: string
-          #   description: Device or area name
           volume:
             type: integer
             minimum: 0
@@ -391,7 +441,7 @@
       HassSetVolume
       {%- endif-%}
     slots:
-      # name: "{%- if entity-%}{{name}}{% endif %}"
+      name: "{%- if name-%}{{name}}{% endif %}"
       volume_level: "{%- if action == 'set'-%}{{volume | int}}{% endif %}"
       volume_step: >-
         {%- if action == 'increase' -%}
@@ -407,9 +457,11 @@
         down
         {%- endif -%}
         {%- endif -%}
-  # name_domains:
-  #   - media_player
   context_area: true
+  name_domains:
+    - media_player
+  name_features:
+    media_player: 4 # MediaPlayerEntityFeature.VOLUME_SET
 
 - tool:
     type: function
@@ -419,6 +471,12 @@
       parameters:
         type: object
         properties:
+          device_name:
+            type: string
+            description: Full name of the media player. Only include if it's explicitly mentioned.
+          location:
+            type: string
+            description: Location name. Only include if it's explicitly mentioned.
           search_query:
             type: string
           media_class:
@@ -434,9 +492,14 @@
   intent:
     name: HassMediaSearchAndPlay
     slots:
+      name: "{%- if name-%}{{name}}{% endif %}"
       search_query: "{{search_query}}"
-      media_class: "{%- if media_class != 'other'-%}{{media_class}}{% endif %}"
+      media_class: "{%- if media_class and (media_class != 'other')-%}{{media_class}}{% endif %}"
   context_area: true
+  name_domains:
+    - media_player
+  name_features:
+    media_player: 4194304 # MediaPlayerEntityFeature.SEARCH_MEDIA
 
 # -----------------------------------------------------------------------------
 # weather and temperature
@@ -469,7 +532,7 @@
       #       description: Device name
       #     location:
       #       type: string
-      #       description: Area/floor name like office or upstairs
+      #       description: Area/floor name
   intent:
     name: HassClimateGetTemperature
 
@@ -486,7 +549,7 @@
 #           description: Device name
 #         location:
 #           type: string
-#           description: Area/floor name like office or upstairs
+#           description: Area/floor name
 #         temperature:
 #           type: integer
 #           minimum: 0
@@ -585,7 +648,7 @@
 #           description: Entity, device, sensor, or thing being asked about
 #         location:
 #           type: string
-#           description: Optional area/floor name like office or upstairs
+#           description: Optional area/floor name
 #         expected_state:
 #           type: string
 #           description: Optional state or condition to check for, such as on/off

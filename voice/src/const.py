@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
-from hass_api import HomeAssistant
+from hass_api import HomeAssistant, HomeAssistantInfo
 
 if TYPE_CHECKING:
     from name_resolver import NameResolver
@@ -21,6 +21,10 @@ class Tool:
     tool: Dict[str, Any]
     intent: Optional[ToolIntent] = None
     name_domains: Optional[Set[str]] = None
+    name_features: Optional[Dict[str, int]] = None
+    area_domains: Optional[Set[str]] = None
+    requires_light_brightness: bool = False
+    requires_light_color: bool = False
     context_area: bool = False
 
 
@@ -37,6 +41,7 @@ class FuzzyCommand:
 @dataclass
 class AppState:
     hass: HomeAssistant
+    hass_info: HomeAssistantInfo
     http_host: str
     http_port: int
     tools: Dict[str, Tool]

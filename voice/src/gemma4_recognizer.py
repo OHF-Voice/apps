@@ -1,6 +1,8 @@
 import hashlib
+import io
 import json
 import logging
+import math
 import pickle
 import re
 import time
@@ -41,6 +43,9 @@ class Gemma4Recognizer:
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
         user_prompt: str = DEFAULT_USER_PROMPT,
         cache_size: int = 0,
+        n_ctx: Optional[int] = None,
+        n_ctx_overhead: int = 128,
+        max_tokens: int = 64,
         debug: bool = False,
     ) -> None:
         self.llm: Optional[Llama] = None
@@ -48,8 +53,9 @@ class Gemma4Recognizer:
         self.repo_id = repo_id
         self.filename = filename
         self.user_prompt = user_prompt
-        self.n_ctx = 2048
-        self.max_tokens = 64
+        self.n_ctx = n_ctx
+        self.n_ctx_overhead = n_ctx_overhead
+        self.max_tokens = max_tokens
         self.temperature = 0.0
         self.top_p = 1.0
         self.enable_thinking = False
@@ -70,6 +76,30 @@ class Gemma4Recognizer:
     def load(self, tools: List[Dict[str, Any]]) -> None:
         self.tools = tools
         if self.llm is None:
+            if self.n_ctx is None:
+                # Estimate context size
+                with io.StringIO() as prompt_file:
+                    print(self.system_prompt, file=prompt_file)
+                    json.dump(self.tools, prompt_file)
+                    num_chars = len(prompt_file.getvalue())
+
+                # Round up to multiple of 64.
+                # Assume chars / 3 is a conservative upper bound on tokens.
+                # User prompt and templating is covered in overhead.
+                n_ctx = (
+                    math.ceil(
+                        (
+                            math.ceil(num_chars / 3)
+                            + self.max_tokens
+                            + self.n_ctx_overhead
+                        )
+                        / 64
+                    )
+                    * 64
+                )
+            else:
+                n_ctx = self.n_ctx
+
             try:
                 model_path = hf_hub_download(
                     repo_id=self.repo_id,
@@ -86,11 +116,13 @@ class Gemma4Recognizer:
             self.llm = Llama(
                 model_path=model_path,
                 chat_template_kwargs={"enable_thinking": self.enable_thinking},
-                n_ctx=self.n_ctx,
+                n_ctx=n_ctx,
                 verbose=self.debug,
             )
 
-        actual_tools_hash = _get_tools_hash(tools, self.system_prompt)
+        actual_tools_hash = _get_tools_hash(
+            f"{self.repo_id}/{self.filename}", tools, self.system_prompt
+        )
         state_metadata_path = self.state_path.with_suffix(".sha256")
         rebuild_state = True
         if state_metadata_path.exists() and self.state_path.exists():
@@ -255,8 +287,11 @@ def _split_args(raw_args: str) -> List[str]:
     return parts
 
 
-def _get_tools_hash(tools: List[Dict[str, Any]], system_prompt: str) -> str:
+def _get_tools_hash(
+    model_id: str, tools: List[Dict[str, Any]], system_prompt: str
+) -> str:
     hasher = hashlib.sha256()
+    hasher.update(model_id.encode())
     hasher.update(system_prompt.encode())
     hasher.update(json.dumps(tools).encode())
     return hasher.hexdigest()

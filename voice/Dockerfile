@@ -1,6 +1,4 @@
-ARG BUILD_FROM
-FROM ${BUILD_FROM}
-ARG BUILD_ARCH
+FROM ghcr.io/home-assistant/base-debian:bookworm
 
 # Set shell
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -17,17 +15,17 @@ RUN \
         curl \
         python3 \
         python3-pip \
-    && pip3 install --no-cache-dir -U \
+        python3-dev \
+        build-essential \
+        cmake \
+        ninja-build \
+    && CMAKE_ARGS='-DCMAKE_BUILD_TYPE=Release' pip3 install --no-cache-dir -U \
         setuptools \
         wheel \
     && pip3 install --no-cache-dir -r ./requirements.txt \
-        --extra-index-url https://download.pytorch.org/whl/cpu \
     && rm -rf /var/lib/apt/lists/*
 
-COPY src/voice_messages/*.py ./voice_messages/
-COPY src/templates/*.html ./templates/
-COPY src/citrinet/*.py ./citrinet/
-COPY src/default_config.yaml ./
+COPY ./tools.yaml ./
 COPY src/*.py ./
 
 WORKDIR /

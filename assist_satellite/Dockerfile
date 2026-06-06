@@ -55,5 +55,13 @@ COPY wakewords/ ./wakewords/
 WORKDIR /
 COPY rootfs /
 
+# Ensure all s6 service scripts are executable.
+# Docker COPY preserves source file permissions, so if the scripts were
+# committed without the executable bit they will fail with exit code 126.
+RUN chmod a+x \
+    /etc/s6-overlay/s6-rc.d/assist_satellite/run \
+    /etc/s6-overlay/s6-rc.d/assist_satellite/finish \
+    /etc/s6-overlay/s6-rc.d/discovery/run
+
 HEALTHCHECK --start-period=10m \
     CMD pgrep -f linux_voice_assistant || exit 1

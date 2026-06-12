@@ -3,7 +3,7 @@
 ## 1.1.11
 
 - Update to linux-voice-assistant [1.1.11](https://github.com/OHF-Voice/linux-voice-assistant/releases/tag/v1.1.11)
-- Fix executable permissions
+- Fix executable permissions [#4](https://github.com/OHF-Voice/apps/pull/4)
 
 ## 1.0.0
 

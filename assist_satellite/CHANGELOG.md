@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.11
+
+- Update to linux-voice-assistant [1.1.11](https://github.com/OHF-Voice/linux-voice-assistant/releases/tag/v1.1.11)
+- Fix executable permissions
+
 ## 1.0.0
 
 ### Linux Voice Assistant App ([linux voice assistant](https://github.com/OHF-Voice/linux-voice-assistant))

@@ -20,16 +20,16 @@ options:
   stop_word: "stop"
   refractory_seconds: 2.0
   enable_thinking_sound: false
-  wakeup_sound: "sounds/wake_word_triggered.flac"
-  processing_sound: "sounds/processing.wav"
-  timer_sound: "sounds/timer_finished.flac"
+  wakeup_sound: "/usr/src/sounds/wake_word_triggered.flac"
+  processing_sound: "/usr/src/sounds/processing.wav"
+  timer_sound: "/usr/src/sounds/timer_finished.flac"
   timer_max_ring_seconds: 900.0
   mic_volume: 1.0
   mic_noise_suppression: 0
   mic_auto_gain: 0
   debug_logging: false
-  mute_sound: "sounds/mute_switch_on.flac"
-  unmute_sound: "sounds/mute_switch_off.flac"
+  mute_sound: "/usr/src/sounds/mute_switch_on.flac"
+  unmute_sound: "/usr/src/sounds/mute_switch_off.flac"
   preferences_file: "/share/assist_satellite/preferences.json"
   download_dir: "/share/assist_satellite/local"
 schema:

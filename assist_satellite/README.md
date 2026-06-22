@@ -10,13 +10,12 @@ Part of the [Year of Voice](https://www.home-assistant.io/blog/2022/12/20/year-o
 
 ### Installation of Assist Satellite app on Home Assistant OS
 
-Note! For now you first have to add the "OHF-Voice apps" repo manually to the App Store repositroy inside Home Assistant Operating System before you can install it:
-
-* https://github.com/OHF-Voice/apps
+> [!NOTE]
+> For now you first have to add the [OHF-Voice apps](https://github.com/OHF-Voice/apps) repo manually to the App Store repositroy inside Home Assistant Operating System before you can install it.
 
 Later you will be able to install it directly from the official add-on repository (but it is not yet published publicly there):
 
-* [![Add repository to your Home Assistant instance.](https://my.home-assistant.io/badges/supervisor_addon.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https://github.com/home-assistant/addons)
+[![Add repository to your Home Assistant instance.](https://my.home-assistant.io/badges/supervisor_addon.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https://github.com/home-assistant/addons)
 
 Once installed, the satellite is automatically discovered by Home Assistant via the ESPHome integration.
 

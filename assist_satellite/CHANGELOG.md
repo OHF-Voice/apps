@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.12
+
+- Update to linux-voice-assistant [1.1.12](https://github.com/OHF-Voice/linux-voice-assistant/releases/tag/v1.1.12)
+- Correct the sound file paths [#7](https://github.com/OHF-Voice/apps/pull/7)
+
 ## 1.1.11
 
 - Update to linux-voice-assistant [1.1.11](https://github.com/OHF-Voice/linux-voice-assistant/releases/tag/v1.1.11)

@@ -27,6 +27,10 @@ options:
   mic_volume: 1.0
   mic_noise_suppression: 0
   mic_auto_gain: 0
+  peripheral_host: 0.0.0.0
+  peripheral_port: 6055
+  peripheral_volume_step: %(default)s
+  disable_peripheral_api: false
   debug_logging: false
   mute_sound: "/usr/src/sounds/mute_switch_on.flac"
   unmute_sound: "/usr/src/sounds/mute_switch_off.flac"
@@ -46,6 +50,10 @@ schema:
   mic_volume: float
   mic_noise_suppression: "int(0,4)"
   mic_auto_gain: "int(0,31)"
+  peripheral_host: int
+  peripheral_port: int
+  peripheral_volume_step: str
+  disable_peripheral_api: bool
   debug_logging: bool
   mute_sound: str
   unmute_sound: str

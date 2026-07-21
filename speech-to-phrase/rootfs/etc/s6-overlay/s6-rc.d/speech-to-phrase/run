@@ -1,0 +1,35 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Start Speech-to-Phrase: the Wyoming STT server (tcp://0.0.0.0:10300) and the
+# configuration web UI (Home Assistant ingress, :8099) run in a single process.
+#
+# On first boot (or when entities/areas/floors/config change) the default
+# grammar is trained; the embedded Wyoming server hot-reloads it.
+# ==============================================================================
+flags=()
+bashio::config.true 'debug_logging' && flags+=('--debug')
+
+language="$(bashio::config 'language')"
+
+# Only pass --max-score when the user set it; otherwise app.py picks a
+# per-backend default (citrinet 5.0, coqui 2.0).
+if bashio::config.has_value 'max_score'; then
+    flags+=('--max-score' "$(bashio::config 'max_score')")
+fi
+
+cd /usr/src/src
+
+exec python3 app.py \
+    --data /data \
+    --intents-yaml /usr/src/intents.yaml \
+    --models-dir '/data/models' \
+    --language "${language}" \
+    --backend "$(bashio::config 'backend')" \
+    --default-importance "$(bashio::config 'default_importance')" \
+    --wyoming-uri 'tcp://0.0.0.0:10300' \
+    --hass-api 'http://supervisor/core/api' \
+    --hass-token "${SUPERVISOR_TOKEN}" \
+    --host '0.0.0.0' \
+    --port 8099 \
+    "${flags[@]}"

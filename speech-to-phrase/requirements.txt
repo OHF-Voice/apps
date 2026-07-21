@@ -1,0 +1,12 @@
+flask
+aiohttp
+pyyaml
+numpy
+soundfile
+librosa
+scipy
+pysilero-vad
+hassil
+home-assistant-intents
+speech-to-phrase-lib @ git+https://github.com/OHF-Voice/speech-to-phrase-lib.git
+wyoming[zeroconf]

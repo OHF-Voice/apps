@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Speech-to-Phrase</title>
+<style>
+  :root { --b:#2563eb; --bg:#f5f7fb; --card:#fff; --line:#e5e7eb; --mut:#6b7280; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background: var(--bg); margin: 0; color:#111; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 16px 64px; }
+  header { position: sticky; top:0; z-index:5; background:var(--bg);
+           border-bottom:1px solid var(--line); padding:14px 0; margin-bottom:14px; }
+  header .bar { max-width:960px; margin:0 auto; padding:0 16px; display:flex;
+                align-items:center; gap:12px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:20px; flex:0 0 auto; }
+  .grow { flex:1; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+          padding: 16px 18px; margin-bottom: 16px; }
+  h2 { margin:0 0 4px; font-size:16px; } h3 { margin:0 0 6px; font-size:14px; }
+  .muted, .sub { color: var(--mut); } .sub { margin:2px 0 14px; font-size:13px; }
+  select, textarea, input[type=text] { font: inherit; }
+  select, input[type=text], input[type=number] { padding:6px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  textarea { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace;
+             border:1px solid var(--line); border-radius:10px; padding:8px; font-size:13px; }
+  button { background:var(--b); color:#fff; border:0; border-radius:10px;
+           padding:9px 16px; font:inherit; cursor:pointer; }
+  button.ghost { background:#eef2ff; color:#1e3a8a; border:1px solid #dbe3ff; }
+  button.mini { padding:4px 10px; font-size:13px; }
+  button:disabled { opacity:.6; cursor:default; }
+  nav.tabs { display:flex; gap:4px; margin-bottom:16px; }
+  nav.tabs button { background:transparent; color:var(--mut); border-radius:10px 10px 0 0;
+                    border-bottom:2px solid transparent; }
+  nav.tabs button.active { color:var(--b); border-bottom-color:var(--b); background:#fff; }
+  .badge { font-size:11px; padding:2px 8px; border-radius:999px; color:#fff; }
+  .required{background:#dc2626} .usable{background:#2563eb}
+  .complete{background:#6b7280} .optional{background:#9ca3af}
+  .pill { font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); color:var(--mut); }
+  .pill.intent{color:#1e3a8a;background:#eef2ff;border-color:#dbe3ff}
+  .pill.action{color:#92400e;background:#fef3c7;border-color:#fde68a}
+  .pill.stt{color:#374151;background:#f3f4f6}
+  #status { font-size:14px; } .ok{color:#16a34a} .err{color:#dc2626}
+  #dirty { color:#b45309; font-size:13px; }
+  code { background:#f1f5f9; padding:1px 5px; border-radius:5px; }
+  .intent { border-top:1px solid var(--line); padding:10px 0; }
+  .group-head { display:flex; align-items:center; gap:8px; }
+  .group-head h3 { margin:0; } .group-head .gcount { font-size:12px; }
+  /* Highlighted slot values in example sentences (matches intent-sentences site). */
+  .slot { font-style:normal; padding:0 3px; border-radius:3px; border-bottom:2px solid transparent; }
+  .slot-name   { background:#d8f3df; border-color:#1b9e3e; }
+  .slot-area   { background:#d7e9fb; border-color:#2f7fd1; }
+  .slot-floor  { background:#dfdcf7; border-color:#5b4fc4; }
+  .slot-number { background:#fbeccb; border-color:#d99e1a; }
+  .slot-color  { background:#fbd7e6; border-color:#d14a86; }
+  .slot-class  { background:#ece1f7; border-color:#8c4fc4; }
+  .slot-text   { background:#fbe2cf; border-color:#d97a2a; }
+  .slot-state  { background:#d4f1ee; border-color:#1aa39a; }
+  .slot-other  { background:#e8e8e8; border-color:#888; }
+  .slot-legend { margin:0 0 12px; padding:0; list-style:none; display:flex;
+                 flex-wrap:wrap; gap:4px 8px; font-size:12px; }
+  .slot-legend li { margin:0; }
+  .combo { display:flex; align-items:flex-start; gap:10px; padding:7px 0; }
+  .combo .meta { flex:1; } .combo .ex { font-size:14px; line-height:1.5; }
+  .combo .ex.muted { color:var(--mut); }
+  .combo-tag { font-size:12px; color:var(--mut); margin-top:2px; }
+  .domrows { margin:4px 0 2px 4px; padding-left:14px; border-left:2px solid var(--line); }
+  .domrow { display:flex; align-items:flex-start; gap:8px; padding:3px 0; }
+  .domrow .dlabel { min-width:120px; font-size:13px; color:var(--mut); }
+  .domrow .ex { font-size:14px; }
+  details.extras { margin-top:4px; }
+  details.extras > summary { cursor:pointer; font-size:12px; color:var(--b); }
+  .extra-list { margin:6px 0; }
+  .extra-item { display:flex; align-items:center; gap:6px; padding:2px 0; font-size:13px; }
+  .extra-item code { background:#f1f5f9; padding:1px 5px; border-radius:5px; }
+  .ex-rm { background:transparent; color:var(--mut); border:0; cursor:pointer; padding:0 4px; font-size:13px; }
+  .extra-add { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .extra-add .extra-input { flex:1; min-width:200px; }
+  .extra-fb { font-size:12px; } .extra-fb.ok{color:#16a34a} .extra-fb.err{color:#dc2626}
+  .cmd { border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:12px; background:#fcfcfd; }
+  .cmd .modes { display:flex; gap:14px; margin:8px 0; flex-wrap:wrap; font-size:14px; }
+  .cmd label.r { display:inline-flex; align-items:center; gap:5px; cursor:pointer; }
+  .field { margin:8px 0; } .field > label { font-weight:600; font-size:13px; display:block; margin-bottom:3px; }
+  .doms { display:flex; flex-wrap:wrap; gap:8px; }
+  .doms label { font-size:13px; display:inline-flex; gap:4px; align-items:center; }
+  .hide { display:none; }
+  .list-row { padding:8px 0; border-top:1px solid var(--line); }
+  .list-row:first-child { border-top:0; }
+  .chip { display:inline-block; background:#eef2ff; color:#1e3a8a; border:1px solid #dbe3ff;
+          border-radius:999px; padding:2px 9px; margin:2px 3px; font-size:13px; }
+  .usedby { color:var(--mut); font-size:12px; margin-top:3px; }
+  .usedby b { color:#374151; font-weight:600; }
+  .empty { color:var(--mut); font-style:italic; }
+  .result { background:#f8fafc; border:1px solid var(--line); border-radius:10px; padding:12px; margin-top:12px; font-size:14px; }
+  .kv { display:grid; grid-template-columns:120px 1fr; gap:4px 10px; margin-top:6px; }
+  .kv .k { color:var(--mut); }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1>Speech-to-Phrase</h1>
+    <label class="muted" for="lang">Language</label>
+    <select id="lang"></select>
+    <span id="trainflag" class="muted"></span>
+    <span class="grow"></span>
+    <span id="dirty"></span>
+    <button id="save">Save &amp; retrain</button>
+    <span id="status"></span>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="tabs">
+    <button data-tab="commands" class="active">Commands</button>
+    <button data-tab="lists">Devices &amp; Lists</button>
+    <button data-tab="test">Test</button>
+  </nav>
+
+  <!-- COMMANDS ------------------------------------------------------------ -->
+  <section id="tab-commands">
+    <div class="card">
+      <h2>Recognition</h2>
+      <p class="sub">Score gate for on-device speech-to-text (this language). A
+        decode is accepted only when its score is at or below this value
+        (<b>lower = more confident</b>). Raise it to recognize more commands, at
+        the risk of acting on misheard speech or noise; lower it to be stricter
+        and let Home Assistant fall back to cloud speech-to-text more often.</p>
+      <label class="r" style="display:inline-flex;align-items:center;gap:8px">
+        <span>Max score</span>
+        <input type="number" id="max-score" step="0.1" min="0.1" max="50" style="width:90px">
+      </label>
+      <span id="score-hint" class="muted" style="font-size:13px;margin-left:10px"></span>
+    </div>
+
+    <div class="card">
+      <h2>Custom commands</h2>
+      <p class="sub">Your own phrasings. Each can fire a Home Assistant
+        <b>intent</b>, run an <b>action</b> (script/scene or a service call), or be
+        <b>STT-only</b> (recognized, then handled by Home Assistant itself). Use
+        <code>{name}</code>, <code>{area}</code>, <code>{floor}</code>,
+        <code>[optional]</code>, <code>(a|b)</code>, <code>{0..100:slot}</code>.</p>
+      <div id="custom-list"></div>
+      <button id="add-cmd" class="ghost">+ Add command</button>
+    </div>
+
+    <div class="card">
+      <h2>Built-in commands</h2>
+      <p class="sub">Pre-defined commands mapped to Home Assistant intents. Toggle a
+        whole group with its header checkbox. Disable unused ones to keep
+        recognition fast and accurate.</p>
+      <ul class="slot-legend">
+        <li><span class="slot slot-name">name</span></li>
+        <li><span class="slot slot-area">area</span></li>
+        <li><span class="slot slot-floor">floor</span></li>
+        <li><span class="slot slot-class">domain</span></li>
+        <li><span class="slot slot-number">number</span></li>
+        <li><span class="slot slot-color">color</span></li>
+        <li><span class="slot slot-state">state</span></li>
+        <li><span class="slot slot-other">other</span></li>
+      </ul>
+      <div id="combos"></div>
+    </div>
+  </section>
+
+  <!-- DEVICES & LISTS ----------------------------------------------------- -->
+  <section id="tab-lists" hidden>
+    <div class="card">
+      <h2>Devices &amp; Lists</h2>
+      <p class="sub">Names pulled from Home Assistant and baked into the grammar,
+        shown with the commands that use them. Rename or expose one in HA and it's
+        picked up on the next retrain.</p>
+      <div id="lists"></div>
+    </div>
+  </section>
+
+  <!-- TEST ---------------------------------------------------------------- -->
+  <section id="tab-test" hidden>
+    <div class="card">
+      <h2>Test recognition</h2>
+      <p class="sub">Type what you'd say and see what would fire. (Doesn't execute
+        anything or resolve the satellite's area.)</p>
+      <div class="row" style="display:flex;gap:8px">
+        <input type="text" id="test-text" style="flex:1" placeholder="turn on the kitchen lamp">
+        <button id="test-btn">Test</button>
+      </div>
+      <div id="test-result"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let S = {};                 // server state for the active language
+let dirty = false;
+
+const COMMON_DOMAINS = ["light","switch","fan","cover","lock","media_player",
+                        "input_boolean","climate","vacuum","valve","scene","script"];
+
+function markDirty(){ dirty = true; $("dirty").textContent = "● unsaved changes"; }
+function clearDirty(){ dirty = false; $("dirty").textContent = ""; }
+
+async function loadLanguages() {
+  const { languages, default: def } = await (await fetch("api/languages")).json();
+  $("lang").innerHTML = languages.map(l => `<option ${l===def?"selected":""}>${l}</option>`).join("");
+  await loadState();
+}
+
+async function loadState() {
+  const lang = $("lang").value;
+  S = await (await fetch("api/state?lang=" + encodeURIComponent(lang))).json();
+  $("trainflag").textContent = S.trainable ? "" : "(no model — saves persist, grammar not retrained)";
+  renderSettings();
+  renderCustom();
+  renderCombos();
+  renderLists();
+  clearDirty();
+}
+
+/* ---- recognition settings ---- */
+function renderSettings() {
+  if (S.max_score != null) $("max-score").value = S.max_score;
+  const def = S.max_score_default;
+  $("score-hint").textContent = def != null ? `default ${def}` : "";
+}
+
+/* ---- domains available for {name} filtering ---- */
+function domains() {
+  const ds = new Set(COMMON_DOMAINS);
+  Object.keys(S.devices_by_domain || {}).forEach(d => ds.add(d));
+  return [...ds].sort();
+}
+
+/* ---- custom commands ---- */
+function renderCustom() {
+  const host = $("custom-list");
+  host.innerHTML = "";
+  (S.commands || []).forEach((cmd, i) => host.appendChild(commandCard(cmd, i)));
+  if (!(S.commands || []).length)
+    host.innerHTML = '<p class="empty">No custom commands yet.</p>';
+}
+
+function commandCard(cmd, i) {
+  const el = document.createElement("div");
+  el.className = "cmd"; el.dataset.i = i;
+  const mode = cmd.mode || "stt";
+  const intentOpts = (S.intents || []).map(it =>
+    `<option value="${it.name}" ${cmd.intent?.name===it.name?"selected":""}>${it.name}</option>`).join("");
+  const scriptOpts = (S.scripts_scenes || []).map(s =>
+    `<option value="${s.entity_id}" ${cmd.action?.entity_id===s.entity_id?"selected":""}>${s.name} (${s.entity_id})</option>`).join("");
+  const actKind = cmd.action?.kind === "service" ? "service" : "script";
+  const slotsText = Object.entries(cmd.intent?.slots || {}).map(([k,v])=>`${k}: ${v}`).join("\n");
+  el.innerHTML = `
+    <div class="field">
+      <label>Sentences (one per line)</label>
+      <textarea class="c-sentences" rows="2" placeholder="movie time">${(cmd.sentences||[]).join("\n")}</textarea>
+    </div>
+    <div class="modes">
+      <label class="r"><input type="radio" name="mode-${i}" value="intent" ${mode==="intent"?"checked":""}> Intent</label>
+      <label class="r"><input type="radio" name="mode-${i}" value="action" ${mode==="action"?"checked":""}> Action</label>
+      <label class="r"><input type="radio" name="mode-${i}" value="stt" ${mode==="stt"?"checked":""}> STT only</label>
+    </div>
+    <div class="m-intent ${mode!=="intent"?"hide":""}">
+      <div class="field"><label>Home Assistant intent</label>
+        <select class="c-intent">${intentOpts}</select></div>
+      <div class="field"><label>Fixed slots (optional, <code>key: value</code> per line)</label>
+        <textarea class="c-slots" rows="2" placeholder="domain: light">${slotsText}</textarea></div>
+    </div>
+    <div class="m-action ${mode!=="action"?"hide":""}">
+      <div class="modes">
+        <label class="r"><input type="radio" name="act-${i}" value="script" ${actKind==="script"?"checked":""}> Run script / scene</label>
+        <label class="r"><input type="radio" name="act-${i}" value="service" ${actKind==="service"?"checked":""}> Custom service (YAML)</label>
+      </div>
+      <div class="a-script ${actKind!=="script"?"hide":""}">
+        <select class="c-script">${scriptOpts || '<option value="">(no exposed scripts/scenes)</option>'}</select>
+      </div>
+      <div class="a-service ${actKind!=="service"?"hide":""}">
+        <textarea class="c-yaml" rows="4" placeholder="service: light.turn_on&#10;target: {entity_id: light.x}&#10;data: {brightness_pct: 50}">${cmd.action?.yaml||""}</textarea>
+      </div>
+    </div>
+    <div class="field c-doms-wrap ${hasName(cmd.sentences)?"":"hide"}">
+      <label>Name domains <span class="muted">(which device types <code>{name}</code> can match)</span></label>
+      <div class="doms">${domains().map(d=>`<label><input type="checkbox" class="c-dom" value="${d}" ${(cmd.name_domains||[]).includes(d)?"checked":""}>${d}</label>`).join("")}</div>
+    </div>
+    <div class="field ${mode==="stt"?"hide":""} c-resp-wrap">
+      <label>Spoken response <span class="muted">(Jinja2, rendered by Home Assistant)</span></label>
+      <textarea class="c-response" rows="2" placeholder="Done">${cmd.response||""}</textarea>
+    </div>
+    <button class="mini ghost c-remove">Remove</button>
+  `;
+  // mode switching
+  el.querySelectorAll(`input[name=mode-${i}]`).forEach(r => r.addEventListener("change", () => {
+    const m = r.value;
+    el.querySelector(".m-intent").classList.toggle("hide", m!=="intent");
+    el.querySelector(".m-action").classList.toggle("hide", m!=="action");
+    el.querySelector(".c-resp-wrap").classList.toggle("hide", m==="stt");
+    markDirty();
+  }));
+  el.querySelectorAll(`input[name=act-${i}]`).forEach(r => r.addEventListener("change", () => {
+    el.querySelector(".a-script").classList.toggle("hide", r.value!=="script");
+    el.querySelector(".a-service").classList.toggle("hide", r.value!=="service");
+    markDirty();
+  }));
+  el.querySelector(".c-sentences").addEventListener("input", e => {
+    el.querySelector(".c-doms-wrap").classList.toggle("hide", !hasName(e.target.value.split("\n")));
+    markDirty();
+  });
+  el.querySelector(".c-remove").addEventListener("click", () => {
+    S.commands.splice(i, 1); renderCustom(); markDirty();
+  });
+  el.querySelectorAll("input,textarea,select").forEach(x => x.addEventListener("input", markDirty));
+  return el;
+}
+
+function hasName(sentences) {
+  return (sentences||[]).some(s => /\{name\}/.test(s));
+}
+
+function collectCommands() {
+  return [...document.querySelectorAll("#custom-list .cmd")].map(el => {
+    const sentences = el.querySelector(".c-sentences").value.split("\n").map(s=>s.trim()).filter(Boolean);
+    const mode = el.querySelector(`input[name^=mode-]:checked`).value;
+    const cmd = { sentences, mode };
+    const resp = el.querySelector(".c-response").value.trim();
+    if (mode !== "stt" && resp) cmd.response = resp;
+    if (hasName(sentences)) {
+      const ds = [...el.querySelectorAll(".c-dom:checked")].map(c=>c.value);
+      if (ds.length) cmd.name_domains = ds;
+    }
+    if (mode === "intent") {
+      const slots = {};
+      el.querySelector(".c-slots").value.split("\n").forEach(line => {
+        const m = line.match(/^\s*([\w.]+)\s*:\s*(.+?)\s*$/);
+        if (m) slots[m[1]] = m[2];
+      });
+      cmd.intent = { name: el.querySelector(".c-intent").value };
+      if (Object.keys(slots).length) cmd.intent.slots = slots;
+    } else if (mode === "action") {
+      const kind = el.querySelector(`input[name^=act-]:checked`).value;
+      if (kind === "service") {
+        cmd.action = { kind: "service", yaml: el.querySelector(".c-yaml").value };
+      } else {
+        const eid = el.querySelector(".c-script").value;
+        cmd.action = { kind: eid.split(".")[0] || "script", entity_id: eid };
+      }
+    }
+    return cmd;
+  });
+}
+
+/* ---- built-in combos, grouped by function ---- */
+function renderCombos() {
+  const byGroup = {};
+  for (const c of S.combos) (byGroup[c.group] ||= []).push(c);
+  const order = (S.groups && S.groups.length) ? S.groups : Object.keys(byGroup);
+  $("combos").innerHTML = order.filter(g => byGroup[g]).map(group => `
+    <div class="intent">
+      <div class="group-head">
+        <input type="checkbox" class="group-toggle" data-group="${group}">
+        <h3>${group}</h3>
+        <span class="muted gcount" data-group="${group}"></span>
+      </div>
+      ${byGroup[group].map(c => {
+        const idx = S.combos.indexOf(c);
+        const split = (c.domains && c.domains.length > 1);
+        let body;
+        if (split) {
+          body = `<div class="domrows">` + c.domains.map(d => `
+            <div class="domrow">
+              <input type="checkbox" class="dom-cb" data-i="${idx}" data-group="${group}" data-domain="${d}" ${(c.enabled_domains||[]).includes(d)?"checked":""}>
+              <span class="dlabel">${d}</span>
+              <span class="ex">${(c.examples_by_domain||{})[d]||""}</span>
+            </div>`).join("") + `</div>`;
+        } else {
+          const examples = (c.examples && c.examples.length) ? c.examples : (c.example ? [c.example] : []);
+          body = examples.map(e => `<div class="ex">${e}</div>`).join("")
+               || `<div class="ex muted">${c.description||""}</div>`;
+        }
+        return `<div class="combo">
+          <input type="checkbox" data-i="${idx}" data-group="${group}" class="combo-cb" ${c.enabled?"checked":""} id="c${idx}">
+          <div class="meta">
+            ${body}
+            <div class="combo-tag">${c.intent} · ${c.combo}</div>
+            <details class="extras" data-i="${idx}">
+              <summary>${extraSummary(c)}</summary>
+              <div class="extra-list" data-i="${idx}"></div>
+              <div class="extra-add">
+                <input type="text" class="extra-input" data-i="${idx}" placeholder="add a phrasing, e.g. {0..100:minutes} minute timer">
+                <button class="mini extra-btn" data-i="${idx}">Add</button>
+                <span class="extra-fb" data-i="${idx}"></span>
+              </div>
+            </details>
+          </div></div>`;
+      }).join("")}
+    </div>`).join("");
+  $("combos").querySelectorAll(".combo-cb").forEach(cb =>
+    cb.addEventListener("change", () => {
+      const c = S.combos[cb.dataset.i];
+      c.enabled = cb.checked;
+      c.enabled_domains = cb.checked ? [...(c.domains||[])] : [];
+      // reflect on any per-domain checkboxes
+      $("combos").querySelectorAll(`.dom-cb[data-i="${cb.dataset.i}"]`)
+        .forEach(d => { d.checked = cb.checked; });
+      cb.indeterminate = false;
+      updateGroupToggle(cb.dataset.group); markDirty();
+    }));
+  $("combos").querySelectorAll(".dom-cb").forEach(cb =>
+    cb.addEventListener("change", () => {
+      const c = S.combos[cb.dataset.i];
+      const set = new Set(c.enabled_domains || []);
+      cb.checked ? set.add(cb.dataset.domain) : set.delete(cb.dataset.domain);
+      c.enabled_domains = (c.domains || []).filter(d => set.has(d));
+      c.enabled = c.enabled_domains.length > 0;
+      updateComboParent(cb.dataset.i);
+      updateGroupToggle(cb.dataset.group); markDirty();
+    }));
+  S.combos.forEach((c, i) => updateComboParent(i));
+  S.combos.forEach((c, i) => renderExtraList(i));
+  $("combos").querySelectorAll(".extra-btn").forEach(b =>
+    b.addEventListener("click", () => addExtra(b.dataset.i)));
+  $("combos").querySelectorAll(".extra-input").forEach(inp =>
+    inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addExtra(inp.dataset.i); } }));
+  $("combos").querySelectorAll(".group-toggle").forEach(t =>
+    t.addEventListener("change", () => {
+      S.combos.forEach((c, i) => {
+        if (c.group === t.dataset.group) {
+          c.enabled = t.checked;
+          c.enabled_domains = t.checked ? [...(c.domains || [])] : [];
+          const el = $("c" + i);
+          if (el) { el.checked = t.checked; el.indeterminate = false; }
+          $("combos").querySelectorAll(`.dom-cb[data-i="${i}"]`)
+            .forEach(d => { d.checked = t.checked; });
+        }
+      });
+      updateGroupToggle(t.dataset.group); markDirty();
+    }));
+  order.forEach(updateGroupToggle);
+}
+
+/* Combo parent checkbox reflects its per-domain children (checked/indeterminate). */
+function updateComboParent(i) {
+  const c = S.combos[i];
+  const el = $("c" + i);
+  if (!el) return;
+  const total = (c.domains || []).length;
+  if (total <= 1) { el.checked = !!c.enabled; el.indeterminate = false; return; }
+  const on = (c.enabled_domains || []).length;
+  el.checked = on === total;
+  el.indeterminate = on > 0 && on < total;
+}
+
+/* ---- extra phrasings on built-in commands ---- */
+function escapeHtml(s){ return s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function extraSummary(c){ const n=(c.extra||[]).length; return "Extra phrasings" + (n?` (${n})`:""); }
+
+function renderExtraList(i) {
+  const host = $("combos").querySelector(`.extra-list[data-i="${i}"]`);
+  if (!host) return;
+  const c = S.combos[i];
+  host.innerHTML = (c.extra||[]).map((s,j) =>
+    `<div class="extra-item"><code>${escapeHtml(s)}</code> <button class="ex-rm" data-i="${i}" data-j="${j}" title="remove">✕</button></div>`).join("");
+  host.querySelectorAll(".ex-rm").forEach(btn => btn.addEventListener("click", () => {
+    S.combos[i].extra.splice(+btn.dataset.j, 1);
+    renderExtraList(i); markDirty();
+    const sum = $("combos").querySelector(`details.extras[data-i="${i}"] > summary`);
+    if (sum) sum.textContent = extraSummary(S.combos[i]);
+  }));
+}
+
+async function addExtra(i) {
+  const c = S.combos[i];
+  const input = $("combos").querySelector(`.extra-input[data-i="${i}"]`);
+  const fb = $("combos").querySelector(`.extra-fb[data-i="${i}"]`);
+  const s = input.value.trim();
+  if (!s) return;
+  fb.className = "extra-fb muted"; fb.textContent = "checking…";
+  let r;
+  try {
+    r = await (await fetch("api/validate_sentence", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ lang: $("lang").value, intent: c.intent, combo: c.combo, sentence: s })
+    })).json();
+  } catch (e) { fb.className="extra-fb err"; fb.textContent="check failed: "+e; return; }
+  if (r.ok) {
+    (c.extra || (c.extra = [])).push(s);
+    renderExtraList(i); input.value = "";
+    const sum = $("combos").querySelector(`details.extras[data-i="${i}"] > summary`);
+    if (sum) sum.textContent = extraSummary(c);
+    fb.className = "extra-fb ok";
+    fb.textContent = `✓ ${r.intent} ${JSON.stringify(r.slots||{})}`;
+    markDirty();
+  } else {
+    fb.className = "extra-fb err";
+    fb.textContent = `✗ ${r.error || "not recognized"}` + (r.sample ? ` (tried “${r.sample}”)` : "");
+  }
+}
+
+function updateGroupToggle(group) {
+  const items = S.combos.filter(c => c.group === group);
+  if (!items.length) return;
+  const on = items.filter(c => c.enabled).length;
+  const sel = `[data-group="${CSS.escape(group)}"]`;
+  const t = document.querySelector(".group-toggle" + sel);
+  if (t) { t.checked = on === items.length; t.indeterminate = on > 0 && on < items.length; }
+  const cnt = document.querySelector(".gcount" + sel);
+  if (cnt) cnt.textContent = `${on}/${items.length}`;
+}
+
+/* ---- devices & lists ---- */
+function chips(items){ return (items&&items.length) ? items.map(x=>`<span class="chip">${x}</span>`).join("") : '<span class="empty">none</span>'; }
+function usedBy(items){ return (items&&items.length) ? `<div class="usedby"><b>Used by:</b> ${items.join(", ")}</div>` : '<div class="usedby empty">Used by no enabled command</div>'; }
+
+function renderLists() {
+  const rows = [];
+  rows.push(`<div class="list-row"><h3>Areas</h3>${chips(S.areas.values)}${usedBy(S.areas.used_by)}</div>`);
+  rows.push(`<div class="list-row"><h3>Floors</h3>${chips(S.floors.values)}${usedBy(S.floors.used_by)}</div>`);
+  const dom = S.devices_by_domain || {};
+  for (const d of Object.keys(dom).sort())
+    rows.push(`<div class="list-row"><h3>${d} <span class="muted">{name}</span></h3>${chips(dom[d].values)}${usedBy(dom[d].used_by)}</div>`);
+  $("lists").innerHTML = rows.join("");
+}
+
+/* ---- test ---- */
+async function runTest() {
+  const text = $("test-text").value.trim();
+  const out = $("test-result");
+  if (!text) { out.innerHTML = ""; return; }
+  out.innerHTML = '<div class="result muted">Testing…</div>';
+  const r = await (await fetch("api/test", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ lang: $("lang").value, text })
+  })).json();
+  if (!r.matched) { out.innerHTML = '<div class="result">No match — Home Assistant would handle this (or fall back).</div>'; return; }
+  const slots = Object.entries(r.slots||{}).map(([k,v])=>`<span class="k">${k}</span><span>${v}</span>`).join("");
+  const pill = `<span class="pill ${r.mode}">${r.mode}</span>`;
+  let head = r.mode==="action"
+    ? `${pill} action: <code>${r.action?.entity_id || r.action?.kind || "service"}</code>`
+    : `${pill} intent: <b>${r.intent}</b>`;
+  if (r.source==="custom") head += ' <span class="pill">custom</span>';
+  out.innerHTML = `<div class="result">${head}
+    ${slots?`<div class="kv">${slots}</div>`:""}
+    ${r.context_area?'<div class="usedby">+ area from the satellite (resolved at runtime)</div>':""}
+    ${r.response?`<div class="usedby"><b>Response:</b> <code>${r.response.replace(/</g,"&lt;")}</code></div>`:""}
+  </div>`;
+}
+
+/* enabled.json entry for a combo: [intent,combo] (all), [intent,combo,[domains]]
+   (subset), or null (off). */
+function comboSelection(c) {
+  if ((c.domains || []).length > 1) {
+    const ed = c.enabled_domains || [];
+    if (!ed.length) return null;
+    if (ed.length === c.domains.length) return [c.intent, c.combo];
+    return [c.intent, c.combo, ed];
+  }
+  return c.enabled ? [c.intent, c.combo] : null;
+}
+
+/* ---- save ---- */
+async function save() {
+  const btn = $("save"), st = $("status");
+  btn.disabled = true; st.className = "muted"; st.textContent = "Saving…";
+  try {
+    const res = await (await fetch("api/save", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        lang: $("lang").value,
+        max_score: parseFloat($("max-score").value),
+        enabled: S.combos.map(comboSelection).filter(Boolean),
+        extra_sentences: Object.fromEntries(
+          S.combos.filter(c => c.extra && c.extra.length).map(c => [`${c.intent}/${c.combo}`, c.extra])),
+        commands: collectCommands(),
+      })
+    })).json();
+    st.className = res.ok ? "ok" : "err";
+    st.textContent = res.message || (res.ok?"Saved.":"Failed.");
+    if (res.ok) { clearDirty(); await loadState(); }
+  } catch (e) { st.className="err"; st.textContent = "Save failed: " + e; }
+  finally { btn.disabled = false; }
+}
+
+/* ---- tabs + wiring ---- */
+document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("nav.tabs button").forEach(x=>x.classList.toggle("active", x===b));
+  ["commands","lists","test"].forEach(t => $("tab-"+t).hidden = (t!==b.dataset.tab));
+}));
+$("add-cmd").addEventListener("click", () => {
+  (S.commands ||= []).push({ sentences:[], mode:"stt" });
+  renderCustom(); markDirty();
+});
+$("max-score").addEventListener("input", markDirty);
+$("test-btn").addEventListener("click", runTest);
+$("test-text").addEventListener("keydown", e => { if (e.key==="Enter") runTest(); });
+$("lang").addEventListener("change", () => {
+  if (dirty && !confirm("Discard unsaved changes and switch language?")) return;
+  loadState();
+});
+$("save").addEventListener("click", save);
+window.addEventListener("beforeunload", e => { if (dirty){ e.preventDefault(); e.returnValue=""; } });
+loadLanguages();
+</script>
+</body>
+</html>

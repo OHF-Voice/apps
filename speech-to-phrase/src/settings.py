@@ -1,0 +1,71 @@
+"""Per-language runtime settings persisted to ``<data>/<lang>/settings.json``.
+
+Currently just the score gate (``max_score``): the max per-token score at/below
+which a decode is accepted (lower = more confident; above it the utterance is
+gated to an empty transcript so Home Assistant can fall back to cloud STT). It's
+per-language and editable in the web UI, and the Wyoming STT server re-reads it
+on each utterance so a change takes effect without a restart.
+"""
+import json
+import logging
+from pathlib import Path
+from typing import Union
+
+_LOGGER = logging.getLogger(__name__)
+
+FILENAME = "settings.json"
+
+# Guard rails for a user-entered gate. The fitted default is ~5.0 (citrinet);
+# well below ~1 nothing matches, well above ~15 even OOV noise is accepted.
+MIN_MAX_SCORE = 0.1
+MAX_MAX_SCORE = 50.0
+
+
+def path(data_dir: Union[str, Path], lang: str) -> Path:
+    return Path(data_dir) / lang / FILENAME
+
+
+def _read(p: Path) -> dict:
+    if p.exists():
+        try:
+            return json.loads(p.read_text())
+        except Exception:  # noqa: BLE001 -- corrupt file shouldn't break serving
+            _LOGGER.warning("Ignoring unreadable settings file %s", p)
+    return {}
+
+
+def load(data_dir: Union[str, Path], lang: str) -> dict:
+    return _read(path(data_dir, lang))
+
+
+def _coerce_max_score(value, default: float) -> float:
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return default
+    return min(MAX_MAX_SCORE, max(MIN_MAX_SCORE, v))
+
+
+def get_max_score(data_dir: Union[str, Path], lang: str, default: float) -> float:
+    """Persisted gate for `lang`, or `default` if unset/invalid."""
+    v = load(data_dir, lang).get("max_score")
+    return default if v is None else _coerce_max_score(v, default)
+
+
+def read_max_score_file(settings_path: Path, default: float) -> float:
+    """Same as get_max_score but from an explicit file path (for the Wyoming
+    server, which knows its grammar dir but not data_dir/lang)."""
+    v = _read(settings_path).get("max_score")
+    return default if v is None else _coerce_max_score(v, default)
+
+
+def set_max_score(data_dir: Union[str, Path], lang: str, value) -> float:
+    """Persist the gate for `lang` (clamped to the valid range). Returns the
+    stored value. Merges into any existing settings so future keys survive."""
+    p = path(data_dir, lang)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    data = _read(p)
+    stored = _coerce_max_score(value, data.get("max_score", MIN_MAX_SCORE))
+    data["max_score"] = stored
+    p.write_text(json.dumps(data, indent=2))
+    return stored

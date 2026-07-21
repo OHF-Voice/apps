@@ -1,0 +1,8 @@
+data/
+local/
+tests/wav/.tts_cache/
+__pycache__/
+*.pyc
+*.fst
+*.fst.tokens
+.pytest_cache/

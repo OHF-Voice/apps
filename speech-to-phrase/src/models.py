@@ -1,0 +1,175 @@
+"""Acoustic-model provisioning.
+
+Models are downloaded from the rhasspy-speech HuggingFace dataset
+    https://huggingface.co/datasets/rhasspy/rhasspy-speech/tree/main/models
+as ``<name>.tar.gz`` (e.g. ``en_US-coqui``) and extracted into a local models
+directory given on the command line (``--models-dir``, default ``/data/models``
+in the add-on). Re-download is skipped if the model is already present.
+"""
+import logging
+import os
+import platform
+import shutil
+import tarfile
+import tempfile
+import urllib.request
+from pathlib import Path
+from typing import Optional
+
+_LOGGER = logging.getLogger("speech-to-phrase.models")
+
+HF_BASE = "https://huggingface.co/datasets/rhasspy/rhasspy-speech/resolve/main/models"
+TOOLS_BASE = "https://huggingface.co/datasets/rhasspy/rhasspy-speech/resolve/main/tools"
+
+# machine() -> stt_onlyprobs binary name (needed only for the coqui backend).
+STT_BINARIES = {
+    "x86_64": "stt_onlyprobs.x86_64.bin",
+    "amd64": "stt_onlyprobs.x86_64.bin",
+    "aarch64": "stt_onlyprobs.arm64.bin",
+    "arm64": "stt_onlyprobs.arm64.bin",
+}
+# A directory is "a model" if it holds an acoustic-model file: *.tflite (coqui),
+# *.onnx (citrinet, often named <model>.onnx), or *.fst (kaldi).
+MODEL_GLOBS = ("*.tflite", "*.onnx", "*.fst")
+
+# Per-backend default score gate: the max per-token penalty at/below which a
+# local transcript is accepted (above it the utterance is treated as
+# out-of-grammar and handed to the cloud fallback). The scales differ because
+# Citrinet is subword and Coqui is character. Citrinet 5.0 was re-fit on
+# tests/en; Coqui 2.0 was re-fit on Common Voice (sl) — the old 1.25 rejected
+# ~24% of correctly recognized commands. Users can override globally (add-on
+# ``max_score`` option) or per-language in the web UI.
+DEFAULT_MAX_SCORE = {"citrinet": 5.0, "coqui": 2.0}
+
+
+def default_max_score(backend: str) -> float:
+    return DEFAULT_MAX_SCORE.get(backend, 5.0)
+
+# language -> {backend: HuggingFace model name}. The repo ships NeMo CTC models
+# (citrinet/conformer, ONNX -> "citrinet" backend, runs on onnxruntime with no
+# extra binary) and Coqui TFLite models ("coqui" backend, needs stt_onlyprobs).
+# Citrinet is preferred where available. Extend as languages are validated.
+MODEL_NAMES = {
+    "en": {"citrinet": "stt_en_citrinet_512", "coqui": "en_US-coqui"},
+    "de": {"citrinet": "stt_de_citrinet_1024", "coqui": "de_DE-coqui"},
+    "es": {"citrinet": "stt_es_citrinet_512", "coqui": "es_ES-coqui"},
+    "fr": {"citrinet": "stt_fr_citrinet_1024_gamma_0_25", "coqui": "fr_FR-rhasspy"},
+    "it": {"citrinet": "stt_it_conformer_ctc_large", "coqui": "it_IT-coqui"},
+    "zh": {"citrinet": "stt_zh_citrinet_512"},
+    "ru": {"citrinet": "stt_ru_conformer_ctc_large"},
+    "hr": {"citrinet": "stt_hr_conformer_ctc_large"},
+    "hi": {"citrinet": "stt_hi_conformer_ctc_medium"},
+    "ca": {"citrinet": "stt_ca_conformer_ctc_large", "coqui": "ca_ES-coqui"},
+    "nl": {"coqui": "nl_NL-coqui"},
+    "cs": {"coqui": "cs_CZ-coqui"},
+    "sl": {"coqui": "sl_SL-coqui"},
+}
+
+
+def _present(d: Path) -> bool:
+    return d.is_dir() and any(any(d.glob(pat)) for pat in MODEL_GLOBS)
+
+
+def _find_model_dir(root: Path) -> Path:
+    """Locate the extracted dir actually containing the model files (the tarball
+    may or may not wrap them in a top-level directory)."""
+    if _present(root):
+        return root
+    for d in (p for p in root.rglob("*") if p.is_dir()):
+        if _present(d):
+            return d
+    return root
+
+
+def model_name_for(language: str, backend: str) -> Optional[str]:
+    by_backend = MODEL_NAMES.get(language, {})
+    return by_backend.get(backend) or (next(iter(by_backend.values()), None))
+
+
+def resolve_backend(language: str, requested: str) -> str:
+    """Turn ``backend="auto"`` into a concrete backend that actually has a model
+    for ``language``. Citrinet is preferred (no extra binary, subword scale);
+    Coqui is used for languages that ship only a Coqui model (e.g. ``sl``,
+    ``nl``, ``cs``). Non-auto values pass through unchanged."""
+    if requested != "auto":
+        return requested
+    by_backend = MODEL_NAMES.get(language, {})
+    if "citrinet" in by_backend:
+        return "citrinet"
+    if "coqui" in by_backend:
+        return "coqui"
+    return "citrinet"
+
+
+def ensure_model(name: str, models_dir: Path) -> Path:
+    """Return <models_dir>/<name>, downloading + extracting it if absent."""
+    models_dir = Path(models_dir)
+    target = models_dir / name
+    if _present(target):
+        return target
+
+    url = f"{HF_BASE}/{name}.tar.gz"
+    _LOGGER.info("Downloading acoustic model '%s' from %s", name, url)
+    models_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as td:
+        tar_path = Path(td) / "model.tar.gz"
+        urllib.request.urlretrieve(url, tar_path)
+        extract_dir = Path(td) / "x"
+        with tarfile.open(tar_path) as tf:
+            tf.extractall(extract_dir)
+        src = _find_model_dir(extract_dir)
+        if not _present(src):
+            raise RuntimeError(f"No model files found in archive for '{name}'")
+        tmp_target = models_dir / f".{name}.tmp"
+        if tmp_target.exists():
+            shutil.rmtree(tmp_target)
+        shutil.move(str(src), str(tmp_target))
+        tmp_target.rename(target)  # atomic publish
+    _LOGGER.info("Acoustic model '%s' ready at %s", name, target)
+    return target
+
+
+def ensure_stt_binary(tools_dir: Path) -> Path:
+    """Download the architecture-appropriate stt_onlyprobs binary (used by the
+    coqui backend) and point $STT_ONLYPROBS at it. Idempotent."""
+    arch = platform.machine().lower()
+    name = STT_BINARIES.get(arch)
+    if not name:
+        raise RuntimeError(f"No stt_onlyprobs binary for architecture {arch!r}")
+    tools_dir = Path(tools_dir)
+    target = tools_dir / name
+    if not target.exists():
+        url = f"{TOOLS_BASE}/{name}"
+        _LOGGER.info("Downloading stt_onlyprobs (%s) from %s", arch, url)
+        tools_dir.mkdir(parents=True, exist_ok=True)
+        tmp = tools_dir / f".{name}.tmp"
+        urllib.request.urlretrieve(url, tmp)
+        tmp.chmod(0o755)
+        tmp.rename(target)
+        _LOGGER.info("stt_onlyprobs ready at %s", target)
+    os.environ["STT_ONLYPROBS"] = str(target)
+    return target
+
+
+def resolve(model: Optional[str], models_dir: Path, language: str,
+            backend: str, tools_dir: Optional[Path] = None) -> Optional[Path]:
+    """Resolve a usable model directory.
+
+    * ``model`` is an existing model dir -> use as-is (dev: point at a checkout).
+    * ``model`` is a name -> download/extract it.
+    * ``model`` unset -> derive the name from (language, backend) and download.
+    Returns None if no mapping exists and nothing was given (caller decides).
+    The coqui backend additionally needs the stt_onlyprobs binary, which is
+    fetched here and exported via $STT_ONLYPROBS.
+    """
+    if backend == "coqui":
+        ensure_stt_binary(tools_dir or (Path(models_dir).parent / "tools"))
+    if model:
+        p = Path(model)
+        if _present(p):
+            return p
+        return ensure_model(model, models_dir)
+    name = model_name_for(language, backend)
+    if not name:
+        return None
+    return ensure_model(name, models_dir)

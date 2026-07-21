@@ -7,6 +7,6 @@ librosa
 scipy
 pysilero-vad
 hassil
-home-assistant-intents
+home-assistant-intents>=2026-07-21
 speech-to-phrase-lib @ git+https://github.com/OHF-Voice/speech-to-phrase-lib.git
 wyoming[zeroconf]

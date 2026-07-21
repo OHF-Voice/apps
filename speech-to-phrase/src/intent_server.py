@@ -26,8 +26,6 @@ from functools import partial
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
-import yaml
-
 from wyoming.asr import Transcript
 from wyoming.handle import Handled, NotHandled
 from wyoming.info import Attribution, Info, IntentModel, IntentProgram
@@ -68,14 +66,9 @@ def _read_enabled(data_dir: Path, lang: str, s2p_repo: Path) -> List[Tuple[str, 
             return [tuple(e) for e in json.loads(f.read_text())]
         except Exception:  # noqa: BLE001
             _LOGGER.warning("could not parse %s; using all on-disk combos", f)
-    out: List[Tuple[str, str]] = []
-    lang_dir = s2p_repo / "sentences" / lang
-    if lang_dir.is_dir():
-        for intent_dir in sorted(lang_dir.iterdir()):
-            if intent_dir.is_dir():
-                for combo in sorted(intent_dir.glob("*.yaml")):
-                    out.append((intent_dir.name, combo.stem))
-    return out
+    import s2p_intents
+
+    return list(s2p_intents.combos(lang))
 
 
 class MatcherHolder:
@@ -303,37 +296,9 @@ class IntentEventHandler(AsyncEventHandler):
             )
 
     async def _run_action(self, action, slots) -> bool:
-        kind = action.get("kind")
-        if kind in ("script", "scene"):
-            entity_id = action.get("entity_id")
-            if not entity_id or "." not in entity_id:
-                _LOGGER.warning("action %s missing entity_id", kind)
-                return False
-            domain = entity_id.split(".", 1)[0]
-            # Scripts can take slots as `variables`; scenes cannot.
-            data = {"variables": slots} if (domain == "script" and slots) else {}
-            return await hass_actions.call_service_async(
-                self._api_url, self._token, domain, "turn_on",
-                data=data, target={"entity_id": entity_id},
-            )
-        if kind == "service":
-            yaml_text = action.get("yaml") or ""
-            # Render slot templates in the YAML (in HA), then parse + call.
-            rendered = await hass_actions.render_template_async(
-                self._api_url, self._token, yaml_text, variables={"slots": slots},
-            )
-            spec = yaml.safe_load(rendered or yaml_text) or {}
-            service = spec.get("service") or spec.get("action")
-            if not service or "." not in service:
-                _LOGGER.warning("custom service action missing 'service:' (%r)", service)
-                return False
-            domain, svc = service.split(".", 1)
-            return await hass_actions.call_service_async(
-                self._api_url, self._token, domain, svc,
-                data=spec.get("data") or {}, target=spec.get("target") or {},
-            )
-        _LOGGER.warning("unknown action kind: %r", kind)
-        return False
+        return await hass_actions.run_action_async(
+            self._api_url, self._token, action, slots
+        )
 
     async def _resolve_area(self, context) -> Optional[str]:
         context = context or {}

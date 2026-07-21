@@ -43,7 +43,12 @@
   #dirty { color:#b45309; font-size:13px; }
   code { background:#f1f5f9; padding:1px 5px; border-radius:5px; }
   .intent { border-top:1px solid var(--line); padding:10px 0; }
+  details.group { border-top:1px solid var(--line); }
+  details.group > summary { list-style:none; cursor:pointer; padding:10px 0; }
+  details.group > summary::-webkit-details-marker { display:none; }
   .group-head { display:flex; align-items:center; gap:8px; }
+  .group-head::before { content:"\25B8"; color:var(--mut); font-size:11px; width:10px; text-align:center; }
+  details.group[open] > summary .group-head::before { content:"\25BE"; }
   .group-head h3 { margin:0; } .group-head .gcount { font-size:12px; }
   /* Highlighted slot values in example sentences (matches intent-sentences site). */
   .slot { font-style:normal; padding:0 3px; border-radius:3px; border-bottom:2px solid transparent; }
@@ -111,38 +116,15 @@
 
 <div class="wrap">
   <nav class="tabs">
-    <button data-tab="commands" class="active">Commands</button>
+    <button data-tab="builtin" class="active">Built-in commands</button>
+    <button data-tab="custom">Custom commands</button>
     <button data-tab="lists">Devices &amp; Lists</button>
     <button data-tab="test">Test</button>
+    <button data-tab="settings">Settings</button>
   </nav>
 
-  <!-- COMMANDS ------------------------------------------------------------ -->
-  <section id="tab-commands">
-    <div class="card">
-      <h2>Recognition</h2>
-      <p class="sub">Score gate for on-device speech-to-text (this language). A
-        decode is accepted only when its score is at or below this value
-        (<b>lower = more confident</b>). Raise it to recognize more commands, at
-        the risk of acting on misheard speech or noise; lower it to be stricter
-        and let Home Assistant fall back to cloud speech-to-text more often.</p>
-      <label class="r" style="display:inline-flex;align-items:center;gap:8px">
-        <span>Max score</span>
-        <input type="number" id="max-score" step="0.1" min="0.1" max="50" style="width:90px">
-      </label>
-      <span id="score-hint" class="muted" style="font-size:13px;margin-left:10px"></span>
-    </div>
-
-    <div class="card">
-      <h2>Custom commands</h2>
-      <p class="sub">Your own phrasings. Each can fire a Home Assistant
-        <b>intent</b>, run an <b>action</b> (script/scene or a service call), or be
-        <b>STT-only</b> (recognized, then handled by Home Assistant itself). Use
-        <code>{name}</code>, <code>{area}</code>, <code>{floor}</code>,
-        <code>[optional]</code>, <code>(a|b)</code>, <code>{0..100:slot}</code>.</p>
-      <div id="custom-list"></div>
-      <button id="add-cmd" class="ghost">+ Add command</button>
-    </div>
-
+  <!-- BUILT-IN COMMANDS --------------------------------------------------- -->
+  <section id="tab-builtin">
     <div class="card">
       <h2>Built-in commands</h2>
       <p class="sub">Pre-defined commands mapped to Home Assistant intents. Toggle a
@@ -162,6 +144,20 @@
     </div>
   </section>
 
+  <!-- CUSTOM COMMANDS ----------------------------------------------------- -->
+  <section id="tab-custom" hidden>
+    <div class="card">
+      <h2>Custom commands</h2>
+      <p class="sub">Your own phrasings. Each can fire a Home Assistant
+        <b>intent</b>, run an <b>action</b> (script/scene or a service call), or be
+        <b>STT-only</b> (recognized, then handled by Home Assistant itself). Use
+        <code>{name}</code>, <code>{area}</code>, <code>{floor}</code>,
+        <code>[optional]</code>, <code>(a|b)</code>, <code>{0..100:slot}</code>.</p>
+      <div id="custom-list"></div>
+      <button id="add-cmd" class="ghost">+ Add command</button>
+    </div>
+  </section>
+
   <!-- DEVICES & LISTS ----------------------------------------------------- -->
   <section id="tab-lists" hidden>
     <div class="card">
@@ -177,13 +173,38 @@
   <section id="tab-test" hidden>
     <div class="card">
       <h2>Test recognition</h2>
-      <p class="sub">Type what you'd say and see what would fire. (Doesn't execute
-        anything or resolve the satellite's area.)</p>
-      <div class="row" style="display:flex;gap:8px">
-        <input type="text" id="test-text" style="flex:1" placeholder="turn on the kitchen lamp">
+      <p class="sub">Type what you'd say and see what would fire. Pick a satellite
+        area to stand in for the room the command comes from (used for "in here"
+        style commands), and optionally run it in Home Assistant.</p>
+      <div class="row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="text" id="test-text" style="flex:1;min-width:220px" placeholder="turn on the kitchen lamp">
+        <label class="muted" for="test-area">Satellite area</label>
+        <select id="test-area"><option value="">(none)</option></select>
         <button id="test-btn">Test</button>
       </div>
+      <label class="r" style="display:inline-flex;align-items:center;gap:6px;margin-top:10px">
+        <input type="checkbox" id="test-execute">
+        <span>Execute in Home Assistant</span>
+        <span id="test-exec-hint" class="muted" style="font-size:12px"></span>
+      </label>
       <div id="test-result"></div>
+    </div>
+  </section>
+
+  <!-- SETTINGS ------------------------------------------------------------ -->
+  <section id="tab-settings" hidden>
+    <div class="card">
+      <h2>Recognition</h2>
+      <p class="sub">Score gate for on-device speech-to-text (this language). A
+        decode is accepted only when its score is at or below this value
+        (<b>lower = more confident</b>). Raise it to recognize more commands, at
+        the risk of acting on misheard speech or noise; lower it to be stricter
+        and let Home Assistant fall back to cloud speech-to-text more often.</p>
+      <label class="r" style="display:inline-flex;align-items:center;gap:8px">
+        <span>Max score</span>
+        <input type="number" id="max-score" step="0.1" min="0.1" max="50" style="width:90px">
+      </label>
+      <span id="score-hint" class="muted" style="font-size:13px;margin-left:10px"></span>
     </div>
   </section>
 </div>
@@ -213,6 +234,7 @@ async function loadState() {
   renderCustom();
   renderCombos();
   renderLists();
+  renderTestControls();
   clearDirty();
 }
 
@@ -353,12 +375,15 @@ function renderCombos() {
   for (const c of S.combos) (byGroup[c.group] ||= []).push(c);
   const order = (S.groups && S.groups.length) ? S.groups : Object.keys(byGroup);
   $("combos").innerHTML = order.filter(g => byGroup[g]).map(group => `
-    <div class="intent">
-      <div class="group-head">
-        <input type="checkbox" class="group-toggle" data-group="${group}">
-        <h3>${group}</h3>
-        <span class="muted gcount" data-group="${group}"></span>
-      </div>
+    <details class="group">
+      <summary>
+        <span class="group-head">
+          <input type="checkbox" class="group-toggle" data-group="${group}">
+          <h3>${group}</h3>
+          <span class="muted gcount" data-group="${group}"></span>
+        </span>
+      </summary>
+      <div class="group-body">
       ${byGroup[group].map(c => {
         const idx = S.combos.indexOf(c);
         const split = (c.domains && c.domains.length > 1);
@@ -378,8 +403,8 @@ function renderCombos() {
         return `<div class="combo">
           <input type="checkbox" data-i="${idx}" data-group="${group}" class="combo-cb" ${c.enabled?"checked":""} id="c${idx}">
           <div class="meta">
-            ${body}
             <div class="combo-tag">${c.intent} · ${c.combo}</div>
+            ${body}
             <details class="extras" data-i="${idx}">
               <summary>${extraSummary(c)}</summary>
               <div class="extra-list" data-i="${idx}"></div>
@@ -391,7 +416,8 @@ function renderCombos() {
             </details>
           </div></div>`;
       }).join("")}
-    </div>`).join("");
+      </div>
+    </details>`).join("");
   $("combos").querySelectorAll(".combo-cb").forEach(cb =>
     cb.addEventListener("change", () => {
       const c = S.combos[cb.dataset.i];
@@ -419,6 +445,9 @@ function renderCombos() {
     b.addEventListener("click", () => addExtra(b.dataset.i)));
   $("combos").querySelectorAll(".extra-input").forEach(inp =>
     inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addExtra(inp.dataset.i); } }));
+  $("combos").querySelectorAll(".group-toggle").forEach(t =>
+    // Don't let the checkbox click bubble to <summary> and toggle the section.
+    t.addEventListener("click", e => e.stopPropagation()));
   $("combos").querySelectorAll(".group-toggle").forEach(t =>
     t.addEventListener("change", () => {
       S.combos.forEach((c, i) => {
@@ -520,14 +549,39 @@ function renderLists() {
 }
 
 /* ---- test ---- */
+function renderTestControls() {
+  const sel = $("test-area");
+  const cur = sel.value;
+  const areas = (S.areas && S.areas.values) || [];
+  sel.innerHTML = '<option value="">(none)</option>' +
+    areas.map(a => `<option value="${escapeHtml(a)}"${a===cur?" selected":""}>${escapeHtml(a)}</option>`).join("");
+  const exec = $("test-execute"), hint = $("test-exec-hint");
+  if (S.hass) {
+    exec.disabled = false; hint.textContent = "";
+  } else {
+    exec.disabled = true; exec.checked = false;
+    hint.textContent = "(no Home Assistant connection)";
+  }
+}
+
+function execResultHtml(ex) {
+  if (!ex) return "";
+  if (ex.ok)
+    return `<div class="usedby"><span class="ok"><b>Executed in Home Assistant.</b></span>`
+         + (ex.response ? ` <code>${escapeHtml(ex.response)}</code>` : "") + `</div>`;
+  return `<div class="usedby"><span class="err"><b>Execution failed:</b> ${escapeHtml(ex.error||"unknown error")}</span></div>`;
+}
+
 async function runTest() {
   const text = $("test-text").value.trim();
   const out = $("test-result");
   if (!text) { out.innerHTML = ""; return; }
+  const area = $("test-area").value;
+  const execute = $("test-execute").checked;
   out.innerHTML = '<div class="result muted">Testing…</div>';
   const r = await (await fetch("api/test", {
     method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({ lang: $("lang").value, text })
+    body: JSON.stringify({ lang: $("lang").value, text, area, execute })
   })).json();
   if (!r.matched) { out.innerHTML = '<div class="result">No match — Home Assistant would handle this (or fall back).</div>'; return; }
   const slots = Object.entries(r.slots||{}).map(([k,v])=>`<span class="k">${k}</span><span>${v}</span>`).join("");
@@ -538,8 +592,9 @@ async function runTest() {
   if (r.source==="custom") head += ' <span class="pill">custom</span>';
   out.innerHTML = `<div class="result">${head}
     ${slots?`<div class="kv">${slots}</div>`:""}
-    ${r.context_area?'<div class="usedby">+ area from the satellite (resolved at runtime)</div>':""}
+    ${r.context_area?`<div class="usedby">+ area from the satellite${r.area?`: <b>${escapeHtml(r.area)}</b>`:" (none selected)"}</div>`:""}
     ${r.response?`<div class="usedby"><b>Response:</b> <code>${r.response.replace(/</g,"&lt;")}</code></div>`:""}
+    ${execResultHtml(r.executed)}
   </div>`;
 }
 
@@ -581,7 +636,7 @@ async function save() {
 /* ---- tabs + wiring ---- */
 document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll("nav.tabs button").forEach(x=>x.classList.toggle("active", x===b));
-  ["commands","lists","test"].forEach(t => $("tab-"+t).hidden = (t!==b.dataset.tab));
+  ["builtin","custom","lists","test","settings"].forEach(t => $("tab-"+t).hidden = (t!==b.dataset.tab));
 }));
 $("add-cmd").addEventListener("click", () => {
   (S.commands ||= []).push({ sentences:[], mode:"stt" });

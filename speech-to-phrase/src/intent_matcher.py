@@ -39,17 +39,16 @@ _LOGGER = logging.getLogger("speech-to-phrase.intent")
 # own). The intent server routes this to the action executor, not to HA.
 CUSTOM_ACTION_INTENT = "_CustomAction"
 
-# Internal list names that map onto a single HA intent slot. Per-domain state
-# lists keep "is the lock on" out of the grammar but all feed the `state` slot.
-_STATE_LISTS = frozenset({"on_off_state", "cover_state", "lock_state"})
-
 
 def canonical_slot(key: str) -> str:
-    """Map an internal slot-list name to the HA intent slot name it fills."""
+    """Map an internal slot-list name to the HA intent slot name it fills.
+
+    Only ``{name}`` is rewritten to a domain-scoped internal list
+    (``name__<domains>``); every other slot (including the per-domain ``state``
+    lists, which bind via ``{...states:state}``) already carries its HA name.
+    """
     if key.startswith("name__"):
         return "name"
-    if key in _STATE_LISTS:
-        return "state"
     return key
 
 
@@ -82,8 +81,9 @@ def build_matcher(
 ) -> Optional[IntentMatcher]:
     """Build an :class:`IntentMatcher` for the enabled combos + custom commands,
     or ``None`` if nothing is matchable."""
+    import s2p_intents
+
     extras = extra_sentences or {}
-    lang_dir = s2p_repo / "sentences" / lang
     intents_dict: Dict[str, dict] = {}
     name_lists: Dict[str, List[str]] = {}
 
@@ -110,12 +110,11 @@ def build_matcher(
         return out
 
     for (intent, combo), allowed in enabled_domain_map(enabled).items():
-        f = lang_dir / intent / f"{combo}.yaml"
-        if not f.exists():
+        si_blocks = s2p_intents.combo_blocks(lang, intent, combo)
+        if not si_blocks:
             continue
-        doc = yaml.safe_load(f.read_text()) or {}
         data_blocks: List[dict] = []
-        for ss in combo_blocks(doc, extras.get(f"{intent}/{combo}")):
+        for ss in combo_blocks({"data": si_blocks}, extras.get(f"{intent}/{combo}")):
             include, eff_nd = _effective_name_domains(ss, allowed)
             if not include:
                 continue
@@ -171,16 +170,25 @@ def build_matcher(
         hassil_slot_lists[key] = TextSlotList.from_strings(
             sorted(set(names)), name=key
         )
-    # Text slot lists from the language/registry (area, floor, color, state, ...).
-    # Numeric slots use inline ranges ({0..100:brightness}) -- hassil expands
-    # those itself, so they need no list here. Harmless if unreferenced.
-    for key, values in (slot_lists or {}).items():
+    # Only name-scoped lists plus area/floor are supplied at runtime; the other
+    # text lists (color, state, ...) and numeric ranges come from the package's
+    # `lists`, and `<rules>` from its `expansion_rules`, both handed to hassil
+    # below so it resolves the raw templates natively.
+    for key in ("area", "floor"):
+        values = (slot_lists or {}).get(key)
         if values and key not in hassil_slot_lists:
             hassil_slot_lists[key] = TextSlotList.from_strings(
                 sorted(set(values)), name=key
             )
 
-    intents = Intents.from_dict({"language": lang, "intents": intents_dict})
+    intents = Intents.from_dict(
+        {
+            "language": lang,
+            "intents": intents_dict,
+            "lists": s2p_intents.list_defs_dict(lang),
+            "expansion_rules": s2p_intents.expansion_rules(lang),
+        }
+    )
     n_sentences = sum(
         len(b["sentences"]) for v in intents_dict.values() for b in v["data"]
     )

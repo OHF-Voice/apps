@@ -55,18 +55,11 @@ DEV_ENTITIES: Dict[str, str] = {
     "front door": "lock",
 }
 DEV_SLOT_LISTS: Dict[str, List[str]] = {
+    # Only area/floor are dev fallbacks now (the container overrides them from
+    # the live HA registry). Text lists (color, states, volume_step, ...) come
+    # from the home-assistant-intents package via s2p_intents.
     "area": ["kitchen", "office", "living room"],
     "floor": ["first floor", "second floor"],
-    "color": ["red", "green", "blue", "white"],
-    "brightness_level": ["maximum", "minimum"],
-    # Language constants (English). Used by both the grammar and the matcher.
-    # Per-domain state lists (kept separate so domain-scoped {name} can't accept
-    # cross-domain nonsense like "is the lock on"). All map to the `state` slot
-    # via intent_matcher.canonical_slot().
-    "on_off_state": ["on", "off"],
-    "cover_state": ["open", "closed"],
-    "lock_state": ["locked", "unlocked"],
-    "volume_step": ["up", "down"],
 }
 
 
@@ -254,11 +247,10 @@ def block_domains(block: dict) -> List[str]:
 
 def combo_domains(s2p_repo: Path, lang: str, intent: str, combo: str) -> List[str]:
     """Distinct domains a combo targets across its blocks, in first-seen order."""
-    f = s2p_repo / "sentences" / lang / intent / f"{combo}.yaml"
-    if not f.exists():
-        return []
+    import s2p_intents
+
     out: List[str] = []
-    for block in (yaml.safe_load(f.read_text()) or {}).get("data", []):
+    for block in s2p_intents.combo_blocks(lang, intent, combo):
         for d in block_domains(block):
             if d not in out:
                 out.append(d)
@@ -349,24 +341,36 @@ def assemble(
 ) -> Tuple[List[str], Dict[str, List[str]]]:
     """Build (templates, list_values) for the enabled built-ins + custom commands."""
     import custom_commands as cc
+    import s2p_intents
 
     extras = extra_sentences or {}
     templates: List[str] = []
     # Slot values are normalized to match the lowercase acoustic vocab.
     list_values: Dict[str, List[str]] = {k: _norm_values(v) for k, v in slot_lists.items()}
-    lang_dir = s2p_repo / "sentences" / lang
+    # Text lists (color, on/off states, ...) come from the package; name/area/
+    # floor stay from the registry-provided slot_lists above.
+    for name, values in s2p_intents.text_list_values(lang).items():
+        list_values[name] = _norm_values(values)
 
     for (intent, combo), allowed in enabled_domain_map(enabled).items():
-        f = lang_dir / intent / f"{combo}.yaml"
-        if not f.exists():
+        si_blocks = s2p_intents.combo_blocks(lang, intent, combo)
+        if not si_blocks:
             continue
-        doc = yaml.safe_load(f.read_text()) or {}
-        for ss in combo_blocks(doc, extras.get(f"{intent}/{combo}")):
+        for ss in combo_blocks({"data": si_blocks}, extras.get(f"{intent}/{combo}")):
             include, eff_nd = _effective_name_domains(ss, allowed)
             if not include:
                 continue
+            # Package templates are hassil dialect -> expand into the trainer's
+            # flat dialect. User extra sentences are already trainer-dialect, so
+            # if expansion fails, fall back to using them verbatim.
+            try:
+                flat_templates, _ref = s2p_intents.grammar_templates(
+                    ss.get("sentences", []), lang
+                )
+            except Exception:  # noqa: BLE001
+                flat_templates = list(ss.get("sentences", []))
             _expand_block(
-                ss.get("sentences", []), eff_nd,
+                flat_templates, eff_nd,
                 entities, templates, list_values,
             )
 

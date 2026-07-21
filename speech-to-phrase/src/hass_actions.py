@@ -82,6 +82,82 @@ async def render_template_async(
             return result
 
 
+async def handle_intent_async(
+    api_url: str, token: str, name: str,
+    slots: Optional[Dict[str, Any]] = None,
+) -> tuple[bool, str]:
+    """Execute a standard intent in HA via ``POST /api/intent/handle``.
+
+    Returns ``(ok, speech)`` -- ``speech`` is HA's spoken response text (or an
+    error message when ``ok`` is False)."""
+    import aiohttp
+
+    url = api_url.rstrip("/") + "/intent/handle"
+    data = {k: v for k, v in (slots or {}).items() if v is not None}
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            url, json={"name": name, "data": data},
+            headers={"Authorization": f"Bearer {token}"},
+        ) as resp:
+            try:
+                body = await resp.json(content_type=None)
+            except Exception:  # noqa: BLE001
+                body = None
+            if resp.status != 200:
+                msg = body.get("message") if isinstance(body, dict) else None
+                _LOGGER.warning("intent/handle %s -> HTTP %s: %s", name, resp.status, msg)
+                return False, msg or f"HTTP {resp.status}"
+            speech = ""
+            if isinstance(body, dict):
+                speech = (((body.get("speech") or {}).get("plain") or {})
+                          .get("speech")) or ""
+                if body.get("response_type") == "error":
+                    return False, speech or "intent error"
+            return True, speech
+
+
+async def run_action_async(
+    api_url: str, token: str, action: Dict[str, Any],
+    slots: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Perform a custom "action" command in HA: run a script/scene, or a service
+    call from a YAML block (slot templates rendered in HA). Returns True on
+    success."""
+    import yaml
+
+    kind = (action or {}).get("kind")
+    if kind in ("script", "scene"):
+        entity_id = action.get("entity_id")
+        if not entity_id or "." not in entity_id:
+            _LOGGER.warning("action %s missing entity_id", kind)
+            return False
+        domain = entity_id.split(".", 1)[0]
+        # Scripts can take slots as `variables`; scenes cannot.
+        data = {"variables": slots} if (domain == "script" and slots) else {}
+        return await call_service_async(
+            api_url, token, domain, "turn_on",
+            data=data, target={"entity_id": entity_id},
+        )
+    if kind == "service":
+        yaml_text = action.get("yaml") or ""
+        # Render slot templates in the YAML (in HA), then parse + call.
+        rendered = await render_template_async(
+            api_url, token, yaml_text, variables={"slots": slots or {}},
+        )
+        spec = yaml.safe_load(rendered or yaml_text) or {}
+        service = spec.get("service") or spec.get("action")
+        if not service or "." not in service:
+            _LOGGER.warning("custom service action missing 'service:' (%r)", service)
+            return False
+        domain, svc = service.split(".", 1)
+        return await call_service_async(
+            api_url, token, domain, svc,
+            data=spec.get("data") or {}, target=spec.get("target") or {},
+        )
+    _LOGGER.warning("unknown action kind: %r", kind)
+    return False
+
+
 async def exposed_scripts_scenes_async(
     api_url: str, token: str,
 ) -> List[Dict[str, str]]:

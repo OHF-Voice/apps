@@ -161,6 +161,7 @@ def create_app(cfg) -> Flask:
                 "groups": groups,
                 "commands": commands,
                 "trainable": bool(cfg.model),
+                "hass": bool(cfg.hass_token),
                 "max_score": settings.get_max_score(data_dir, lang, cfg.max_score),
                 "max_score_default": cfg.max_score,
                 "intents": bi.intent_catalog(meta),
@@ -214,10 +215,16 @@ def create_app(cfg) -> Flask:
     @app.route("/api/test", methods=["POST"])
     def api_test():
         """Dry-run the matcher on text: what intent/action + slots would fire.
-        Does not execute anything or resolve the satellite area."""
+
+        A ``area`` (the satellite's area) fills the slot for ``context_area``
+        commands ("turn on the lights in here"). When ``execute`` is set and a
+        Home Assistant token is configured, actually run the intent (via
+        ``/api/intent/handle``) or action in HA."""
         body = request.get_json(force=True)
         lang = body.get("lang", cfg.language)
         text = (body.get("text") or "").strip()
+        sat_area = (body.get("area") or "").strip()
+        execute = bool(body.get("execute"))
         combos = bi.available_combos(ADDON_ROOT, lang, meta)
         enabled = [list(e) for e in read_enabled(lang, combos)]
         commands = cc.load(data_dir, lang)
@@ -238,17 +245,25 @@ def create_app(cfg) -> Flask:
             slots["domain"] = md["domain"]
         slots.update(md.get("slots") or {})
         mode = md.get("mode", "intent")  # built-ins are intent-mode
-        return jsonify({
+        # For "in here" style commands, stand in the chosen satellite area.
+        context_area = bool(md.get("context_area"))
+        if context_area and sat_area:
+            slots["area"] = sat_area
+        resp = {
             "matched": True,
             "text": text,
             "mode": mode,
             "intent": None if mode == "action" else result.intent.name,
             "action": md.get("action") if mode == "action" else None,
             "slots": slots,
-            "context_area": bool(md.get("context_area")),
+            "context_area": context_area,
+            "area": sat_area if context_area else None,
             "response": md.get("response") if md.get("source") == "custom" else None,
             "source": md.get("source", "builtin"),
-        })
+        }
+        if execute:
+            resp["executed"] = _execute_in_hass(cfg, mode, result.intent.name, md, slots)
+        return jsonify(resp)
 
     @app.route("/api/validate_sentence", methods=["POST"])
     def api_validate():
@@ -302,11 +317,48 @@ def create_app(cfg) -> Flask:
     return app
 
 
+def _execute_in_hass(cfg, mode: str, intent_name: str, md: dict, slots: dict) -> dict:
+    """Run the matched intent/action in the live HA instance (from the Test tab).
+
+    Standard intents go through ``POST /api/intent/handle``; custom actions run
+    the script/scene/service. Returns ``{ok, response}`` or ``{ok: False, error}``."""
+    import asyncio
+
+    if not cfg.hass_token:
+        return {"ok": False, "error": "No Home Assistant connection."}
+    try:
+        if mode == "action":
+            action = md.get("action") or {}
+            response_tmpl = md.get("response")
+
+            async def _run():
+                if not await hass_actions.run_action_async(
+                    cfg.hass_api, cfg.hass_token, action, slots
+                ):
+                    return {"ok": False, "error": "action failed"}
+                text = ""
+                if response_tmpl:
+                    text = await hass_actions.render_template_async(
+                        cfg.hass_api, cfg.hass_token, response_tmpl,
+                        variables={"slots": slots},
+                    ) or ""
+                return {"ok": True, "response": text}
+
+            return asyncio.run(_run())
+
+        ok, speech = asyncio.run(hass_actions.handle_intent_async(
+            cfg.hass_api, cfg.hass_token, intent_name, slots
+        ))
+        return {"ok": True, "response": speech} if ok else {"ok": False, "error": speech}
+    except Exception as e:  # noqa: BLE001
+        _LOGGER.exception("execute in HA failed")
+        return {"ok": False, "error": str(e)}
+
+
 def _first_block_name_domains(lang, intent, combo):
-    f = ADDON_ROOT / "sentences" / lang / intent / f"{combo}.yaml"
-    if not f.exists():
-        return None
-    blocks = (yaml.safe_load(f.read_text()) or {}).get("data", [])
+    import s2p_intents
+
+    blocks = s2p_intents.combo_blocks(lang, intent, combo)
     return blocks[0].get("name_domains") if blocks else None
 
 
@@ -361,20 +413,20 @@ def _usage(lang: str, enabled_set, commands: list):
     def refs(sentence: str):
         return set(re.findall(r"\{([^}]+)\}", sentence))
 
+    import s2p_intents
+
     area_used: List[str] = []
     floor_used: List[str] = []
     name_used: Dict[str, List[str]] = {}
-    lang_dir = ADDON_ROOT / "sentences" / lang
 
     for intent, combo in sorted(enabled_set):
-        f = lang_dir / intent / f"{combo}.yaml"
-        if not f.exists():
+        blocks = s2p_intents.combo_blocks(lang, intent, combo)
+        if not blocks:
             continue
-        doc = yaml.safe_load(f.read_text()) or {}
         label = f"{intent}/{combo}"
         ua = uf = False
         domains: set = set()
-        for ss in doc.get("data", []):
+        for ss in blocks:
             if ss.get("context_area"):
                 ua = True
             nd = ss.get("name_domains") or []

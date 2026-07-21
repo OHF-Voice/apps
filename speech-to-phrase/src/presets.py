@@ -72,7 +72,7 @@ def _slot_class(slot: str) -> str:
         return "name"
     if slot in ("area", "floor", "color"):
         return slot
-    if slot in ("state", "on_off_state", "cover_state", "lock_state"):
+    if slot == "state":
         return "state"
     if slot in ("domain", "device_class", "media_class"):
         return "class"
@@ -105,10 +105,13 @@ def _resolve_slot(
         else:
             rep = next(iter(sorted(entities)), "device")
         return rep, "name"
-    vals = slot_lists.get(content)
+    # {list} or {list:slot}: look up by list name, label by slot name.
+    list_name, _, slot_name = content.partition(":")
+    slot_name = slot_name or list_name
+    vals = slot_lists.get(list_name)
     if vals:
-        return str(vals[0]), content
-    return {"area": "kitchen", "floor": "first floor"}.get(content, content), content
+        return str(vals[0]), slot_name
+    return {"area": "kitchen", "floor": "first floor"}.get(list_name, list_name), slot_name
 
 
 def _example_html(
@@ -119,10 +122,12 @@ def _example_html(
     import html
     s = sentence
     # Resolve structure first; slot tokens ({...}) contain no []/() so survive.
+    # Pick the first alternative of each group and the content of each optional
+    # (also first alternative, e.g. "[the|my]" -> "the").
     while re.search(r"\([^()]*\)", s):
         s = re.sub(r"\(([^()]*)\)", lambda m: m.group(1).split("|")[0], s)
     while re.search(r"\[[^\[\]]*\]", s):
-        s = re.sub(r"\[([^\[\]]*)\]", r"\1", s)
+        s = re.sub(r"\[([^\[\]]*)\]", lambda m: m.group(1).split("|")[0], s)
     s = " ".join(s.split())  # safe: slot tokens have no spaces
     out: List[str] = []
     pos = 0
@@ -157,26 +162,33 @@ def combo_examples(
                          each rendered with a {name} of that domain.
     Plus the ordered ``domains`` list.
     """
+    import s2p_intents
     import training
-    f = s2p_repo / "sentences" / lang / intent / f"{combo}.yaml"
-    if not f.exists():
+    blocks = s2p_intents.combo_blocks(lang, intent, combo)
+    if not blocks:
         return {"domains": [], "by_domain": {}, "examples": []}
-    doc = yaml.safe_load(f.read_text()) or {}
+    # Sample values for the package's lists (states, colors, numeric ranges)
+    # so {state}/{brightness}/... render as words; caller lists (area/floor)
+    # take precedence.
+    slot_lists = {**s2p_intents.example_slot_values(lang), **(slot_lists or {})}
     domains: List[str] = []
     by_domain: Dict[str, str] = {}
     examples: List[str] = []
-    for block in doc.get("data", []):
+    for block in blocks:
         sents = block.get("sentences") or []
         if not sents:
             continue
-        ex = _example_html(sents[0], block.get("name_domains"), entities, slot_lists)
+        # Package templates use <rules>; resolve them so examples read as plain
+        # sentences (the structural renderer only handles []/()/{...}).
+        first = s2p_intents.resolve_rules(sents[0], lang)
+        ex = _example_html(first, block.get("name_domains"), entities, slot_lists)
         if ex and ex not in examples:
             examples.append(ex)
         for d in training.block_domains(block):
             if d not in domains:
                 domains.append(d)
             if d not in by_domain:
-                by_domain[d] = _example_html(sents[0], [d], entities, slot_lists)
+                by_domain[d] = _example_html(first, [d], entities, slot_lists)
     return {"domains": domains, "by_domain": by_domain, "examples": examples}
 
 
@@ -215,35 +227,32 @@ def _combo_domains(combo_def: dict) -> List[str]:
 
 
 def available_combos(s2p_repo: Path, lang: str, meta: dict) -> List[dict]:
-    """Every (intent, combo) the add-on has curated templates for, in `lang`."""
-    lang_dir = s2p_repo / "sentences" / lang
+    """Every (intent, combo) the package ships tagged templates for, in `lang`."""
+    import s2p_intents
+
     combos: List[dict] = []
-    if not lang_dir.is_dir():
-        return combos
-    for intent_dir in sorted(p for p in lang_dir.iterdir() if p.is_dir()):
-        intent = intent_dir.name
-        cdefs = (meta.get(intent) or {}).get("slot_combinations", {})
-        for f in sorted(intent_dir.glob("*.yaml")):
-            cdef = cdefs.get(f.stem, {})
-            example = cdef.get("example", "")
-            if isinstance(example, list):
-                example = example[0] if example else ""
-            combos.append(
-                {
-                    "intent": intent,
-                    "combo": f.stem,
-                    "description": cdef.get("description", ""),
-                    "example": example,
-                    "importance": _combo_importance(cdef),
-                    "domains": _combo_domains(cdef),
-                }
-            )
+    for intent, combo in s2p_intents.combos(lang):
+        cdef = (meta.get(intent) or {}).get("slot_combinations", {}).get(combo, {})
+        example = cdef.get("example", "")
+        if isinstance(example, list):
+            example = example[0] if example else ""
+        combos.append(
+            {
+                "intent": intent,
+                "combo": combo,
+                "description": cdef.get("description", ""),
+                "example": example,
+                "importance": _combo_importance(cdef),
+                "domains": _combo_domains(cdef),
+            }
+        )
     return combos
 
 
 def languages(s2p_repo: Path) -> List[str]:
-    d = s2p_repo / "sentences"
-    return sorted(p.name for p in d.iterdir() if p.is_dir()) if d.is_dir() else []
+    import s2p_intents
+
+    return s2p_intents.languages()
 
 
 def intent_catalog(meta: dict) -> List[dict]:

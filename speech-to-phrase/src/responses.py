@@ -16,23 +16,19 @@ _LOGGER = logging.getLogger("speech-to-phrase.intent")
 
 
 def load_responses(s2p_repo: Path, lang: str) -> Dict[str, Dict[str, str]]:
-    """Return {intent: {response_key: template}} for a language."""
-    out: Dict[str, Dict[str, str]] = {}
-    rdir = s2p_repo / "responses" / lang
-    if not rdir.is_dir():
-        _LOGGER.warning("no bundled responses for '%s' (%s)", lang, rdir)
-        return out
-    for f in sorted(rdir.glob("*.yaml")):
-        try:
-            doc = yaml.safe_load(f.read_text()) or {}
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("could not parse %s", f)
-            continue
-        intents = (doc.get("responses") or {}).get("intents") or {}
-        for intent, keys in intents.items():
-            if isinstance(keys, dict):
-                out.setdefault(intent, {}).update(keys)
-    _LOGGER.info("Loaded responses for %d intents (%s)", len(out), lang)
+    """Return {intent: {response_key: template}} for a language.
+
+    Sourced from the home-assistant-intents package (the ``speech_to_phrase``
+    tagged responses), not the add-on's ``responses/`` tree. ``s2p_repo`` is kept
+    for signature compatibility.
+    """
+    import s2p_intents
+
+    out = s2p_intents.responses(lang)
+    if not out:
+        _LOGGER.warning("no packaged Speech-to-Phrase responses for '%s'", lang)
+    else:
+        _LOGGER.info("Loaded responses for %d intents (%s)", len(out), lang)
     return out
 
 

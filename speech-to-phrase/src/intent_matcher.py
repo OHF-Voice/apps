@@ -94,13 +94,13 @@ def build_matcher(
     # in original case so matched slot values are HA-friendly.
     scoped_lists: Dict[str, List[str]] = {}
 
-    def scope(sentences, name_domains, inferred_domain, capability) -> List[str]:
-        """Rewrite {name}/{area}/{floor} to domain-scoped lists and apply the
-        same capability/area gating as the grammar (gating.scope_sentence)."""
+    def scope(sentences, name_domains, capability) -> List[str]:
+        """Rewrite {name} to a domain-scoped list and apply the same capability
+        gate as the grammar (gating.scope_sentence)."""
         out: List[str] = []
         for sentence in sentences:
             rewritten, lists = gating.scope_sentence(
-                sentence, name_domains, inferred_domain, capability, info
+                sentence, name_domains, capability, info
             )
             if rewritten is None:
                 continue
@@ -124,7 +124,7 @@ def build_matcher(
                 eff_nd, inferred, capability, gating.capability_domains(intent), info
             ):
                 continue
-            sentences = scope(ss.get("sentences", []), eff_nd, inferred, capability)
+            sentences = scope(ss.get("sentences", []), eff_nd, capability)
             if not sentences:
                 continue
             metadata: Dict[str, object] = {
@@ -148,7 +148,7 @@ def build_matcher(
         mode = cmd.get("mode", "stt")
         if mode not in ("intent", "action"):
             continue
-        sentences = scope(cmd.get("sentences") or [], cmd.get("name_domains"), None, None)
+        sentences = scope(cmd.get("sentences") or [], cmd.get("name_domains"), None)
         if not sentences:
             continue
         metadata = {"source": "custom", "mode": mode, "id": idx}

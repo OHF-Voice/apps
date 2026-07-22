@@ -307,21 +307,20 @@ def as_entity_info(entities):
 def _expand_block(
     sentences: Sequence[str],
     name_domains: Optional[Sequence[str]],
-    inferred_domain: Optional[str],
     capability: Optional[str],
     info,
     templates: List[str],
     list_values: Dict[str, List[str]],
 ) -> None:
-    """Append a block's sentences to `templates`, rewriting `{name}`/`{area}`/
-    `{floor}` to domain-scoped lists and applying entity/capability/area gating
-    (see gating.scope_sentence). Slot values are normalised to the acoustic
-    vocab; a sentence with no matching entity/area is dropped."""
+    """Append a block's sentences to `templates`, rewriting `{name}` to a
+    domain-scoped list and applying the capability gate (see
+    gating.scope_sentence). Slot values are normalised to the acoustic vocab; a
+    sentence with no matching capable entity is dropped."""
     import gating
 
     for sentence in sentences:
         rewritten, lists = gating.scope_sentence(
-            sentence, name_domains, inferred_domain, capability, info
+            sentence, name_domains, capability, info
         )
         if rewritten is None:
             continue
@@ -380,14 +379,14 @@ def assemble(
             except Exception:  # noqa: BLE001
                 flat_templates = list(ss.get("sentences", []))
             _expand_block(
-                flat_templates, eff_nd, inferred, capability,
+                flat_templates, eff_nd, capability,
                 info, templates, list_values,
             )
 
     # Custom commands (all modes contribute their sentences to the grammar).
     for block in cc.grammar_sentences(list(custom_commands or [])):
         _expand_block(
-            block["sentences"], block.get("name_domains") or None, None, None,
+            block["sentences"], block.get("name_domains") or None, None,
             info, templates, list_values,
         )
 

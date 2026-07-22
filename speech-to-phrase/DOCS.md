@@ -46,4 +46,4 @@ you don't own) keeps recognition fast and accurate.
 - `tools/audio_test.py` — pipeline sanity check: TTS → device RIR + noise sweep →
   recognizer, plus OOV false-accept detection.
 - Run the UI locally:
-  `python src/app.py --intents-yaml <intents.yaml> --data ./data --port 8099`
+  `python src/app.py --data ./data --port 8099`

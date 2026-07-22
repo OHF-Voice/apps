@@ -27,7 +27,6 @@ RUN \
 # Add-on application + intents metadata (sentences/responses now come from the
 # home-assistant-intents package's speech_to_phrase tagged subset).
 COPY src/ ./src/
-COPY intents.yaml ./intents.yaml
 COPY example_values.yaml ./example_values.yaml
 
 WORKDIR /

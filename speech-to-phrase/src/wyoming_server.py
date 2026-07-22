@@ -35,7 +35,7 @@ from speech_to_phrase.audio import SAMPLE_RATE
 
 import models
 import settings
-from vad import trim_silence
+from vad import normalize_level, trim_silence
 
 _LOGGER = logging.getLogger("wyoming-speech-to-phrase")
 NAME = "speech-to-phrase"
@@ -140,8 +140,11 @@ class S2PEventHandler(AsyncEventHandler):
                 samples = _pcm_to_float(
                     bytes(self._buf), self._rate, self._width, self._channels
                 )
-                # Drop leading wake-word chime + silence and trailing silence so
-                # the recognizer only decodes the spoken command.
+                # Boost very quiet mic audio to a nominal level before VAD + STT
+                # (both under-perform on ~-46 dBFS input); no-op for normal
+                # levels. Then drop the leading wake-word chime + silence and
+                # trailing silence so the recognizer only decodes the command.
+                samples = normalize_level(samples)
                 samples = await asyncio.get_event_loop().run_in_executor(
                     None, trim_silence, samples
                 )

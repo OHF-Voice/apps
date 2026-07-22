@@ -1,10 +1,11 @@
 """Discover the built-in (pre-defined) slot-combinations the add-on ships, and
-join them with metadata from home-assistant-intents' intents.yaml.
+join them with metadata from home-assistant-intents.
 
 The curated Speech-to-Phrase templates live at
     sentences/<lang>/<Intent>/<slot_combination>.yaml
-and intents.yaml supplies each combo's description / example / importance /
-domains for display and default-enable decisions.
+and ``home_assistant_intents.get_intent_info()`` supplies each combo's
+description / example / importance / domains for display and default-enable
+decisions.
 """
 import re
 from pathlib import Path
@@ -13,6 +14,18 @@ from typing import Dict, List, Optional, Sequence
 import yaml
 
 IMPORTANCE_ORDER = ["required", "usable", "complete", "optional"]
+
+# Display order for the web UI (sort of slot combinations by importance). This
+# intentionally differs from IMPORTANCE_ORDER, which governs default-enable
+# thresholds; here "optional" sorts ahead of "complete".
+IMPORTANCE_SORT = ["required", "usable", "optional", "complete"]
+
+
+def _importance_sort_key(importance: str) -> int:
+    try:
+        return IMPORTANCE_SORT.index(importance)
+    except ValueError:
+        return len(IMPORTANCE_SORT)
 
 # Functional grouping for the web UI (ordered). Intents not listed fall in "Other".
 INTENT_GROUPS = [
@@ -151,32 +164,174 @@ def _resolve_slot(
     return {"area": "kitchen", "floor": "first floor"}.get(list_name, list_name), slot_name
 
 
-def _example_html(
-    sentence: str, domains: Optional[Sequence[str]],
-    entities: Dict[str, str], slot_lists: Dict[str, List[str]],
-) -> str:
-    """Render one example as HTML with each slot value wrapped in a span."""
-    import html
+def _canonical(sentence: str) -> str:
+    """Collapse ``()``/``[]`` structure to the canonical wording: first
+    alternative of each group, first alternative of each optional (e.g.
+    ``[the|my]`` -> ``the``). Slot tokens ({...}) contain no []/() so survive."""
     s = sentence
-    # Resolve structure first; slot tokens ({...}) contain no []/() so survive.
-    # Pick the first alternative of each group and the content of each optional
-    # (also first alternative, e.g. "[the|my]" -> "the").
     while re.search(r"\([^()]*\)", s):
         s = re.sub(r"\(([^()]*)\)", lambda m: m.group(1).split("|")[0], s)
     while re.search(r"\[[^\[\]]*\]", s):
         s = re.sub(r"\[([^\[\]]*)\]", lambda m: m.group(1).split("|")[0], s)
-    s = " ".join(s.split())  # safe: slot tokens have no spaces
+    return " ".join(s.split())  # safe: slot tokens have no spaces
+
+
+def _render(sentence: str, slot_fn) -> str:
+    """Render a (structure-resolved) sentence to HTML, mapping each ``{...}``
+    token through ``slot_fn(content) -> html``."""
+    import html
+    s = _canonical(sentence)
     out: List[str] = []
     pos = 0
     for m in re.finditer(r"\{([^}]*)\}", s):
         out.append(html.escape(s[pos:m.start()]))
-        value, slot = _resolve_slot(
-            m.group(1).strip(), domains, entities, slot_lists
-        )
-        out.append(_span(value, slot))
+        out.append(slot_fn(m.group(1).strip()))
         pos = m.end()
     out.append(html.escape(s[pos:]))
     return "".join(out).strip()
+
+
+def _example_html(
+    sentence: str, domains: Optional[Sequence[str]],
+    entities: Dict[str, str], slot_lists: Dict[str, List[str]],
+) -> str:
+    """Render one example as HTML, each slot value wrapped in a highlight span
+    (one representative value per slot)."""
+    def span_fn(content: str) -> str:
+        value, slot = _resolve_slot(content, domains, entities, slot_lists)
+        return _span(value, slot)
+
+    return _render(sentence, span_fn)
+
+
+# Slots whose values are an enumerable vocabulary become a <select> in the
+# interactive example; numeric/range slots stay a single representative value.
+_SELECT_CAP = 40
+
+
+def _slot_options(
+    content: str, domains: Optional[Sequence[str]],
+    entities: Dict[str, str], slot_lists: Dict[str, List[str]],
+):
+    """(values, slot_name) for an enumerable slot, or (None, slot_name) when the
+    slot isn't a discrete list (numeric range) -- rendered as a span instead."""
+    if re.fullmatch(
+        r"-?\d+\s*\.\.\s*-?\d+(?:\s*[,/]\s*-?\d+)?(?::([a-z_]+))?", content
+    ):
+        return None, "number"  # numeric range: not a picklist
+    if content == "name":
+        if domains:
+            vals = [n for n, d in sorted(entities.items()) if d in domains]
+        else:
+            vals = sorted(entities)
+        return vals, "name"
+    list_name, _, slot_name = content.partition(":")
+    slot_name = slot_name or list_name
+    vals = slot_lists.get(slot_name) or slot_lists.get(list_name) or []
+    return [str(v) for v in vals], slot_name
+
+
+def _slot_field(
+    content: str, domains: Optional[Sequence[str]],
+    entities: Dict[str, str], slot_lists: Dict[str, List[str]],
+) -> str:
+    """A <select> of the (filtered) values for an enumerable slot, so the user
+    sees the actual vocabulary in context. Falls back to a highlight span for
+    numeric ranges and single-option slots."""
+    import html
+    values, slot = _slot_options(content, domains, entities, slot_lists)
+    if not values or len(values) <= 1:
+        value, slot = _resolve_slot(content, domains, entities, slot_lists)
+        return _span(value, slot)
+    cls = _slot_class(slot)
+    shown = values[:_SELECT_CAP]
+    opts = "".join(f"<option>{html.escape(v)}</option>" for v in shown)
+    extra = len(values) - len(shown)
+    if extra > 0:
+        opts += f'<option disabled>… and {extra} more</option>'
+    return (
+        f'<select class="slot slot-{cls} slot-select" title="{html.escape(slot)}" '
+        f'aria-label="{html.escape(slot)}" onclick="event.stopPropagation()">'
+        f'{opts}</select>'
+    )
+
+
+def _example_interactive(
+    sentence: str, domains: Optional[Sequence[str]],
+    entities: Dict[str, str], slot_lists: Dict[str, List[str]],
+) -> str:
+    """Like _example_html, but enumerable slots render as a <select> of their
+    filtered values."""
+    return _render(
+        sentence, lambda c: _slot_field(c, domains, entities, slot_lists)
+    )
+
+
+def _find_group(s: str):
+    """(open_idx, close_idx, open_char) of the first top-level ``(``/``[`` group,
+    or None. Nesting of the same bracket type is respected."""
+    for i, ch in enumerate(s):
+        if ch in "([":
+            close = ")" if ch == "(" else "]"
+            depth = 1
+            for j in range(i + 1, len(s)):
+                if s[j] == ch:
+                    depth += 1
+                elif s[j] == close:
+                    depth -= 1
+                    if depth == 0:
+                        return i, j, ch
+            break
+    return None
+
+
+def _split_alts(inner: str) -> List[str]:
+    """Split on top-level ``|`` (ignoring ``|`` inside nested groups)."""
+    parts: List[str] = []
+    depth = 0
+    buf = ""
+    for ch in inner:
+        if ch in "([":
+            depth += 1
+            buf += ch
+        elif ch in ")]":
+            depth -= 1
+            buf += ch
+        elif ch == "|" and depth == 0:
+            parts.append(buf)
+            buf = ""
+        else:
+            buf += ch
+    parts.append(buf)
+    return parts
+
+
+def _phrasings(sentence: str, cap: int) -> List[str]:
+    """Distinct wordings from the ``()`` alternatives (canonical first, slot
+    tokens intact, deduped). Optionals are kept as their canonical branch, so the
+    variants surface real word choices ("turn on" / "switch on") rather than a
+    combinatorial blowup of "[please]"/"[the]". Grows to at most `cap`."""
+    out: List[str] = []
+
+    def rec(s: str) -> None:
+        if len(out) >= cap:
+            return
+        g = _find_group(s)
+        if g is None:
+            w = " ".join(s.split())
+            if w and w not in out:
+                out.append(w)
+            return
+        i, j, ch = g
+        prefix, inner, suffix = s[:i], s[i + 1:j], s[j + 1:]
+        opts = [_split_alts(inner)[0]] if ch == "[" else _split_alts(inner)
+        for opt in opts:
+            if len(out) >= cap:
+                return
+            rec(prefix + opt + suffix)
+
+    rec(sentence)
+    return out
 
 
 def sample_sentence(
@@ -187,6 +342,45 @@ def sample_sentence(
     import html
     return html.unescape(re.sub(r"<[^>]+>", "", _example_html(
         sentence, domains, entities, slot_lists)))
+
+
+def _example_card(
+    sentences: Sequence[str], domains: Optional[Sequence[str]],
+    entities: Dict[str, str], slot_lists: Dict[str, List[str]],
+) -> str:
+    """A combo example: the first template's canonical wording with <select>s for
+    its enumerable slots, plus a collapsed "N more ways to say this" list of the
+    other phrasings (plain text, one representative value each).
+
+    Alternate phrasings come from BOTH the sibling sentence templates in the
+    block ("turn off {name}" / "switch off {name}" / "{name} off") and the ``()``
+    alternatives inside each template."""
+    import html
+    if not sentences:
+        return ""
+    main = _example_interactive(sentences[0], domains, entities, slot_lists)
+    if not main:
+        return ""
+    variants: List[str] = []
+    seen = {sample_sentence(sentences[0], domains, entities, slot_lists)}
+    for tmpl in sentences:
+        for w in _phrasings(tmpl, 64):
+            txt = sample_sentence(w, domains, entities, slot_lists)
+            if txt and txt not in seen:
+                seen.add(txt)
+                variants.append(txt)
+    parts = [f'<div class="ex-main">{main}</div>']
+    if variants:
+        shown = variants[:6]
+        items = "".join(f'<div class="ex-alt">{html.escape(v)}</div>' for v in shown)
+        if len(variants) > len(shown):
+            items += f'<div class="ex-alt more">… and {len(variants) - len(shown)} more</div>'
+        plural = "s" if len(variants) != 1 else ""
+        parts.append(
+            f'<details class="phrasings"><summary>{len(variants)} more way{plural} '
+            f'to say this</summary>{items}</details>'
+        )
+    return "".join(parts)
 
 
 def combo_examples(
@@ -240,19 +434,10 @@ def combo_examples(
         ):
             continue
 
-        # Narrow {area}/{floor} to areas/floors that actually have the domain.
+        # {area}/{floor} are not narrowed by domain co-occurrence (the command
+        # stays speakable everywhere), so the example just draws from the full
+        # area/floor lists.
         block_slots = dict(base_slots)
-        skip = False
-        if inferred:
-            for kind, getter in (("area", info.areas), ("floor", info.floors)):
-                vals = getter([inferred], capability)
-                if vals is not None:
-                    if not vals:
-                        skip = True
-                        break
-                    block_slots[kind] = vals
-        if skip:
-            continue
 
         # {name} must name a capable entity of the block's domains.
         if nd:
@@ -263,9 +448,15 @@ def combo_examples(
             ent_map = name_domain
 
         # Package templates use <rules>; resolve them so examples read as plain
-        # sentences (the structural renderer only handles []/()/{...}).
-        first = s2p_intents.resolve_rules(sents[0], lang)
-        ex = _example_html(first, nd, ent_map, block_slots)
+        # sentences (the structural renderer only handles []/()/{...}). Every
+        # sentence in the block is a phrasing alternative, so resolve them all.
+        resolved: List[str] = []
+        for s in sents:
+            try:
+                resolved.append(s2p_intents.resolve_rules(s, lang))
+            except Exception:  # noqa: BLE001
+                resolved.append(s)
+        ex = _example_card(resolved, nd, ent_map, block_slots)
         if ex and ex not in examples:
             examples.append(ex)
         for d in training.block_domains(block):
@@ -275,12 +466,20 @@ def combo_examples(
             if d not in domains:
                 domains.append(d)
             if d not in by_domain:
-                by_domain[d] = _example_html(first, [d], d_map or name_domain, block_slots)
+                # Per-domain rows stay compact: canonical wording + selects, no
+                # phrasing expander.
+                by_domain[d] = _example_interactive(
+                    resolved[0], [d], d_map or name_domain, block_slots
+                )
     return {"domains": domains, "by_domain": by_domain, "examples": examples}
 
 
-def load_intents_meta(intents_yaml: Path) -> dict:
-    return yaml.safe_load(intents_yaml.read_text()) or {}
+def load_intents_meta() -> dict:
+    """Intent metadata (descriptions, examples, importance, domains) straight
+    from ``home_assistant_intents.get_intent_info()``."""
+    from home_assistant_intents import get_intent_info
+
+    return get_intent_info() or {}
 
 
 def _combo_importance(combo_def: dict) -> str:
@@ -333,6 +532,10 @@ def available_combos(s2p_repo: Path, lang: str, meta: dict) -> List[dict]:
                 "domains": _combo_domains(cdef),
             }
         )
+    # Sort by importance for the web UI (stable: equal-importance combos keep
+    # their discovery order). Grouping in the frontend preserves this order, so
+    # each group lists its combos required -> usable -> optional -> complete.
+    combos.sort(key=lambda c: _importance_sort_key(c["importance"]))
     return combos
 
 
@@ -343,8 +546,8 @@ def languages(s2p_repo: Path) -> List[str]:
 
 
 def intent_catalog(meta: dict) -> List[dict]:
-    """All known HA intents (name, description, slots) from intents.yaml, for the
-    custom intent-mode picker."""
+    """All known HA intents (name, description, slots) from get_intent_info(),
+    for the custom intent-mode picker."""
     out: List[dict] = []
     for name, d in meta.items():
         if not isinstance(d, dict) or "slot_combinations" not in d:

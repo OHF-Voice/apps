@@ -26,6 +26,16 @@ _LOGGER = logging.getLogger(__name__)
 # Silero's window is fixed at 512 samples (32 ms @ 16 kHz).
 _CHUNK = SileroVoiceActivityDetector.chunk_samples()
 
+# Silero is trained on nominal-level speech. HA mic audio can arrive very quiet
+# (observed peak ~0.005, ~-46 dBFS), where the VAD under-detects and trims away
+# most of the spoken command -- and the acoustic model, though it feature-
+# normalizes internally, also decodes such low-level speech less reliably.
+# normalize_level() boosts to a nominal peak to fix both; it is applied by the
+# server before VAD *and* STT. Boost only (never attenuate), capped so a
+# near-silent clip's noise floor isn't blown up without bound.
+_VAD_TARGET_PEAK = 0.3
+_VAD_MAX_GAIN = 64.0
+
 # The detector loads a small model and carries per-utterance recurrent state, so
 # it is neither free to recreate nor safe to share across threads. Keep one
 # instance, reset() it per call, and serialize access (transcribe() and thus
@@ -39,6 +49,24 @@ def _detector() -> SileroVoiceActivityDetector:
     if _vad is None:
         _vad = SileroVoiceActivityDetector()
     return _vad
+
+
+def normalize_level(samples: np.ndarray) -> np.ndarray:
+    """Boost quiet audio up to a nominal peak (see _VAD_TARGET_PEAK).
+
+    HA mic audio sometimes arrives extremely quiet (observed peak ~0.005). At
+    that level Silero VAD under-detects (mislocating a fragment and trimming away
+    most of the command) *and* the acoustic model -- while it normalizes features
+    internally -- decodes low-level speech less reliably. Scaling to a nominal
+    peak fixes both. Boost only (never attenuate), gain capped so a near-silent
+    clip's noise floor isn't amplified without bound. Returns ``samples``
+    unchanged when it is already at or above the target (the common case, so
+    normal-level audio is untouched)."""
+    peak = float(np.abs(samples).max()) if samples.size else 0.0
+    if peak <= 0.0:
+        return samples
+    gain = max(1.0, min(_VAD_TARGET_PEAK / peak, _VAD_MAX_GAIN))
+    return samples * gain if gain != 1.0 else samples
 
 
 def trim_silence(
@@ -61,12 +89,16 @@ def trim_silence(
     if n_chunks == 0:
         return samples
 
+    # Amplitude-normalize for detection so window scoring is level-robust. When
+    # the caller already normalized (production path), this is a no-op.
+    scaled = normalize_level(samples)
+
     first = last = -1
     with _vad_lock:
         vad = _detector()
         vad.reset()
         for i in range(n_chunks):
-            chunk = samples[i * _CHUNK : (i + 1) * _CHUNK]
+            chunk = scaled[i * _CHUNK : (i + 1) * _CHUNK]
             if vad.process_samples(chunk.tolist()) >= threshold:
                 if first < 0:
                     first = i

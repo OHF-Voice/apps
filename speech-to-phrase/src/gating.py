@@ -2,21 +2,25 @@
 
 Speech-to-Phrase should only put a command in the grammar if the user actually
 has an entity it can act on. The library already drops ``{name}`` sentences
-whose domain matches no entity; this module adds two finer gates, driven by an
-enriched entity model (domain + device_class + supported features + area/floor):
+whose domain matches no entity; this module adds a finer **capability** gate,
+driven by an enriched entity model (domain + device_class + supported features +
+area/floor):
 
-  * **capability** (Phase 1): drop a combo/block when no exposed entity of its
-    domain supports the required feature -- e.g. ``HassSetPosition`` for a cover
-    with no ``SET_POSITION``, ``HassLightSet`` brightness for a light that can't
-    dim, ``HassFanSetSpeed`` for a fan with no speed control. ``{name}`` lists
-    are narrowed to the capable entities.
-  * **area/floor co-occurrence** (Phase 2): in inferred-domain combos
-    ("turn on the lights in {area}"), restrict ``{area}``/``{floor}`` to the
-    areas/floors that actually contain an entity of that domain (and capability).
+  * drop a combo/block when no exposed entity of its domain supports the required
+    feature -- e.g. ``HassSetPosition`` for a cover with no ``SET_POSITION``,
+    ``HassLightSet`` brightness for a light that can't dim, ``HassFanSetSpeed``
+    for a fan with no speed control. ``{name}`` lists are narrowed to the capable
+    entities.
 
-Both gates are **conservative**: when a signal is unknown (no feature data for an
-entity, or no area data at all) nothing is dropped, so an incomplete registry
-never silently removes valid commands.
+The gate is **conservative**: when a signal is unknown (no feature data for an
+entity) nothing is dropped, so an incomplete registry never silently removes
+valid commands.
+
+Note: ``{area}``/``{floor}`` are **not** narrowed by domain co-occurrence. A
+sentence like "turn on the lights in the basement" stays in the grammar even
+when the basement has no lights -- it must remain speakable so Home Assistant
+can respond with a "no entities" error rather than the utterance being silently
+unrecognisable.
 """
 from dataclasses import dataclass
 from typing import Dict, FrozenSet, List, Optional, Sequence, Set
@@ -113,8 +117,6 @@ class EntityInfo:
 
     def __init__(self, records: Sequence[EntityRecord]):
         self._records = list(records)
-        self._has_area_data = any(r.area for r in self._records)
-        self._has_floor_data = any(r.floor for r in self._records)
 
     @property
     def records(self) -> List[EntityRecord]:
@@ -138,49 +140,35 @@ class EntityInfo:
         """Original-case names in `domains` (supporting `capability`), de-duped."""
         return list(dict.fromkeys(r.name for r in self._match(domains, capability)))
 
-    def areas(
-        self, domains: Sequence[str], capability: Optional[str]
-    ) -> Optional[List[str]]:
-        """Area names containing a matching entity, or None to not narrow.
 
-        None (no narrowing) is returned when there is no area data at all, so an
-        area-less fixture / registry keeps every area rather than dropping all.
-        """
-        if not self._has_area_data:
-            return None
-        return list(
-            dict.fromkeys(r.area for r in self._match(domains, capability) if r.area)
-        )
-
-    def floors(
-        self, domains: Sequence[str], capability: Optional[str]
-    ) -> Optional[List[str]]:
-        if not self._has_floor_data:
-            return None
-        return list(
-            dict.fromkeys(r.floor for r in self._match(domains, capability) if r.floor)
-        )
-
-
-def _scoped_key(kind: str, domains: Sequence[str]) -> str:
-    return kind + "__" + "_".join(sorted(domains))
+def _scoped_key(
+    kind: str, domains: Sequence[str], capability: Optional[str] = None
+) -> str:
+    # The capability is part of the key: two blocks over the same domains but
+    # with different capability requirements (e.g. the ungated "is {cover} open"
+    # state query vs the set_position-gated "open {cover} to 50%") must NOT share
+    # a name list, or the narrower one would silently shrink the wider one (a
+    # garage door with no set_position vanishing from state queries) -- or the
+    # wider one would leak position-incapable covers into the position template.
+    base = kind + "__" + "_".join(sorted(domains))
+    return f"{base}__{capability}" if capability else base
 
 
 def scope_sentence(
     sentence: str,
     name_domains: Optional[Sequence[str]],
-    inferred_domain: Optional[str],
     capability: Optional[str],
     info: "EntityInfo",
 ):
-    """Rewrite ``{name}``/``{area}``/``{floor}`` to domain-scoped list refs and
-    apply gating. Returns ``(rewritten, lists)`` or ``(None, {})`` if the sentence
-    must be dropped (no capable entity, or no area/floor has the domain).
+    """Rewrite ``{name}`` to a domain-scoped list ref and apply the capability
+    gate. Returns ``(rewritten, lists)`` or ``(None, {})`` if the sentence must be
+    dropped (no capable entity of the name's domain).
 
     ``lists`` maps scoped-list-name -> original-case values; the caller registers
-    them (normalising as needed). ``{area}``/``{floor}`` are only narrowed for
-    inferred-domain combos -- name-based combos keep the full area/floor list, as
-    the name already disambiguates the entity.
+    them (normalising as needed). ``{area}``/``{floor}`` are left untouched (bound
+    to the full area/floor lists by the caller): area/floor sentences stay
+    speakable even when no entity of the domain lives there, so Home Assistant can
+    report the "no entities" error instead of the utterance going unrecognised.
     """
     lists: Dict[str, List[str]] = {}
 
@@ -189,7 +177,7 @@ def scope_sentence(
             names = info.names(name_domains, capability)
             if not names:
                 return None, {}  # capability/domain gate: no such entity
-            key = _scoped_key("name", name_domains)
+            key = _scoped_key("name", name_domains, capability)
             lists[key] = names
             sentence = sentence.replace("{name}", "{" + key + "}")
         else:
@@ -198,24 +186,6 @@ def scope_sentence(
             if not allnames:
                 return None, {}
             lists["name"] = allnames
-
-    if inferred_domain:
-        if "{area}" in sentence:
-            areas = info.areas([inferred_domain], capability)
-            if areas is not None:  # None => no area data, don't narrow
-                if not areas:
-                    return None, {}
-                key = _scoped_key("area", [inferred_domain])
-                lists[key] = areas
-                sentence = sentence.replace("{area}", "{" + key + "}")
-        if "{floor}" in sentence:
-            floors = info.floors([inferred_domain], capability)
-            if floors is not None:
-                if not floors:
-                    return None, {}
-                key = _scoped_key("floor", [inferred_domain])
-                lists[key] = floors
-                sentence = sentence.replace("{floor}", "{" + key + "}")
 
     return sentence, lists
 

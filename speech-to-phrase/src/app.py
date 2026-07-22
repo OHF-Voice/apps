@@ -3,9 +3,7 @@
 
 Runnable locally:
 
-    .venv/bin/python src/app.py \
-        --intents-yaml /path/to/home-assistant-intents/intents.yaml \
-        --data ./data --port 8099
+    .venv/bin/python src/app.py --data ./data --port 8099
     # then open http://localhost:8099
 
 Lets the user, per language:
@@ -24,7 +22,6 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import yaml
 from flask import Flask, jsonify, render_template, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -72,7 +69,7 @@ def create_app(cfg) -> Flask:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
     app.wsgi_app = IngressPrefixMiddleware(app.wsgi_app)
 
-    meta = bi.load_intents_meta(cfg.intents_yaml)
+    meta = bi.load_intents_meta()
     data_dir = Path(cfg.data)
 
     # Resolve / download the acoustic model. None => UI-only (saves persist but
@@ -584,9 +581,6 @@ def _start_watch(cfg, meta, data_dir: Path) -> None:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=os.environ.get("DATA_DIR", "./data"))
-    ap.add_argument("--intents-yaml", type=Path,
-                    default=os.environ.get("INTENTS_YAML",
-                    "/home/hansenm/opt/intent-sentences/intents.yaml"))
     ap.add_argument("--language", default="en")
     ap.add_argument("--backend", default="citrinet")
     ap.add_argument("--model", default=os.environ.get("MODEL_DIR"),
@@ -618,10 +612,6 @@ def main():
     logging.basicConfig(level=logging.DEBUG if cfg.debug else logging.INFO)
     # numba (pulled in by librosa) floods DEBUG with JIT traces.
     logging.getLogger("numba").setLevel(logging.INFO)
-    # Resolve intents.yaml: explicit flag/env -> bundled copy -> dev checkout.
-    cfg.intents_yaml = Path(cfg.intents_yaml)
-    if not cfg.intents_yaml.exists() and (ADDON_ROOT / "intents.yaml").exists():
-        cfg.intents_yaml = ADDON_ROOT / "intents.yaml"
     app = create_app(cfg)
 
     # Serve Wyoming STT alongside the web UI in this same process. It reads the

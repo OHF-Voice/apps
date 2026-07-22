@@ -61,6 +61,19 @@
   .slot-text   { background:#fbe2cf; border-color:#d97a2a; }
   .slot-state  { background:#d4f1ee; border-color:#1aa39a; }
   .slot-other  { background:#e8e8e8; border-color:#888; }
+  /* Enumerable slots render as a picklist of the actual (filtered) values.
+     Defined after the colour classes so the caret image doesn't reset their bg. */
+  .slot-select { appearance:none; -webkit-appearance:none; font:inherit; color:inherit;
+    cursor:pointer; max-width:200px; vertical-align:baseline; padding:0 16px 0 3px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 3.5 5 6.5 8 3.5' fill='none' stroke='%23555' stroke-width='1.4'/></svg>");
+    background-repeat:no-repeat; background-position:right 3px center; }
+  .phrasings { margin-top:3px; }
+  .phrasings > summary { list-style:none; cursor:pointer; font-size:13px; color:#2f7fd1; }
+  .phrasings > summary::-webkit-details-marker { display:none; }
+  .phrasings > summary::before { content:"\25B8"; font-size:10px; margin-right:6px; }
+  .phrasings[open] > summary::before { content:"\25BE "; }
+  .ex-alt { font-size:13px; color:var(--mut); padding:2px 0 0 14px; }
+  .ex-alt.more { font-style:italic; }
   .slot-legend { margin:0 0 12px; padding:0; list-style:none; display:flex;
                  flex-wrap:wrap; gap:4px 8px; font-size:12px; }
   .slot-legend li { margin:0; }
@@ -479,7 +492,7 @@ function updateComboParent(i) {
 
 /* ---- extra phrasings on built-in commands ---- */
 function escapeHtml(s){ return s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
-function extraSummary(c){ const n=(c.extra||[]).length; return "Extra phrasings" + (n?` (${n})`:""); }
+function extraSummary(c){ const n=(c.extra||[]).length; return "Customize" + (n?` (${n})`:""); }
 
 function renderExtraList(i) {
   const host = $("combos").querySelector(`.extra-list[data-i="${i}"]`);

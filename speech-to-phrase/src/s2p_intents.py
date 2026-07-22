@@ -174,20 +174,18 @@ def _flatten_value(value: str) -> str:
     return " ".join(value.split())
 
 
-def example_slot_values(lang: str) -> Dict[str, List[str]]:
-    """{list_name: [one representative value]} for rendering UI examples.
+def example_text_values(lang: str) -> Dict[str, List[str]]:
+    """{text_list_name: [one representative value]} for rendering UI examples.
 
-    Text lists use their first value (flattened to plain words); range lists use
-    a representative number (50 clamped into range). Keyed by list name so
-    ``{list}`` and ``{list:slot}`` refs both resolve.
+    First value of each text list, flattened to plain words. Numeric (range)
+    slots are not included here -- their example values are chosen per slot name
+    by the caller (see presets.load_example_values), so ``50 hours`` can be a
+    sensible ``2 hours`` instead.
     """
-    ranges, texts = _list_defs(lang)
-    out: Dict[str, List[str]] = {
+    _ranges, texts = _list_defs(lang)
+    return {
         name: [_flatten_value(vals[0])] for name, vals in texts.items() if vals
     }
-    for name, (lo, hi, _step) in ranges.items():
-        out[name] = [str(min(hi, max(lo, 50)))]
-    return out
 
 
 def list_defs_dict(lang: str) -> dict:

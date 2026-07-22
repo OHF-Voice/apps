@@ -24,10 +24,11 @@ RUN \
     && pip3 install --no-cache-dir -r requirements.txt \
     && rm -rf /var/lib/apt/lists/*
 
-# Add-on application + curated sentences + intents metadata
+# Add-on application + intents metadata (sentences/responses now come from the
+# home-assistant-intents package's speech_to_phrase tagged subset).
 COPY src/ ./src/
-COPY sentences/ ./sentences/
 COPY intents.yaml ./intents.yaml
+COPY example_values.yaml ./example_values.yaml
 
 WORKDIR /
 COPY rootfs /

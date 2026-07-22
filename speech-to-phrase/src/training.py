@@ -29,6 +29,7 @@ import unicodedata
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
+import aiohttp
 import yaml
 
 _LOGGER = logging.getLogger("speech-to-phrase.training")
@@ -45,15 +46,8 @@ def _norm_value(s: str) -> str:
 def _norm_values(values: Sequence[str]) -> List[str]:
     return list(dict.fromkeys(v for v in (_norm_value(x) for x in values) if v))
 
-# Local-dev fallback registry (name -> domain) and slot lists. The container
-# replaces these with the live HA registry + home-assistant-intents lists.
-DEV_ENTITIES: Dict[str, str] = {
-    "overhead light": "light",
-    "kitchen lamp": "light",
-    "kitchen fan": "fan",
-    "garage door": "cover",
-    "front door": "lock",
-}
+# Local-dev fallbacks. The container replaces these with the live HA registry +
+# home-assistant-intents lists. Entities live in DEV_ENTITY_RECORDS (below).
 DEV_SLOT_LISTS: Dict[str, List[str]] = {
     # Only area/floor are dev fallbacks now (the container overrides them from
     # the live HA registry). Text lists (color, states, volume_step, ...) come
@@ -61,6 +55,22 @@ DEV_SLOT_LISTS: Dict[str, List[str]] = {
     "area": ["kitchen", "office", "living room"],
     "floor": ["first floor", "second floor"],
 }
+
+# Enriched dev fallback (name -> domain + capabilities + area/floor), so the
+# entity-aware gating can be exercised without Home Assistant. Deliberately
+# uneven: only kitchen has lights/a fan, the cover can't be positioned.
+DEV_ENTITY_RECORDS: List[dict] = [
+    {"name": "overhead light", "domain": "light",
+     "features": ["brightness", "color"], "area": "kitchen", "floor": "first floor"},
+    {"name": "kitchen lamp", "domain": "light",
+     "features": ["brightness"], "area": "kitchen", "floor": "first floor"},
+    {"name": "kitchen fan", "domain": "fan",
+     "features": ["set_speed"], "area": "kitchen", "floor": "first floor"},
+    {"name": "garage door", "domain": "cover",
+     "features": [], "area": "living room", "floor": "first floor"},
+    {"name": "front door", "domain": "lock",
+     "features": [], "area": "living room", "floor": "first floor"},
+]
 
 
 def _ws_url(api_url: str) -> str:
@@ -73,93 +83,6 @@ def _ws_url(api_url: str) -> str:
     base = p.path[:-4] if p.path.endswith("/api") else p.path
     ws_path = (base + "/websocket") if base else "/api/websocket"
     return urlunparse((scheme, p.netloc, ws_path, "", "", ""))
-
-
-async def _exposed_conversation_ids(api_url: str, token: str) -> Set[str]:
-    """entity_ids exposed to the `conversation` assistant, via the websocket
-    command homeassistant/expose_entity/list."""
-    import aiohttp
-
-    ids: Set[str] = set()
-    async with aiohttp.ClientSession() as session:
-        async with session.ws_connect(_ws_url(api_url), max_msg_size=0) as ws:
-            assert (await ws.receive_json())["type"] == "auth_required"
-            await ws.send_json({"type": "auth", "access_token": token})
-            assert (await ws.receive_json())["type"] == "auth_ok"
-            await ws.send_json({"id": 1, "type": "homeassistant/expose_entity/list"})
-            msg = await ws.receive_json()
-            assert msg.get("success"), msg
-            for eid, info in msg["result"]["exposed_entities"].items():
-                if info.get("conversation"):
-                    ids.add(eid)
-    return ids
-
-
-def exposed_conversation_ids(api_url: str, token: str) -> Set[str]:
-    import asyncio
-
-    return asyncio.run(_exposed_conversation_ids(api_url, token))
-
-
-async def _exposed_entity_names(
-    api_url: str, token: str, friendly: Dict[str, str]
-) -> Dict[str, str]:
-    """{name: domain} for conversation-exposed entities, INCLUDING aliases.
-
-    Names come from the entity registry (name override / original_name / aliases,
-    like hass_api.py), falling back to the live friendly_name. Disabled entities
-    are skipped. Each alias maps to the entity's domain so it's recognizable."""
-    import aiohttp
-
-    out: Dict[str, str] = {}
-    async with aiohttp.ClientSession() as session:
-        async with session.ws_connect(_ws_url(api_url), max_msg_size=0) as ws:
-            assert (await ws.receive_json())["type"] == "auth_required"
-            await ws.send_json({"type": "auth", "access_token": token})
-            assert (await ws.receive_json())["type"] == "auth_ok"
-            await ws.send_json({"id": 1, "type": "homeassistant/expose_entity/list"})
-            em = await ws.receive_json()
-            assert em.get("success"), em
-            exposed = [
-                eid
-                for eid, info in em["result"]["exposed_entities"].items()
-                if info.get("conversation")
-            ]
-            if not exposed:
-                return out
-            await ws.send_json({
-                "id": 2,
-                "type": "config/entity_registry/get_entries",
-                "entity_ids": exposed,
-            })
-            rm = await ws.receive_json()
-            entries = rm["result"] if rm.get("success") else {}
-
-    for eid in exposed:
-        info = entries.get(eid) or {}
-        if info.get("disabled_by") is not None:
-            continue
-        domain = eid.split(".", 1)[0] if "." in eid else ""
-        if not domain:
-            continue
-        names: List[str] = []
-        primary = info.get("name") or info.get("original_name")
-        if primary:
-            names.append(primary)
-        names.extend(a for a in (info.get("aliases") or []) if a)
-        if not names and friendly.get(eid):
-            names.append(friendly[eid])
-        for name in names:
-            name = name.strip()
-            if name:
-                out[name] = domain
-    return out
-
-
-def exposed_entity_names(api_url: str, token: str, friendly: Dict[str, str]) -> Dict[str, str]:
-    import asyncio
-
-    return asyncio.run(_exposed_entity_names(api_url, token, friendly))
 
 
 def _registry_names(items: list) -> List[str]:
@@ -196,40 +119,102 @@ def areas_floors_from_hass(api_url: str, token: str) -> Tuple[List[str], List[st
     return asyncio.run(_areas_floors(api_url, token))
 
 
-def entities_from_hass(api_url: str, token: str) -> Dict[str, str]:
-    """Build {name: domain} for entities **exposed to the conversation
-    integration**, including their aliases. Used in the container (api_url=
-    http://supervisor/core/api, token=SUPERVISOR_TOKEN)."""
-    import json
-    import urllib.request
+async def _entity_records(api_url: str, token: str) -> List[dict]:
+    """Enriched records for conversation-exposed entities: one per name/alias,
+    carrying domain, device_class, capability tokens, and area/floor names.
 
-    req = urllib.request.Request(
-        f"{api_url}/states", headers={"Authorization": f"Bearer {token}"}
-    )
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        states = json.loads(resp.read())
-    friendly = {
-        s["entity_id"]: (s.get("attributes") or {}).get("friendly_name", "")
-        for s in states
-        if s.get("entity_id")
-    }
+    Capabilities come from the live state attributes (supported_features /
+    supported_color_modes); area comes from the entity's own area_id, falling
+    back to its device's area, resolved to a name via the area registry (and its
+    floor). Best-effort: any piece that can't be fetched is simply left unknown,
+    which the gating treats permissively.
+    """
+    import gating
 
-    try:
-        out = exposed_entity_names(api_url, token, friendly)
-        _LOGGER.info("%d exposed entity names (including aliases)", len(out))
-        return out
-    except Exception:  # noqa: BLE001
-        _LOGGER.warning(
-            "Could not fetch exposed entities/aliases; using ALL friendly names",
-            exc_info=True,
-        )
+    async with aiohttp.ClientSession() as session:
+        # Live states -> attributes by entity_id.
+        async with session.get(
+            f"{api_url}/states", headers={"Authorization": f"Bearer {token}"}
+        ) as resp:
+            states = await resp.json()
+        attrs = {
+            s["entity_id"]: (s.get("attributes") or {})
+            for s in states
+            if s.get("entity_id")
+        }
 
-    out = {}
-    for eid, name in friendly.items():
+        async with session.ws_connect(_ws_url(api_url), max_msg_size=0) as ws:
+            assert (await ws.receive_json())["type"] == "auth_required"
+            await ws.send_json({"type": "auth", "access_token": token})
+            assert (await ws.receive_json())["type"] == "auth_ok"
+
+            async def call(msg_id, type_, **kw):
+                await ws.send_json({"id": msg_id, "type": type_, **kw})
+                m = await ws.receive_json()
+                return m["result"] if m.get("success") else None
+
+            expose = await call(1, "homeassistant/expose_entity/list")
+            exposed = [
+                eid
+                for eid, info in ((expose or {}).get("exposed_entities") or {}).items()
+                if info.get("conversation")
+            ]
+            if not exposed:
+                return []
+            entries = await call(
+                2, "config/entity_registry/get_entries", entity_ids=exposed
+            ) or {}
+            devices = await call(3, "config/device_registry/list") or []
+            areas = await call(4, "config/area_registry/list") or []
+            floors = await call(5, "config/floor_registry/list") or []
+
+    device_area = {d["id"]: d.get("area_id") for d in devices}
+    floor_name = {f["floor_id"]: (f.get("name") or "") for f in floors}
+    area_name = {a["area_id"]: (a.get("name") or "") for a in areas}
+    area_floor = {a["area_id"]: floor_name.get(a.get("floor_id")) for a in areas}
+
+    records: List[dict] = []
+    for eid in exposed:
+        info = entries.get(eid) or {}
+        if info.get("disabled_by") is not None:
+            continue
         domain = eid.split(".", 1)[0] if "." in eid else ""
-        if domain and (name or eid):
-            out[name or eid] = domain
-    return out
+        if not domain:
+            continue
+        names: List[str] = []
+        primary = info.get("name") or info.get("original_name")
+        if primary:
+            names.append(primary)
+        names.extend(a for a in (info.get("aliases") or []) if a)
+        friendly = attrs.get(eid, {}).get("friendly_name")
+        if not names and friendly:
+            names.append(friendly)
+
+        area_id = info.get("area_id") or device_area.get(info.get("device_id"))
+        area = area_name.get(area_id) if area_id else None
+        floor = area_floor.get(area_id) if area_id else None
+        features = sorted(gating.capabilities_from_attributes(domain, attrs.get(eid, {})))
+        device_class = attrs.get(eid, {}).get("device_class")
+
+        for name in names:
+            name = name.strip()
+            if name:
+                records.append({
+                    "name": name,
+                    "domain": domain,
+                    "device_class": device_class,
+                    "features": features,
+                    "area": area,
+                    "floor": floor,
+                })
+    return records
+
+
+def entity_records_from_hass(api_url: str, token: str) -> List[dict]:
+    """Enriched entity records for gating (see _entity_records)."""
+    import asyncio
+
+    return asyncio.run(_entity_records(api_url, token))
 
 
 def _name_list_key(domains: Sequence[str]) -> str:
@@ -304,30 +289,45 @@ def _effective_name_domains(
     return (True, None)
 
 
+def as_entity_info(entities):
+    """Normalise the entities argument into a gating.EntityInfo.
+
+    Accepts a plain ``{name: domain}`` dict (features/area unknown -> no
+    capability/area gating), a list of enriched record dicts, or an EntityInfo.
+    """
+    import gating
+
+    if isinstance(entities, gating.EntityInfo):
+        return entities
+    if isinstance(entities, dict):
+        return gating.EntityInfo(gating.records_from_mapping(entities))
+    return gating.EntityInfo(gating.records_from_dicts(entities))
+
+
 def _expand_block(
     sentences: Sequence[str],
-    domains: Optional[Sequence[str]],
-    entities: Dict[str, str],
+    name_domains: Optional[Sequence[str]],
+    inferred_domain: Optional[str],
+    capability: Optional[str],
+    info,
     templates: List[str],
     list_values: Dict[str, List[str]],
 ) -> None:
-    """Append a block's sentences to `templates`, rewriting `{name}` to a
-    domain-scoped list and applying entity gating. A bare `{name}` with no
-    `name_domains` binds to every entity (custom commands own the meaning)."""
+    """Append a block's sentences to `templates`, rewriting `{name}`/`{area}`/
+    `{floor}` to domain-scoped lists and applying entity/capability/area gating
+    (see gating.scope_sentence). Slot values are normalised to the acoustic
+    vocab; a sentence with no matching entity/area is dropped."""
+    import gating
+
     for sentence in sentences:
-        if "{name}" in sentence:
-            if domains:
-                values = _norm_values([n for n, d in entities.items() if d in domains])
-                if not values:
-                    continue  # entity gating: no such device -> drop sentence
-                key = _name_list_key(domains)
-                list_values[key] = values
-                sentence = sentence.replace("{name}", "{" + key + "}")
-            elif entities:
-                list_values.setdefault("name", _norm_values(list(entities.keys())))
-            else:
-                continue  # {name} but nothing to fill it with
-        templates.append(sentence)
+        rewritten, lists = gating.scope_sentence(
+            sentence, name_domains, inferred_domain, capability, info
+        )
+        if rewritten is None:
+            continue
+        for key, values in lists.items():
+            list_values[key] = _norm_values(values)
+        templates.append(rewritten)
 
 
 def assemble(
@@ -341,8 +341,10 @@ def assemble(
 ) -> Tuple[List[str], Dict[str, List[str]]]:
     """Build (templates, list_values) for the enabled built-ins + custom commands."""
     import custom_commands as cc
+    import gating
     import s2p_intents
 
+    info = as_entity_info(entities)
     extras = extra_sentences or {}
     templates: List[str] = []
     # Slot values are normalized to match the lowercase acoustic vocab.
@@ -356,9 +358,17 @@ def assemble(
         si_blocks = s2p_intents.combo_blocks(lang, intent, combo)
         if not si_blocks:
             continue
+        capability = gating.required_capability(intent, combo)
         for ss in combo_blocks({"data": si_blocks}, extras.get(f"{intent}/{combo}")):
             include, eff_nd = _effective_name_domains(ss, allowed)
             if not include:
+                continue
+            inferred = ss.get("inferred_domain")
+            # Capability/domain gate for combos with no {name}/{area} slot to
+            # narrow (e.g. context-area combos).
+            if not gating.keep_block(
+                eff_nd, inferred, capability, gating.capability_domains(intent), info
+            ):
                 continue
             # Package templates are hassil dialect -> expand into the trainer's
             # flat dialect. User extra sentences are already trainer-dialect, so
@@ -370,15 +380,15 @@ def assemble(
             except Exception:  # noqa: BLE001
                 flat_templates = list(ss.get("sentences", []))
             _expand_block(
-                flat_templates, eff_nd,
-                entities, templates, list_values,
+                flat_templates, eff_nd, inferred, capability,
+                info, templates, list_values,
             )
 
     # Custom commands (all modes contribute their sentences to the grammar).
     for block in cc.grammar_sentences(list(custom_commands or [])):
         _expand_block(
-            block["sentences"], block.get("name_domains") or None,
-            entities, templates, list_values,
+            block["sentences"], block.get("name_domains") or None, None, None,
+            info, templates, list_values,
         )
 
     templates = list(dict.fromkeys(templates))

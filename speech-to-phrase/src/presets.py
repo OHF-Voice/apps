@@ -51,12 +51,46 @@ def group_order() -> List[str]:
     return labels
 
 
-# Representative numbers for inline ranges, by slot name (for example sentences).
-# Chosen so the plural "[s]" in templates reads correctly (e.g. "2 hours").
+# Representative numbers for numeric slots (example sentences only). Chosen so
+# the plural "[s]" in templates reads correctly (e.g. "2 hours", not "50 hours").
+# Users can override/extend these via example_values.yaml (see below).
 _NUM_SAMPLE = {
     "minutes": "5", "seconds": "30", "hours": "2",
     "brightness": "50", "volume_level": "50", "position": "50",
     "percentage": "50", "temperature": "70",
+}
+
+
+def load_example_values(s2p_repo: Optional[Path]) -> Dict[str, str]:
+    """Numeric example values by slot name, built-in defaults merged with the
+    user's ``example_values.yaml`` (if present at the add-on root).
+
+    The file is a simple ``slot: value`` map, optionally nested under an
+    ``example_values:`` key, e.g.::
+
+        example_values:
+          hours: 2
+          temperature: 68
+    """
+    values = dict(_NUM_SAMPLE)
+    if s2p_repo is not None:
+        path = s2p_repo / "example_values.yaml"
+        if path.exists():
+            try:
+                doc = yaml.safe_load(path.read_text()) or {}
+            except Exception:  # noqa: BLE001
+                doc = {}
+            overrides = doc.get("example_values", doc)
+            if isinstance(overrides, dict):
+                for key, val in overrides.items():
+                    values[str(key)] = str(val)
+    return values
+
+
+# Friendlier nouns when no real entity exists for a {name} domain.
+_DOMAIN_NOUN = {
+    "climate": "thermostat", "media_player": "media player",
+    "binary_sensor": "sensor", "input_boolean": "switch",
 }
 
 # Friendlier nouns when no real entity exists for a {name} domain.
@@ -97,7 +131,8 @@ def _resolve_slot(
     )
     if m:
         slot = m.group(1) or "number"
-        return _NUM_SAMPLE.get(slot, "50"), slot
+        vals = slot_lists.get(slot)
+        return (str(vals[0]) if vals else _NUM_SAMPLE.get(slot, "50")), slot
     if content == "name":
         if domains:
             rep = next((n for n, d in sorted(entities.items()) if d in domains), None)
@@ -105,10 +140,12 @@ def _resolve_slot(
         else:
             rep = next(iter(sorted(entities)), "device")
         return rep, "name"
-    # {list} or {list:slot}: look up by list name, label by slot name.
+    # {list} or {list:slot}: label by slot name; resolve by slot name (numeric
+    # example values are keyed this way, e.g. timer_hours:hours -> "hours") and
+    # fall back to the list name (text lists are keyed by list name).
     list_name, _, slot_name = content.partition(":")
     slot_name = slot_name or list_name
-    vals = slot_lists.get(list_name)
+    vals = slot_lists.get(slot_name) or slot_lists.get(list_name)
     if vals:
         return str(vals[0]), slot_name
     return {"area": "kitchen", "floor": "first floor"}.get(list_name, list_name), slot_name
@@ -162,15 +199,31 @@ def combo_examples(
                          each rendered with a {name} of that domain.
     Plus the ordered ``domains`` list.
     """
+    import gating
     import s2p_intents
     import training
+
+    info = training.as_entity_info(entities)
     blocks = s2p_intents.combo_blocks(lang, intent, combo)
     if not blocks:
         return {"domains": [], "by_domain": {}, "examples": []}
-    # Sample values for the package's lists (states, colors, numeric ranges)
-    # so {state}/{brightness}/... render as words; caller lists (area/floor)
-    # take precedence.
-    slot_lists = {**s2p_intents.example_slot_values(lang), **(slot_lists or {})}
+    # Example slot values: numeric samples by slot name (user-overridable via
+    # example_values.yaml) + text-list samples by list name; caller-supplied
+    # lists (area/floor) win.
+    base_slots = {
+        **{k: [v] for k, v in load_example_values(s2p_repo).items()},
+        **s2p_intents.example_text_values(lang),
+        **(slot_lists or {}),
+    }
+    name_domain = {r.name: r.domain for r in info.records}
+    capability = gating.required_capability(intent, combo)
+
+    def _entity_map(domains):
+        """{name: domain} restricted to entities of `domains` that support the
+        combo's capability -- so an example never names an incapable device."""
+        allowed = set(info.names(domains, capability))
+        return {n: name_domain[n] for n in allowed if n in name_domain}
+
     domains: List[str] = []
     by_domain: Dict[str, str] = {}
     examples: List[str] = []
@@ -178,17 +231,51 @@ def combo_examples(
         sents = block.get("sentences") or []
         if not sents:
             continue
+        nd = block.get("name_domains")
+        inferred = block.get("inferred_domain")
+        # Same capability/domain gate as the grammar: no capable entity -> the
+        # combo isn't trained, so it gets no example either.
+        if not gating.keep_block(
+            nd, inferred, capability, gating.capability_domains(intent), info
+        ):
+            continue
+
+        # Narrow {area}/{floor} to areas/floors that actually have the domain.
+        block_slots = dict(base_slots)
+        skip = False
+        if inferred:
+            for kind, getter in (("area", info.areas), ("floor", info.floors)):
+                vals = getter([inferred], capability)
+                if vals is not None:
+                    if not vals:
+                        skip = True
+                        break
+                    block_slots[kind] = vals
+        if skip:
+            continue
+
+        # {name} must name a capable entity of the block's domains.
+        if nd:
+            ent_map = _entity_map(nd)
+            if not ent_map:
+                continue
+        else:
+            ent_map = name_domain
+
         # Package templates use <rules>; resolve them so examples read as plain
         # sentences (the structural renderer only handles []/()/{...}).
         first = s2p_intents.resolve_rules(sents[0], lang)
-        ex = _example_html(first, block.get("name_domains"), entities, slot_lists)
+        ex = _example_html(first, nd, ent_map, block_slots)
         if ex and ex not in examples:
             examples.append(ex)
         for d in training.block_domains(block):
+            d_map = _entity_map([d])
+            if nd and not d_map:  # name-based domain with no capable entity
+                continue
             if d not in domains:
                 domains.append(d)
             if d not in by_domain:
-                by_domain[d] = _example_html(first, [d], entities, slot_lists)
+                by_domain[d] = _example_html(first, [d], d_map or name_domain, block_slots)
     return {"domains": domains, "by_domain": by_domain, "examples": examples}
 
 

@@ -43,12 +43,14 @@ CUSTOM_ACTION_INTENT = "_CustomAction"
 def canonical_slot(key: str) -> str:
     """Map an internal slot-list name to the HA intent slot name it fills.
 
-    Only ``{name}`` is rewritten to a domain-scoped internal list
-    (``name__<domains>``); every other slot (including the per-domain ``state``
+    ``{name}``/``{area}``/``{floor}`` are rewritten to domain-scoped internal
+    lists (``name__<domains>`` / ``area__<domain>`` / ``floor__<domain>``) for
+    gating; map them back. Every other slot (including per-domain ``state``
     lists, which bind via ``{...states:state}``) already carries its HA name.
     """
-    if key.startswith("name__"):
-        return "name"
+    for prefix, canonical in (("name__", "name"), ("area__", "area"), ("floor__", "floor")):
+        if key.startswith(prefix):
+            return canonical
     return key
 
 
@@ -81,52 +83,56 @@ def build_matcher(
 ) -> Optional[IntentMatcher]:
     """Build an :class:`IntentMatcher` for the enabled combos + custom commands,
     or ``None`` if nothing is matchable."""
+    import gating
     import s2p_intents
+    import training
 
+    info = training.as_entity_info(entities)
     extras = extra_sentences or {}
     intents_dict: Dict[str, dict] = {}
-    name_lists: Dict[str, List[str]] = {}
+    # Domain-scoped lists (name__*/area__*/floor__*) collected while scoping,
+    # in original case so matched slot values are HA-friendly.
+    scoped_lists: Dict[str, List[str]] = {}
 
-    def scope(sentences: Sequence[str], domains) -> List[str]:
-        """Rewrite `{name}` -> a domain-scoped list (original-case names, so the
-        emitted slot value is HA-friendly), dropping a sentence whose domains
-        match no entity -- the same gating the grammar applies."""
+    def scope(sentences, name_domains, inferred_domain, capability) -> List[str]:
+        """Rewrite {name}/{area}/{floor} to domain-scoped lists and apply the
+        same capability/area gating as the grammar (gating.scope_sentence)."""
         out: List[str] = []
         for sentence in sentences:
-            if "{name}" in sentence:
-                if domains:
-                    names = [n for n, d in entities.items() if d in domains]
-                    key = _name_list_key(domains)
-                elif entities:
-                    names = list(entities.keys())
-                    key = "name"
-                else:
-                    continue
-                if not names:
-                    continue
-                name_lists.setdefault(key, names)
-                sentence = sentence.replace("{name}", "{" + key + "}")
-            out.append(sentence)
+            rewritten, lists = gating.scope_sentence(
+                sentence, name_domains, inferred_domain, capability, info
+            )
+            if rewritten is None:
+                continue
+            for key, values in lists.items():
+                scoped_lists.setdefault(key, values)
+            out.append(rewritten)
         return out
 
     for (intent, combo), allowed in enabled_domain_map(enabled).items():
         si_blocks = s2p_intents.combo_blocks(lang, intent, combo)
         if not si_blocks:
             continue
+        capability = gating.required_capability(intent, combo)
         data_blocks: List[dict] = []
         for ss in combo_blocks({"data": si_blocks}, extras.get(f"{intent}/{combo}")):
             include, eff_nd = _effective_name_domains(ss, allowed)
             if not include:
                 continue
-            sentences = scope(ss.get("sentences", []), eff_nd)
+            inferred = ss.get("inferred_domain")
+            if not gating.keep_block(
+                eff_nd, inferred, capability, gating.capability_domains(intent), info
+            ):
+                continue
+            sentences = scope(ss.get("sentences", []), eff_nd, inferred, capability)
             if not sentences:
                 continue
             metadata: Dict[str, object] = {
                 "combo": combo,
                 "response_key": ss.get("response", "default"),
             }
-            if ss.get("inferred_domain"):
-                metadata["domain"] = ss["inferred_domain"]
+            if inferred:
+                metadata["domain"] = inferred
             if ss.get("context_area"):
                 metadata["context_area"] = True
             if ss.get("slots"):  # fixed slot values (e.g. timer "half" -> 30)
@@ -142,7 +148,7 @@ def build_matcher(
         mode = cmd.get("mode", "stt")
         if mode not in ("intent", "action"):
             continue
-        sentences = scope(cmd.get("sentences") or [], cmd.get("name_domains"))
+        sentences = scope(cmd.get("sentences") or [], cmd.get("name_domains"), None, None)
         if not sentences:
             continue
         metadata = {"source": "custom", "mode": mode, "id": idx}
@@ -166,14 +172,15 @@ def build_matcher(
         return None
 
     hassil_slot_lists: Dict[str, TextSlotList] = {}
-    for key, names in name_lists.items():
+    for key, names in scoped_lists.items():
         hassil_slot_lists[key] = TextSlotList.from_strings(
             sorted(set(names)), name=key
         )
-    # Only name-scoped lists plus area/floor are supplied at runtime; the other
-    # text lists (color, state, ...) and numeric ranges come from the package's
-    # `lists`, and `<rules>` from its `expansion_rules`, both handed to hassil
-    # below so it resolves the raw templates natively.
+    # Domain-scoped lists (above) plus the un-narrowed area/floor (for name-based
+    # combos) are supplied at runtime; the other text lists (color, state, ...)
+    # and numeric ranges come from the package's `lists`, and `<rules>` from its
+    # `expansion_rules`, both handed to hassil below so it resolves the raw
+    # templates natively.
     for key in ("area", "floor"):
         values = (slot_lists or {}).get(key)
         if values and key not in hassil_slot_lists:

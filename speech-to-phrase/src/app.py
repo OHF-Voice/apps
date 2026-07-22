@@ -87,7 +87,7 @@ def create_app(cfg) -> Flask:
     # Train the configured language now if its inputs changed (first boot,
     # entity/area/floor renames, config edits), then watch for further changes.
     if cfg.model:
-        _ensure_trained(cfg, cfg.language, meta, _current_entities(cfg),
+        _ensure_trained(cfg, cfg.language, meta, _current_records(cfg),
                         _current_slot_lists(cfg), data_dir)
         _start_watch(cfg, meta, data_dir)
 
@@ -119,13 +119,14 @@ def create_app(cfg) -> Flask:
         combos = bi.available_combos(ADDON_ROOT, lang, meta)
         amap = training.enabled_domain_map(read_enabled(lang, combos))
         extras = ex.load(data_dir, lang)
-        entities = _current_entities(cfg)
+        records = _current_records(cfg)
+        entities = _entities_mapping(records)
         slot_lists = _current_slot_lists(cfg)
         for c in combos:
             key = (c["intent"], c["combo"])
             c["extra"] = extras.get(ex.key(c["intent"], c["combo"]), [])
             ce = bi.combo_examples(
-                ADDON_ROOT, lang, c["intent"], c["combo"], entities, slot_lists
+                ADDON_ROOT, lang, c["intent"], c["combo"], records, slot_lists
             )
             c["domains"] = ce["domains"]
             c["examples"] = ce["examples"]
@@ -190,7 +191,7 @@ def create_app(cfg) -> Flask:
         if body.get("max_score") is not None:
             settings.set_max_score(data_dir, lang, body["max_score"])
 
-        entities = _current_entities(cfg)
+        entities = _current_records(cfg)
         slot_lists = _current_slot_lists(cfg)
         templates, _ = training.assemble(
             ADDON_ROOT, lang, enabled, commands, entities, slot_lists,
@@ -229,7 +230,7 @@ def create_app(cfg) -> Flask:
         enabled = [list(e) for e in read_enabled(lang, combos)]
         commands = cc.load(data_dir, lang)
         matcher = intent_matcher.build_matcher(
-            ADDON_ROOT, lang, enabled, _current_entities(cfg),
+            ADDON_ROOT, lang, enabled, _current_records(cfg),
             _current_slot_lists(cfg), custom_commands=commands,
             extra_sentences=ex.load(data_dir, lang),
         )
@@ -278,7 +279,8 @@ def create_app(cfg) -> Flask:
         if not (sentence and intent and combo):
             return jsonify({"ok": False, "error": "missing sentence/intent/combo"})
 
-        entities = _current_entities(cfg)
+        records = _current_records(cfg)
+        entities = _entities_mapping(records)
         slot_lists = _current_slot_lists(cfg)
         combos = bi.available_combos(ADDON_ROOT, lang, meta)
         enabled = [list(e) for e in read_enabled(lang, combos)]
@@ -290,7 +292,7 @@ def create_app(cfg) -> Flask:
         domains = _first_block_name_domains(lang, intent, combo)
         try:
             matcher = intent_matcher.build_matcher(
-                ADDON_ROOT, lang, enabled, entities, slot_lists,
+                ADDON_ROOT, lang, enabled, records, slot_lists,
                 custom_commands=cc.load(data_dir, lang), extra_sentences=cand,
             )
             sample = bi.sample_sentence(sentence, domains, entities, slot_lists)
@@ -368,17 +370,34 @@ def _load_json(path, default):
     return default
 
 
-def _current_entities(cfg) -> Dict[str, str]:
-    """Live entity {name: domain}: HA registry in the container, fixture/dev
-    otherwise. Re-fetched at each training event so renames/adds are picked up."""
+def _current_records(cfg) -> list:
+    """Live enriched entity records (name/domain/device_class/features/area/
+    floor): HA registry in the container, fixture/dev otherwise. Re-fetched at
+    each training event so renames/adds/feature changes are picked up. Drives the
+    entity-aware gating in training/intent_matcher."""
     if cfg.hass_token:
         try:
-            ents = training.entities_from_hass(cfg.hass_api, cfg.hass_token)
-            _LOGGER.debug("Loaded %d entities from Home Assistant", len(ents))
-            return ents
+            recs = training.entity_records_from_hass(cfg.hass_api, cfg.hass_token)
+            _LOGGER.debug("Loaded %d entity records from Home Assistant", len(recs))
+            return recs
         except Exception:  # noqa: BLE001
             _LOGGER.exception("entity fetch failed; falling back to fixture/dev")
-    return _load_json(cfg.entities_file, training.DEV_ENTITIES)
+    data = _load_json(cfg.entities_file, None)
+    if data is None:
+        return training.DEV_ENTITY_RECORDS
+    if isinstance(data, dict):  # legacy {name: domain} fixture
+        return [{"name": n, "domain": d} for n, d in data.items()]
+    return data
+
+
+def _entities_mapping(records) -> Dict[str, str]:
+    """{name: domain} view of enriched records (for examples/UI)."""
+    return {r["name"]: r["domain"] for r in records}
+
+
+def _current_entities(cfg) -> Dict[str, str]:
+    """{name: domain} for examples/UI. Training/matching use _current_records."""
+    return _entities_mapping(_current_records(cfg))
 
 
 def _current_slot_lists(cfg) -> Dict[str, List[str]]:
@@ -546,7 +565,7 @@ def _start_watch(cfg, meta, data_dir: Path) -> None:
         while True:
             time.sleep(interval)
             try:
-                entities = _current_entities(cfg)
+                entities = _current_records(cfg)
                 slot_lists = _current_slot_lists(cfg)
                 langs = {cfg.language} | {
                     p.name for p in data_dir.iterdir()
@@ -624,7 +643,7 @@ def main():
 
         intent_server.start_background(
             cfg.intent_uri, cfg.language, Path(cfg.data), ADDON_ROOT,
-            get_entities=lambda: _current_entities(cfg),
+            get_entities=lambda: _current_records(cfg),
             get_slot_lists=lambda: _current_slot_lists(cfg),
             api_url=cfg.hass_api, token=cfg.hass_token,
             ttl=max(cfg.refresh_interval, 60),

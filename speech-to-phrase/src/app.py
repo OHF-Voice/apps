@@ -7,10 +7,15 @@ Runnable locally:
     # then open http://localhost:8099
 
 Lets the user, per language:
-  * edit free-text custom sentences, and
-  * enable/disable built-in slot-combinations.
+  * enable/disable built-in slot-combinations,
+  * write their own (speech-to-text only) commands, and
+  * switch a device/area/floor off for voice entirely.
 On save it persists the choice and (if a model is configured) retrains the
 grammar. Works behind Home Assistant ingress and standalone.
+
+Scope note: this is the speech-to-text half of the add-on. The intent
+recognizer (``intent_server.py``) is present but not started unless
+``--intent`` is passed -- Home Assistant handles the transcript.
 """
 import argparse
 import hashlib
@@ -27,9 +32,6 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import custom_commands as cc
 import extra_sentences as ex
-import gating
-import hass_actions
-import intent_matcher
 import models
 import overrides
 import presets as bi
@@ -117,14 +119,11 @@ def create_app(cfg) -> Flask:
         lang = request.args.get("lang", cfg.language)
         combos = bi.available_combos(ADDON_ROOT, lang, meta)
         amap = training.enabled_domain_map(read_enabled(lang, combos))
-        extras = ex.load(data_dir, lang)
         ov = _overrides(cfg, lang)
         records = _current_records(cfg, lang)
-        entities = _entities_mapping(records)
         slot_lists = _current_slot_lists(cfg, lang)
         for c in combos:
             key = (c["intent"], c["combo"])
-            c["extra"] = extras.get(ex.key(c["intent"], c["combo"]), [])
             ce = bi.combo_examples(
                 ADDON_ROOT, lang, c["intent"], c["combo"], records, slot_lists
             )
@@ -147,22 +146,6 @@ def create_app(cfg) -> Flask:
                     slot_lists, ov=ov
                 )
                 for d in c["domains"]
-            }
-            # Values this command can target, so the drill-down can offer them
-            # (already narrowed by domain/capability gating).
-            c["targets"] = {
-                "name": {
-                    d: training.as_entity_info(records).names(
-                        [d], gating.required_capability(c["intent"], c["combo"])
-                    )
-                    for d in c["domains"]
-                },
-                "area": slot_lists.get("area", []) if "area" in ce["uses"] else [],
-                "floor": slot_lists.get("floor", []) if "floor" in ce["uses"] else [],
-            }
-            c["exclude"] = {
-                slot: sorted(ov.excluded(overrides.combo_key(c["intent"], c["combo"]), slot))
-                for slot in overrides.SLOT_KINDS
             }
             if key in amap:
                 c["enabled"] = True
@@ -198,17 +181,14 @@ def create_app(cfg) -> Flask:
                 "groups": groups,
                 "commands": commands,
                 "trainable": bool(cfg.model),
-                "hass": bool(cfg.hass_token),
                 "max_score": settings.get_max_score(data_dir, lang, cfg.max_score),
                 "max_score_default": cfg.max_score,
-                "intents": bi.intent_catalog(meta),
-                "scripts_scenes": hass_actions.exposed_scripts_scenes(
-                    cfg.hass_api, cfg.hass_token
-                ) if cfg.hass_token else [],
                 "devices_by_domain": devices,
                 "areas": {"values": raw_lists.get("area", []), "used_by": area_used},
                 "floors": {"values": raw_lists.get("floor", []), "used_by": floor_used},
-                # Voice targeting + aliases, round-tripped by the UI.
+                # Voice targeting, round-tripped by the UI. The UI only edits the
+                # global on/off switches; anything else already in the document
+                # (aliases, per-command exclusions) rides along untouched.
                 "overrides": overrides.load_doc(data_dir, lang),
             }
         )
@@ -219,11 +199,14 @@ def create_app(cfg) -> Flask:
         lang = body["lang"]
         enabled = [list(e) for e in body.get("enabled", [])]
         commands = body.get("commands", [])
-        extras = body.get("extra_sentences", {})
         d = lang_dir(lang)
         (d / "enabled.json").write_text(json.dumps(enabled, indent=2))
         cc.save(data_dir, lang, commands)
-        ex.save(data_dir, lang, extras)
+        # The UI no longer edits extra phrasings, so only write them when the
+        # client actually sent some -- otherwise an existing file would be wiped
+        # on every save.
+        if body.get("extra_sentences") is not None:
+            ex.save(data_dir, lang, body["extra_sentences"])
         if body.get("overrides") is not None:
             overrides.save(data_dir, lang, body["overrides"])
         # Score gate: persisted per-language and hot-reloaded by the STT server
@@ -253,156 +236,7 @@ def create_app(cfg) -> Flask:
             )
         return jsonify(resp)
 
-    @app.route("/api/test", methods=["POST"])
-    def api_test():
-        """Dry-run the matcher on text: what intent/action + slots would fire.
-
-        A ``area`` (the satellite's area) fills the slot for ``context_area``
-        commands ("turn on the lights in here"). When ``execute`` is set and a
-        Home Assistant token is configured, actually run the intent (via
-        ``/api/intent/handle``) or action in HA."""
-        body = request.get_json(force=True)
-        lang = body.get("lang", cfg.language)
-        text = (body.get("text") or "").strip()
-        sat_area = (body.get("area") or "").strip()
-        execute = bool(body.get("execute"))
-        combos = bi.available_combos(ADDON_ROOT, lang, meta)
-        enabled = [list(e) for e in read_enabled(lang, combos)]
-        commands = cc.load(data_dir, lang)
-        matcher = intent_matcher.build_matcher(
-            ADDON_ROOT, lang, enabled, _current_records(cfg, lang),
-            _current_slot_lists(cfg, lang), custom_commands=commands,
-            extra_sentences=ex.load(data_dir, lang), ov=_overrides(cfg, lang),
-        )
-        result = matcher.match(text) if (matcher and text) else None
-        if result is None:
-            return jsonify({"matched": False, "text": text})
-        md = result.intent_metadata or {}
-        slots = {
-            intent_matcher.canonical_slot(k): v.value
-            for k, v in result.entities.items()
-        }
-        if md.get("domain"):
-            slots["domain"] = md["domain"]
-        slots.update(md.get("slots") or {})
-        mode = md.get("mode", "intent")  # built-ins are intent-mode
-        # For "in here" style commands, stand in the chosen satellite area.
-        context_area = bool(md.get("context_area"))
-        if context_area and sat_area:
-            slots["area"] = sat_area
-        resp = {
-            "matched": True,
-            "text": text,
-            "mode": mode,
-            "intent": None if mode == "action" else result.intent.name,
-            "action": md.get("action") if mode == "action" else None,
-            "slots": slots,
-            "context_area": context_area,
-            "area": sat_area if context_area else None,
-            "response": md.get("response") if md.get("source") == "custom" else None,
-            "source": md.get("source", "builtin"),
-        }
-        if execute:
-            resp["executed"] = _execute_in_hass(cfg, mode, result.intent.name, md, slots)
-        return jsonify(resp)
-
-    @app.route("/api/validate_sentence", methods=["POST"])
-    def api_validate():
-        """Validate an extra phrasing for a built-in combo before saving: build a
-        matcher with the candidate injected, render a sample utterance, and report
-        whether it recognizes as the combo's intent + what slots it captures."""
-        body = request.get_json(force=True)
-        lang = body.get("lang", cfg.language)
-        intent = body.get("intent")
-        combo = body.get("combo")
-        sentence = (body.get("sentence") or "").strip()
-        if not (sentence and intent and combo):
-            return jsonify({"ok": False, "error": "missing sentence/intent/combo"})
-
-        records = _current_records(cfg, lang)
-        entities = _entities_mapping(records)
-        slot_lists = _current_slot_lists(cfg, lang)
-        combos = bi.available_combos(ADDON_ROOT, lang, meta)
-        enabled = [list(e) for e in read_enabled(lang, combos)]
-        if not any(e[0] == intent and e[1] == combo for e in enabled):
-            enabled.append([intent, combo])  # ensure the target is active
-        cand = {k: list(v) for k, v in ex.load(data_dir, lang).items()}
-        cand[ex.key(intent, combo)] = cand.get(ex.key(intent, combo), []) + [sentence]
-
-        domains = _first_block_name_domains(lang, intent, combo)
-        try:
-            matcher = intent_matcher.build_matcher(
-                ADDON_ROOT, lang, enabled, records, slot_lists,
-                custom_commands=cc.load(data_dir, lang), extra_sentences=cand,
-                ov=_overrides(cfg, lang),
-            )
-            sample = bi.sample_sentence(sentence, domains, entities, slot_lists)
-            result = matcher.match(sample) if (matcher and sample) else None
-        except Exception as e:  # noqa: BLE001 (undefined list, bad syntax, ...)
-            return jsonify({"ok": False, "error": f"couldn't parse: {e}"})
-
-        if result is None:
-            return jsonify({"ok": False, "sample": sample,
-                            "error": "not recognized (check slot names/syntax)"})
-        md = result.intent_metadata or {}
-        slots = {intent_matcher.canonical_slot(k): v.value
-                 for k, v in result.entities.items()}
-        if md.get("domain"):
-            slots["domain"] = md["domain"]
-        slots.update(md.get("slots") or {})
-        return jsonify({
-            "ok": result.intent.name == intent,
-            "sample": sample,
-            "intent": result.intent.name,
-            "slots": slots,
-        })
-
     return app
-
-
-def _execute_in_hass(cfg, mode: str, intent_name: str, md: dict, slots: dict) -> dict:
-    """Run the matched intent/action in the live HA instance (from the Test tab).
-
-    Standard intents go through ``POST /api/intent/handle``; custom actions run
-    the script/scene/service. Returns ``{ok, response}`` or ``{ok: False, error}``."""
-    import asyncio
-
-    if not cfg.hass_token:
-        return {"ok": False, "error": "No Home Assistant connection."}
-    try:
-        if mode == "action":
-            action = md.get("action") or {}
-            response_tmpl = md.get("response")
-
-            async def _run():
-                if not await hass_actions.run_action_async(
-                    cfg.hass_api, cfg.hass_token, action, slots
-                ):
-                    return {"ok": False, "error": "action failed"}
-                text = ""
-                if response_tmpl:
-                    text = await hass_actions.render_template_async(
-                        cfg.hass_api, cfg.hass_token, response_tmpl,
-                        variables={"slots": slots},
-                    ) or ""
-                return {"ok": True, "response": text}
-
-            return asyncio.run(_run())
-
-        ok, speech = asyncio.run(hass_actions.handle_intent_async(
-            cfg.hass_api, cfg.hass_token, intent_name, slots
-        ))
-        return {"ok": True, "response": speech} if ok else {"ok": False, "error": speech}
-    except Exception as e:  # noqa: BLE001
-        _LOGGER.exception("execute in HA failed")
-        return {"ok": False, "error": str(e)}
-
-
-def _first_block_name_domains(lang, intent, combo):
-    import s2p_intents
-
-    blocks = s2p_intents.combo_blocks(lang, intent, combo)
-    return blocks[0].get("name_domains") if blocks else None
 
 
 def _load_json(path, default):
@@ -442,16 +276,6 @@ def _raw_records(cfg) -> list:
     if isinstance(data, dict):  # legacy {name: domain} fixture
         return [{"name": n, "domain": d} for n, d in data.items()]
     return data
-
-
-def _entities_mapping(records) -> Dict[str, str]:
-    """{name: domain} view of enriched records (for examples/UI)."""
-    return {r["name"]: r["domain"] for r in records}
-
-
-def _current_entities(cfg) -> Dict[str, str]:
-    """{name: domain} for examples/UI. Training/matching use _current_records."""
-    return _entities_mapping(_current_records(cfg))
 
 
 def _current_slot_lists(cfg, lang: Optional[str] = None) -> Dict[str, List[str]]:
@@ -668,7 +492,10 @@ def main():
                     help="score gate; if unset, a per-backend default is used "
                          "(citrinet 5.0, coqui 2.0)")
     ap.add_argument("--no-wyoming", action="store_true", help="UI only (don't serve Wyoming STT)")
-    ap.add_argument("--no-intent", action="store_true", help="don't serve the Wyoming intent service")
+    # Off by default: the add-on ships as speech-to-text only, and Home Assistant
+    # handles the transcript with its own conversation agent.
+    ap.add_argument("--intent", action="store_true",
+                    help="also serve the Wyoming intent service (experimental)")
     ap.add_argument("--debug", action="store_true")
     cfg = ap.parse_args()
 
@@ -689,9 +516,10 @@ def main():
     else:
         _LOGGER.warning("No model — Wyoming server not started")
 
-    # Serve the Wyoming intent service alongside. It is independent of the
-    # acoustic model (text in -> intent out), so it runs even UI-only.
-    if not cfg.no_intent:
+    # Optionally serve the Wyoming intent service alongside. It is independent of
+    # the acoustic model (text in -> intent out), so it runs even UI-only, but
+    # it is off unless asked for: speech-to-text is what this add-on ships.
+    if cfg.intent:
         import intent_server
 
         intent_server.start_background(
@@ -702,7 +530,7 @@ def main():
             ttl=max(cfg.refresh_interval, 60),
         )
     else:
-        _LOGGER.info("Wyoming intent service disabled (--no-intent)")
+        _LOGGER.info("Speech-to-text only; intent service not started (--intent enables it)")
 
     _LOGGER.info("Speech-to-Phrase UI on http://%s:%s (data=%s, model=%s)",
                  cfg.host, cfg.port, cfg.data, cfg.model or "<none>")

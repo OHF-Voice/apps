@@ -6,6 +6,9 @@
 #
 # On first boot (or when entities/areas/floors/config change) the default
 # grammar is trained; the embedded Wyoming server hot-reloads it.
+#
+# Speech-to-text only: the transcript goes to Home Assistant, which decides what
+# it means. The add-on's own intent service is not started.
 # ==============================================================================
 flags=()
 bashio::config.true 'debug_logging' && flags+=('--debug')
@@ -22,7 +25,6 @@ cd /usr/src/src
 
 exec python3 app.py \
     --data /data \
-    --intents-yaml /usr/src/intents.yaml \
     --models-dir '/data/models' \
     --language "${language}" \
     --backend "$(bashio::config 'backend')" \

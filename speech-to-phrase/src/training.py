@@ -3,11 +3,11 @@
 The grammar for a language is assembled from two sources:
   1. enabled built-in slot-combinations (curated S2P templates), and
   2. the user's free-text custom sentences,
-then compiled by speech-to-phrase-lib's Recognizer.
+then compiled by the recognition library's Recognizer.
 
 DOMAIN-SCOPED NAMES (the important bit)
 ---------------------------------------
-speech-to-phrase-lib's `train(sentences, list_values)` takes ONE list_values
+The library's `train(sentences, list_values)` takes ONE list_values
 dict for the whole grammar, so a bare `{name}` -> all-entities flattens away the
 entity<->domain binding and makes nonsense like "front door on" (a lock spoken
 in an on-able phrasing) recognizable.

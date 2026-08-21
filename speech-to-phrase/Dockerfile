@@ -8,10 +8,13 @@ WORKDIR /usr/src
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 COPY requirements.txt ./
+# The recognition library is vendored (lib/) and built from these sources, so
+# the image needs no network access to a git host and no external checkout.
+COPY lib/ ./lib/
 
-# cmake/g++/libfst-dev/git exist only to compile speech-to-phrase-lib's native
-# _fst module, and are purged in the same layer so they never reach the shipped
-# image (~200 MB of toolchain).
+# cmake/g++/libfst-dev exist only to compile the vendored library's native _fst
+# module, and are purged in the same layer so they never reach the shipped image
+# (~200 MB of toolchain).
 #
 # The OpenFST *runtime* library has to survive that purge: _fst links
 # libfst.so.<N> dynamically, and only the -dev package was asked for by name, so
@@ -34,7 +37,6 @@ RUN \
     && apt-get install -y --no-install-recommends \
         cmake \
         g++ \
-        git \
         libfst-dev \
     && pip3 install --no-cache-dir -U setuptools wheel \
     && pip3 install --no-cache-dir -r requirements.txt \
@@ -53,10 +55,10 @@ RUN \
            echo "ERROR: mapped none of _fst's shared libraries to packages; refusing to purge" >&2; \
            exit 1; \
        fi \
-    && apt-get purge -y --auto-remove cmake g++ git libfst-dev \
+    && apt-get purge -y --auto-remove cmake g++ libfst-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /root/.cache \
-    && python3 -c "import speech_to_phrase; print('speech-to-phrase-lib import OK after purge')"
+    && python3 -c "import speech_to_phrase; print('vendored speech_to_phrase imports OK after purge')"
 
 # Bundle the default acoustic model so a fresh install works offline and doesn't
 # spend its first boot downloading ~140 MB. Only src/models.py is copied first,

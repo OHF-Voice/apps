@@ -11,7 +11,8 @@ command means and runs it. Nothing here replaces or bypasses that agent.
 
 ## How it works
 
-The recognizer (speech-to-phrase-lib) compiles your enabled sentences into a
+The recognizer (the vendored `speech_to_phrase` library in `lib/`) compiles
+your enabled sentences into a
 grammar and decodes audio against it. Three sentence sources feed the grammar:
 
 1. **Built-in commands** — curated, speech-first templates the add-on ships for
@@ -51,10 +52,17 @@ the grammar.
 | `token_bonus` | Word-insertion reward per emitted token. Leave it unset to use a per-backend default (Citrinet `2.0`, Coqui `0.0` — the cost scales differ and Coqui has not been measured); `0` disables it. The FST decode picks the lowest-cost path, and audio a path doesn't account for is absorbed by CTC blanks almost for free — so without a bonus a shorter in-grammar phrase can beat the longer one actually spoken ("set the office light brightness to ten percent" heard as "office light off"). Too high and the decoder starts inserting words. Re-fit with `tools/audio_test.py --token-bonus`. |
 | `debug_logging` | Verbose logs. |
 
+## Self-contained build
+
+The recognition library lives in `lib/` (package `speech_to_phrase`, built from
+`lib/speech_to_phrase/_fst/fstmodule.cc` against OpenFST) and is installed from
+source by `requirements.txt`'s `./lib` entry. There is no dependency on an
+external checkout or git host, so the image builds from this directory alone.
+
 ## Image size and the bundled model
 
-The build compiles speech-to-phrase-lib's native OpenFST module, so it needs
-`cmake`, `g++`, `libfst-dev` and `git`. Those are purged in the same layer they
+The build compiles the vendored library's native OpenFST module, so it needs
+`cmake`, `g++` and `libfst-dev`. Those are purged in the same layer they
 are installed in (~200 MB of toolchain that never reaches the shipped image);
 the OpenFST *runtime* library is detected from what the built module links and
 marked manual so `--auto-remove` can't take it with them.
@@ -80,6 +88,8 @@ downloaded one keeps using it. Build a lean image that downloads on demand with:
   with `HA_TOKEN` (and `HA_URL`, default `http://homeassistant.local:8123`).
   Clips are cached under `tests/wav/.tts_cache`, so a re-run with the same
   `--seed` makes no TTS calls.
+- `lib/` is the recognition library; rebuild it after editing with
+  `pip install ./lib` (needs `cmake`, `g++`, `libfst-dev`).
 - `src/intent_server.py` is a Wyoming *intent* service (text in → intent out).
   It is complete but not started by the add-on; pass `--intent` to app.py to
   bring it up for development. Custom-command `intent`/`action` modes and the

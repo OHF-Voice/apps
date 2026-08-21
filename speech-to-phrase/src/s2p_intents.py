@@ -9,7 +9,7 @@ blocks in hassil's *converted* format (domain info under ``slots`` /
   * adapts each block back to the add-on's authored shape
     (``name_domains`` / ``inferred_domain`` / ``context_area`` / ``response``),
     so the existing training / matcher / preset code keeps working, and
-  * transpiles a template into the speech-to-phrase-lib grammar dialect
+  * transpiles a template into the recognition library's grammar dialect
     (``<rules>`` substituted inline, range lists inlined to ``{from..to:slot}``)
     for the FST trainer, which -- unlike hassil -- has no rule support.
 
@@ -18,6 +18,7 @@ package's ``lists`` and ``expansion_rules``.
 """
 import logging
 import re
+import unicodedata
 from functools import lru_cache
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
@@ -157,10 +158,166 @@ def _list_defs(lang: str) -> Tuple[Dict[str, Tuple[int, int, int]], Dict[str, Tu
     return ranges, texts
 
 
+# --- speakability -----------------------------------------------------------
+#
+# Package templates and list values are authored for hassil's *text* matcher, so
+# they carry written-only forms: ``timer_half`` ships both ``half`` and ``1/2``;
+# ``{timer_hours}( |-)hour[s]`` exists so typed "2-hour" matches. Those forms
+# cannot appear in a grammar meant for speech -- a path through ``%`` or ``-``
+# asks the acoustic model to emit a token for something that has no sound, so it
+# sits in the grammar matching nothing. Both are screened with the same rule.
+
+# Written separators: no sound of their own, but they do separate two spoken
+# words, so they become a space rather than disqualifying the surface form.
+_WORD_BREAKS = "-–—/"
+# Non-letters that are still part of a spoken word.
+_IN_WORD = "'’"
+
+
+def _spoken_char(ch: str) -> Optional[str]:
+    """``ch``'s spoken contribution: itself, a space, ``""`` if it is silent, or
+    ``None`` if it has no spoken realization at all (which disqualifies the whole
+    surface form).
+
+    Combining marks count as spoken: vowel signs in Malayalam, Thai, Devanagari
+    and other abugidas are categories ``Mn``/``Mc``, for which ``str.isalpha()``
+    is ``False``. Treating them as unspeakable would discard ordinary words
+    ("ജനലുകൾ", "टाइमर") and quietly gut those languages.
+    """
+    if ch in _WORD_BREAKS:
+        return " "
+    if unicodedata.category(ch) == "Cf":
+        return ""  # ZWJ/ZWNJ/soft hyphen: not pronounced, not disqualifying
+    if (
+        ch.isalpha()
+        or ch.isspace()
+        or ch in _IN_WORD
+        or unicodedata.category(ch).startswith("M")
+    ):
+        return ch
+    return None  # %, °, digits, stray punctuation: written-only
+
+
+def _speakable_value(value: str) -> Optional[str]:
+    """A list value's spoken form, or ``None`` if it is a written-only alias.
+
+    This *normalizes* rather than merely accepting or rejecting, because letting
+    a hyphen through verbatim would put a real hyphenated word like Bulgarian
+    "по-силно" into the grammar demanding an unpronounceable ``-`` token.
+    Spacing it ("по силно") gives the two words the tokenizer and acoustic model
+    actually deal in.
+    """
+    out: List[str] = []
+    for ch in value:
+        spoken = _spoken_char(ch)
+        if spoken is None:
+            return None
+        out.append(spoken)
+    return normalize_whitespace("".join(out)).strip() or None
+
+
+def _speakable_template(template: str) -> Optional[str]:
+    """A template's spoken form, or ``None`` if it is a written-only phrasing.
+
+    The value-level counterpart of :func:`_speakable_value`, with one extra rule:
+    ``{...}`` references are copied through untouched. A range body such as
+    ``{1..100}`` is digits and dots by construction, and the values a list
+    contributes are screened separately by :func:`_speakable_value`.
+    """
+    out: List[str] = []
+    i = 0
+    while i < len(template):
+        ch = template[i]
+        if ch == "{":
+            end = template.find("}", i)
+            if end < 0:
+                return None  # malformed ref
+            out.append(template[i : end + 1])
+            i = end + 1
+            continue
+        spoken = _spoken_char(ch)
+        if spoken is None:
+            return None
+        out.append(spoken)
+        i += 1
+    return normalize_whitespace("".join(out)).strip() or None
+
+
 def text_list_values(lang: str) -> Dict[str, List[str]]:
-    """{list_name: [spoken values]} for every text list in the package."""
+    """{list_name: [spoken values]} for every text list in the package.
+
+    A list value is itself a template fragment more often than not -- English
+    ships ``(closed|shut)`` and ``[securely] locked``, and other languages lean
+    on this much harder (German's ``on_off_states`` is
+    ``((an|ein)[geschaltet]|auf|offen|...)``). The trainer takes these as literal
+    spoken words, so passing them through unexpanded puts the punctuation itself
+    into the FST and makes every phrasing of the value unrecognizable. Expand
+    each value into its plain realizations instead, so "ist die Tür offen" and
+    "ist die Tür auf" both decode.
+
+    Written-only forms are then dropped (see :func:`_speakable_value`): the
+    package ships ``1/2`` alongside ``half`` for hassil's text matcher, and a
+    grammar path through ``/`` matches no audio.
+    """
     _ranges, texts = _list_defs(lang)
-    return {name: list(vals) for name, vals in texts.items()}
+    out: Dict[str, List[str]] = {}
+    for name, vals in texts.items():
+        expanded: List[str] = []
+        for value in vals:
+            expanded.extend(_value_phrasings(value, lang))
+        expanded = list(dict.fromkeys(expanded))
+        # De-dupe after normalization too: spacing a hyphen can collide a value
+        # with one already present ("по-силно" -> "по силно").
+        spoken: List[str] = []
+        spoken_seen: Set[str] = set()
+        for value in expanded:
+            said = _speakable_value(value)
+            if said is not None and said not in spoken_seen:
+                spoken_seen.add(said)
+                spoken.append(said)
+        if not spoken:
+            # Never leave a list empty (it would break the {list} ref in
+            # training). Nothing speakable means the package ships only written
+            # forms for this list, so the fallback keeps dead paths -- say so.
+            _LOGGER.warning(
+                "No speakable values for list '%s' (%s); keeping written forms",
+                name, lang,
+            )
+        out[name] = spoken or expanded
+    return out
+
+
+@lru_cache(maxsize=None)
+def _value_phrasings(value: str, lang: str) -> Tuple[str, ...]:
+    """Plain spoken forms of a single list value (``(up|increase)`` -> up,
+    increase). Falls back to the flattened value if it will not parse."""
+    if not any(c in value for c in "()[]<|"):
+        return (normalize_whitespace(value).strip(),)
+    try:
+        intents = Intents.from_dict(
+            {
+                "language": lang,
+                "intents": {"_V": {"data": [{"sentences": [value]}]}},
+                "expansion_rules": expansion_rules(lang),
+            }
+        )
+        sentence = intents.intents["_V"].data[0].sentences[0]
+        out = [
+            normalize_whitespace(text).strip()
+            for text in sample_sentence(
+                sentence,
+                slot_lists=None,
+                expansion_rules=intents.expansion_rules,
+                expand_lists=False,
+                expand_ranges=False,
+            )
+        ]
+        forms = tuple(dict.fromkeys(t for t in out if t))
+        if forms:
+            return forms
+    except Exception:  # noqa: BLE001  (a malformed value must not break training)
+        _LOGGER.warning("Could not expand list value %r for %s", value, lang)
+    return (_flatten_value(value),)
 
 
 def _flatten_value(value: str) -> str:
@@ -223,7 +380,7 @@ def resolve_rules(text: str, lang: str) -> str:
 
 # --- grammar-dialect templates (for the FST trainer) -------------------------
 #
-# speech-to-phrase-lib's template parser is a strict subset of hassil: it has no
+# The library's template parser is a strict subset of hassil: it has no
 # ``<rule>`` support, no ``[a|b]`` (alternatives inside an optional), and no
 # ``(a;b)`` permutations. Rather than transpile every hassil construct, we let
 # hassil *sample* each template into its flat phrasings -- rules resolved,
@@ -262,6 +419,10 @@ def grammar_templates(sentences: Sequence[str], lang: str) -> Tuple[List[str], S
     kept as refs), with range refs inlined to ``{lo..hi}`` and text/``name``/
     ``area``/``floor`` refs reduced to ``{name}``. ``referenced_lists`` names the
     text lists whose values the caller must add to ``list_values``.
+
+    Written-only phrasings are dropped (see :func:`_speakable_template`), so the
+    ``( |-)`` in ``{timer_hours}( |-)hour[s]`` contributes "2 hours" but not the
+    typed-only "2-hours".
     """
     rules = expansion_rules(lang)
     range_lists, text_lists = _list_defs(lang)
@@ -277,6 +438,7 @@ def grammar_templates(sentences: Sequence[str], lang: str) -> Tuple[List[str], S
     out: List[str] = []
     for intent_data in intents.intents["_G"].data:
         for sentence in intent_data.sentences:
+            n_kept = n_dropped = 0
             for text in sample_sentence(
                 sentence,
                 slot_lists=None,
@@ -289,5 +451,20 @@ def grammar_templates(sentences: Sequence[str], lang: str) -> Tuple[List[str], S
                     lambda m: _rewrite_ref(m.group(1), range_lists, text_lists, referenced),
                     flat,
                 )
-                out.append(normalize_whitespace(rewritten).strip())
+                spoken = _speakable_template(normalize_whitespace(rewritten).strip())
+                if spoken is None:
+                    n_dropped += 1
+                    continue
+                n_kept += 1
+                out.append(spoken)
+            # A sentence whose every phrasing is written-only contributes nothing
+            # to the grammar, so that command becomes unsayable. Still better
+            # than the dead paths it replaces, but it must not be silent: it
+            # means the source template has no spoken form in this language
+            # (e.g. only "{brightness}%", never a "percent" word).
+            if n_dropped and not n_kept:
+                _LOGGER.warning(
+                    "No speakable phrasing for a %s template; dropped %d written-only "
+                    "form(s): %s", lang, n_dropped, sentence.text,
+                )
     return list(dict.fromkeys(out)), referenced

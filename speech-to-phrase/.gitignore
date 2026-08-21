@@ -9,3 +9,5 @@ __pycache__/
 *.fst
 *.fst.tokens
 .pytest_cache/
+lib/build/
+lib/*.egg-info/

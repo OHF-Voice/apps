@@ -6,7 +6,7 @@ pipeline (``<data>/<lang>/grammar.fst``), decodes incoming audio against it, and
 returns a Transcript. The grammar is **hot-reloaded** when the file changes, so
 saving in the web UI takes effect without restarting the server.
 
-Score gating: speech-to-phrase-lib returns a per-token ``score`` (lower = more
+Score gating: the recognition library returns a per-token ``score`` (lower = more
 confident). If it exceeds ``--max-score`` the utterance is out-of-grammar /
 low-confidence, so we return an EMPTY transcript — Home Assistant then treats it
 as a failed local recognition and can fall back (e.g. to cloud STT) instead of

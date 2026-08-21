@@ -1,3 +1,9 @@
+# The recognition library is vendored in lib/ and built from source here, so the
+# add-on has no external git dependency and builds from this checkout alone.
+# It pulls its own deps (numpy, onnxruntime, sentencepiece, soundfile, librosa,
+# icu-rbnf); the ones listed below are those the add-on itself imports.
+./lib
+
 flask
 aiohttp
 pyyaml
@@ -7,6 +13,5 @@ librosa
 scipy
 pysilero-vad
 hassil
-home-assistant-intents>=2026-07-21
-speech-to-phrase-lib @ git+https://github.com/OHF-Voice/speech-to-phrase-lib.git
+home-assistant-intents>=2026.7.21
 wyoming[zeroconf]

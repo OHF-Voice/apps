@@ -39,6 +39,20 @@
 - Fixed: an unparseable `max_score` was persisted as `0.1`, a gate that accepts
   nothing; it is now rejected and the previous value stands.
 - Dropped the unused `share:rw` mapping from the add-on manifest.
+- The recognition library is now vendored in `lib/` and built from source, so
+  the add-on is self-contained: no `speech-to-phrase-lib` git dependency, and
+  no `git` in the image. The vendored copy is the newer speech-to-phrase-2
+  code, which adds a subword-segmentation lattice so the grammar accepts any
+  valid tokenization of a word rather than one hard-coded segmentation.
+- Grammar correctness: list values written as hassil patterns (`(closed|shut)`,
+  `[securely] locked`) are expanded into their spoken forms, and written-only
+  forms are dropped — `timer_half` no longer trains a dead `1/2` path, and a
+  hyphenated word is spaced rather than demanding an unpronounceable token.
+  The en grammar drops 667 -> 539 templates with only the two unsayable
+  `{0..100}%` phrasings actually removed; the rest were duplicate spellings
+  collapsing onto their spoken form.
+- `tools/lang_check.py`: per-language round-trip check (package templates ->
+  grammar -> TTS -> decode) for validating a new language.
 - Smaller image: the C++/CMake/git toolchain needed to build the native OpenFST
   module is now purged in the layer that installs it (~200 MB), keeping only
   the shared libraries the built module actually links against.

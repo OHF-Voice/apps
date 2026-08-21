@@ -181,10 +181,14 @@ async def _entity_records(api_url: str, token: str) -> List[dict]:
         domain = eid.split(".", 1)[0] if "." in eid else ""
         if not domain:
             continue
-        primary = info.get("name") or info.get("original_name")
+        ent_attrs = attrs.get(eid)
+        # An entity whose name comes from its device has no registry name of its
+        # own -- friendly_name is the only place it exists. Fall back to it
+        # whenever the registry has nothing, aliases or not: an aliased entity
+        # would otherwise be reachable *only* by its alias.
+        primary = (info.get("name") or info.get("original_name")
+                   or (ent_attrs or {}).get("friendly_name"))
         aliases = [a for a in (info.get("aliases") or []) if a]
-        if not primary and not aliases:
-            primary = attrs.get(eid, {}).get("friendly_name")
         # (spoken name, the registry name it stands in for). An alias becomes a
         # record of its own -- the grammar is trained on names, not entity ids --
         # so `alias_of` is the only thing that remembers where it came from.
@@ -195,8 +199,14 @@ async def _entity_records(api_url: str, token: str) -> List[dict]:
         area_id = info.get("area_id") or device_area.get(info.get("device_id"))
         area = area_name.get(area_id) if area_id else None
         floor = area_floor.get(area_id) if area_id else None
-        features = sorted(gating.capabilities_from_attributes(domain, attrs.get(eid, {})))
-        device_class = attrs.get(eid, {}).get("device_class")
+        # No state for this entity (unavailable, or missing from /api/states)
+        # means its capabilities are *unknown*, not absent. Recording [] here
+        # would read as "supports nothing" and silently gate the entity out of
+        # every brightness/position/speed/volume command -- the opposite of the
+        # conservative behaviour gating.py promises.
+        features = (sorted(gating.capabilities_from_attributes(domain, ent_attrs))
+                    if ent_attrs is not None else None)
+        device_class = (ent_attrs or {}).get("device_class")
 
         for name, alias_of in named:
             name = (name or "").strip()

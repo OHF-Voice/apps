@@ -464,14 +464,21 @@ def _start_watch(cfg, meta, data_dir: Path) -> None:
         while True:
             time.sleep(interval)
             try:
-                entities = _current_records(cfg)
-                slot_lists = _current_slot_lists(cfg, lang)
                 langs = {cfg.language} | {
                     p.name for p in data_dir.iterdir()
                     if p.is_dir() and (p / "grammar.fst").exists()
                 }
-                for lang in langs:
-                    if _ensure_trained(cfg, lang, meta, entities, slot_lists, data_dir):
+                # Fetch the registry once per pass, then apply each language's
+                # own overrides to it: the filtering is per-language, but the
+                # Home Assistant round-trip must not be.
+                raw_records = _raw_records(cfg)
+                raw_lists = _raw_slot_lists(cfg)
+                for lang in sorted(langs):
+                    ov = overrides.load(data_dir, lang)
+                    if _ensure_trained(
+                        cfg, lang, meta, ov.filter_records(raw_records),
+                        ov.filter_slot_lists(raw_lists), data_dir
+                    ):
                         _LOGGER.info("Auto-retrained '%s' after a registry/config change", lang)
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("watch loop iteration failed")

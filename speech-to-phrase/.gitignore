@@ -1,5 +1,6 @@
 data/
 local/
+.claude/
 tests/wav/.tts_cache/
 __pycache__/
 *.pyc

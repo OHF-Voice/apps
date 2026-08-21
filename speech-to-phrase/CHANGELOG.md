@@ -15,6 +15,8 @@
     exclusion is global. Spoken aliases are gone.
   - The **Test** tab and its `/api/test` and `/api/validate_sentence` endpoints
     are gone.
+- Removed the `expansion_budget` and `use_score_gating` add-on options: nothing
+  read them.
 - Fixed: the add-on's run script passed a `--intents-yaml` flag app.py does not
   accept, which aborted startup.
 

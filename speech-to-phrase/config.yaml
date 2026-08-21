@@ -21,15 +21,11 @@ options:
   language: "en"
   backend: "auto"
   default_importance: "usable"
-  expansion_budget: 150000
-  use_score_gating: true
   debug_logging: false
 schema:
   language: str
   backend: "list(auto|citrinet|coqui)"
   default_importance: "list(required|usable|complete|optional)"
-  expansion_budget: int
-  use_score_gating: bool
   # Score gate. Left unset by default so a per-backend default applies
   # (citrinet 5.0, coqui 2.0); set it here to override for all languages.
   max_score: "float?"

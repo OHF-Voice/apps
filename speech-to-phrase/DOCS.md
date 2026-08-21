@@ -47,8 +47,7 @@ the grammar.
 | `language` | Default language for the recognizer. |
 | `backend` | `auto` (per-language), `citrinet`, or `coqui`. |
 | `default_importance` | Built-ins at/above this tier are on by default. |
-| `expansion_budget` | Soft cap on grammar size (sentence-equivalents). |
-| `use_score_gating` / `max_score` | Defer low-confidence results to the cloud. `max_score` is the default score gate (lower = stricter). Leave it unset to use a per-backend default (Citrinet `5.0`, Coqui `2.0` — the scales differ); set it to override for all languages. It can also be overridden per-language in the web UI (**Settings → Recognition**), which the STT server hot-reloads. |
+| `max_score` | Defer low-confidence results to the cloud. This is the default score gate (lower = stricter). Leave it unset to use a per-backend default (Citrinet `5.0`, Coqui `2.0` — the scales differ); set it to override for all languages. It can also be overridden per-language in the web UI (**Settings → Recognition**), which the STT server hot-reloads. |
 | `debug_logging` | Verbose logs. |
 
 ## Developer notes

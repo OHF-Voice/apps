@@ -48,7 +48,7 @@ the grammar.
 | `backend` | `auto` (per-language), `citrinet`, or `coqui`. |
 | `default_importance` | Built-ins at/above this tier are on by default. |
 | `max_score` | Defer low-confidence results to the cloud. This is the default score gate (lower = stricter). Leave it unset to use a per-backend default (Citrinet `5.0`, Coqui `2.0` — the scales differ); set it to override for all languages. It can also be overridden per-language in the web UI (**Settings → Recognition**), which the STT server hot-reloads. |
-| `token_bonus` | Word-insertion reward per emitted token (unset = `0`, off). The FST decode picks the lowest-cost path, and audio a path doesn't account for is absorbed by CTC blanks almost for free — so a shorter in-grammar phrase can beat the longer one that was actually spoken ("set the office light brightness to ten percent" heard as "office light on"). Raising this offsets the bias; too high and the decoder starts inserting words. Sweep it with `tools/audio_test.py --token-bonus`. |
+| `token_bonus` | Word-insertion reward per emitted token. Leave it unset to use a per-backend default (Citrinet `2.0`, Coqui `0.0` — the cost scales differ and Coqui has not been measured); `0` disables it. The FST decode picks the lowest-cost path, and audio a path doesn't account for is absorbed by CTC blanks almost for free — so without a bonus a shorter in-grammar phrase can beat the longer one actually spoken ("set the office light brightness to ten percent" heard as "office light off"). Too high and the decoder starts inserting words. Re-fit with `tools/audio_test.py --token-bonus`. |
 | `debug_logging` | Verbose logs. |
 
 ## Developer notes
@@ -61,6 +61,10 @@ the grammar.
   recognizer, plus OOV false-accept detection.
 - Run the UI locally:
   `python src/app.py --data ./data --port 8099`
+- `tools/audio_test.py` needs a Home Assistant instance for TTS; point it at one
+  with `HA_TOKEN` (and `HA_URL`, default `http://homeassistant.local:8123`).
+  Clips are cached under `tests/wav/.tts_cache`, so a re-run with the same
+  `--seed` makes no TTS calls.
 - `src/intent_server.py` is a Wyoming *intent* service (text in → intent out).
   It is complete but not started by the add-on; pass `--intent` to app.py to
   bring it up for development. Custom-command `intent`/`action` modes and the

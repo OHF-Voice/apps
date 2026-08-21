@@ -45,6 +45,22 @@ DEFAULT_MAX_SCORE = {"citrinet": 5.0, "coqui": 2.0}
 def default_max_score(backend: str) -> float:
     return DEFAULT_MAX_SCORE.get(backend, 5.0)
 
+
+# Word-insertion reward per emitted token. The FST decode picks the lowest-cost
+# path and audio a path doesn't account for is absorbed by CTC blanks almost for
+# free, so without a bonus a shorter in-grammar phrase can beat the longer one
+# actually spoken ("set the office light brightness to ten percent" heard as
+# "office light off"). Citrinet 2.0 was fit with tools/audio_test.py on en: over
+# 12 long brightness/speed commands, exact decodes went 3/12 at 0 -> 10/12 at
+# 2.0, saturating there (4.0 gained nothing and drove OOV false-accepts 1 -> 18).
+# Coqui is 0 because it has not been measured -- its cost scale differs from
+# Citrinet's, so borrowing the number would be a guess.
+DEFAULT_TOKEN_BONUS = {"citrinet": 2.0, "coqui": 0.0}
+
+
+def default_token_bonus(backend: str) -> float:
+    return DEFAULT_TOKEN_BONUS.get(backend, 0.0)
+
 # language -> {backend: HuggingFace model name}. The repo ships NeMo CTC models
 # (citrinet/conformer, ONNX -> "citrinet" backend, runs on onnxruntime with no
 # extra binary) and Coqui TFLite models ("coqui" backend, needs stt_onlyprobs).

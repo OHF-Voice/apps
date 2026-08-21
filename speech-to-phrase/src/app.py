@@ -66,9 +66,12 @@ def create_app(cfg) -> Flask:
         # preferred; Coqui for coqui-only languages like sl/nl/cs).
         cfg.backend = models.resolve_backend(cfg.language, "auto")
     # Gate default depends on the (now-resolved) backend: Citrinet and Coqui use
-    # different penalty scales. Only applied when the user left it unset.
+    # different penalty scales. Only applied when the user left it unset. Same
+    # for the word-insertion reward, whose scale is likewise per-backend.
     if getattr(cfg, "max_score", None) is None:
         cfg.max_score = models.default_max_score(cfg.backend)
+    if getattr(cfg, "token_bonus", None) is None:
+        cfg.token_bonus = models.default_token_bonus(cfg.backend)
     app = Flask(__name__, template_folder=str(Path(__file__).parent / "templates"))
     app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
     app.wsgi_app = IngressPrefixMiddleware(app.wsgi_app)
@@ -503,13 +506,12 @@ def main():
     ap.add_argument("--max-score", type=float, default=None,
                     help="score gate; if unset, a per-backend default is used "
                          "(citrinet 5.0, coqui 2.0)")
-    # The FST decode picks the lowest-cost path, and audio the path doesn't
-    # account for is absorbed by CTC blanks almost for free -- so a shorter
-    # in-grammar phrase can beat the longer one that was actually spoken. This
-    # rewards each emitted token to offset that. 0 = off (the library default).
-    ap.add_argument("--token-bonus", type=float, default=0.0,
+    # Offsets the decoder's bias toward short paths (see models.DEFAULT_TOKEN_BONUS).
+    # Unset => the per-backend default (citrinet 2.0, coqui 0.0).
+    ap.add_argument("--token-bonus", type=float, default=None,
                     help="word-insertion reward per emitted token (0 = off); "
-                         "raise it if long commands decode as short ones")
+                         "if unset, a per-backend default is used "
+                         "(citrinet 2.0, coqui 0.0)")
     ap.add_argument("--no-wyoming", action="store_true", help="UI only (don't serve Wyoming STT)")
     # Off by default: the add-on ships as speech-to-text only, and Home Assistant
     # handles the transcript with its own conversation agent.

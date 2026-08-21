@@ -18,12 +18,18 @@ Outcome per (sample, condition) is classified, not pass/fail:
 and each is annotated GATED when score exceeds the backend's gate threshold
 (the recognizer would defer to cloud, so a wrong+gated result is acceptable).
 
-Hard-coded for the prototype: homeassistant.local:8123, TTS language en-US.
+Needs a Home Assistant instance for TTS. Point it at one with:
+
+    export HA_URL=http://homeassistant.local:8123      # optional, this is the default
+    export HA_TOKEN=<long-lived access token>
+
+TTS language is en-US.
 """
 import argparse
 import hashlib
 import io
 import json
+import os
 import random
 import sys
 import unicodedata
@@ -53,12 +59,8 @@ from speech_to_phrase.templates import (
     _spellout_words,
 )
 
-HA_URL = "http://homeassistant.local:8123"
-TOKEN = (  # prototype only — move to env/secret before this lands
-    "REDACTED_HA_TOKEN"
-    "REDACTED_HA_TOKEN"
-    "REDACTED_HA_TOKEN"
-)
+HA_URL = os.environ.get("HA_URL", "http://homeassistant.local:8123")
+TOKEN = os.environ.get("HA_TOKEN", "")
 TTS_LANGUAGE = "en-US"
 SAMPLE_RATE = 16000
 # citrinet gate re-fit 8.0 -> 5.0 (2026-07-01): the expanded ~26-intent grammar
@@ -240,6 +242,12 @@ def tts_wav(message: str, engine_id: str, cache_dir: Path) -> np.ndarray:
     if cached.exists():
         return sf.read(cached, dtype="float32")[0]
 
+    if not TOKEN:
+        raise SystemExit(
+            "HA_TOKEN is not set: this clip is not cached and synthesizing it "
+            "needs a Home Assistant long-lived access token.\n"
+            "  export HA_TOKEN=<token>   (and HA_URL if not homeassistant.local:8123)"
+        )
     req = urllib.request.Request(
         f"{HA_URL}/api/tts_get_url",
         data=json.dumps(

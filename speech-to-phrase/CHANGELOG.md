@@ -16,10 +16,15 @@
   - The **Test** tab and its `/api/test` and `/api/validate_sentence` endpoints
     are gone.
 - Added the `token_bonus` option (`--token-bonus`, also on
-  `tools/audio_test.py` for sweeping). The library has supported a
-  word-insertion reward all along; the add-on never passed one, leaving the
-  CTC length bias unopposed — long commands could decode as short in-grammar
-  phrases. Default `0`, i.e. unchanged behaviour.
+  `tools/audio_test.py`). The library has supported a word-insertion reward all
+  along; the add-on never passed one, leaving the CTC length bias unopposed, so
+  long commands could decode as short in-grammar phrases ("set the office light
+  brightness to ten percent" heard as "office light off"). Defaults per backend:
+  Citrinet `2.0` — fit on en, where exact decodes over 12 long
+  brightness/speed commands went 3/12 at `0` to 10/12 at `2.0` — and Coqui `0.0`,
+  which is unmeasured.
+- `tools/audio_test.py` no longer embeds a Home Assistant token; it reads
+  `HA_TOKEN` and `HA_URL` from the environment.
 - Removed the `expansion_budget` and `use_score_gating` add-on options: nothing
   read them.
 - Fixed: the add-on's run script passed a `--intents-yaml` flag app.py does not

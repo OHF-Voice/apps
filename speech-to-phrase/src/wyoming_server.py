@@ -241,16 +241,20 @@ def main() -> None:
     ap.add_argument("--max-score", type=float, default=None,
                     help="score gate; if unset, a per-backend default is used "
                          "(citrinet 5.0, coqui 2.0)")
-    ap.add_argument("--token-bonus", type=float, default=0.0,
-                    help="word-insertion reward per emitted token (0 = off). "
-                         "Counters the CTC length bias that lets a short parse "
-                         "win over a longer, better-fitting one")
+    ap.add_argument("--token-bonus", type=float, default=None,
+                    help="word-insertion reward per emitted token (0 = off); "
+                         "if unset, a per-backend default is used "
+                         "(citrinet 2.0, coqui 0.0). Counters the CTC length "
+                         "bias that lets a short parse win over a longer, "
+                         "better-fitting one")
     ap.add_argument("--debug", action="store_true")
     cfg = ap.parse_args()
     if cfg.backend == "auto":
         cfg.backend = "citrinet"  # TODO: per-language auto-selection table
     if cfg.max_score is None:
         cfg.max_score = models.default_max_score(cfg.backend)
+    if cfg.token_bonus is None:
+        cfg.token_bonus = models.default_token_bonus(cfg.backend)
     logging.basicConfig(level=logging.DEBUG if cfg.debug else logging.INFO)
     logging.getLogger("numba").setLevel(logging.INFO)  # silence librosa's JIT traces
     asyncio.run(run(cfg))

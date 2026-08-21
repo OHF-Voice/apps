@@ -164,14 +164,26 @@ def create_app(cfg) -> Flask:
         # where the user switches one off for voice, so a switched-off one still
         # has to be visible (greyed) rather than vanishing.
         raw_lists = _raw_slot_lists(cfg)
-        by_domain: Dict[str, List[str]] = {}
-        for rec in sorted(_raw_records(cfg), key=lambda r: r["name"]):
-            by_domain.setdefault(rec["domain"], []).append(rec["name"])
+        # One row per spoken *name*, carrying the entities behind it. A name is
+        # not unique: two devices can share one, and every alias is a name of its
+        # own. The grammar and the voice switch are keyed by name, so the entity
+        # ids go underneath the row rather than becoming rows of their own.
+        by_domain: Dict[str, Dict[str, List[dict]]] = {}
+        for rec in sorted(_raw_records(cfg),
+                          key=lambda r: (r["name"].lower(), r.get("entity_id") or "")):
+            sources = by_domain.setdefault(rec["domain"], {}).setdefault(rec["name"], [])
+            src = {"entity_id": rec.get("entity_id"), "alias_of": rec.get("alias_of")}
+            if src not in sources:
+                sources.append(src)
 
         # "How are devices/areas/floors used?" -- which commands consume each list.
         area_used, floor_used, name_used = _usage(lang, set(amap), commands)
         devices = {
-            d: {"values": by_domain.get(d, []), "used_by": name_used.get(d, [])}
+            d: {
+                "values": [{"name": n, "sources": s}
+                           for n, s in by_domain.get(d, {}).items()],
+                "used_by": name_used.get(d, []),
+            }
             for d in sorted(set(by_domain) | set(name_used))
         }
         return jsonify(

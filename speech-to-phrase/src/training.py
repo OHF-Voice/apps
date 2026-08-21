@@ -60,15 +60,15 @@ DEV_SLOT_LISTS: Dict[str, List[str]] = {
 # entity-aware gating can be exercised without Home Assistant. Deliberately
 # uneven: only kitchen has lights/a fan, the cover can't be positioned.
 DEV_ENTITY_RECORDS: List[dict] = [
-    {"name": "overhead light", "domain": "light",
+    {"name": "overhead light", "domain": "light", "entity_id": "light.overhead",
      "features": ["brightness", "color"], "area": "kitchen", "floor": "first floor"},
-    {"name": "kitchen lamp", "domain": "light",
+    {"name": "kitchen lamp", "domain": "light", "entity_id": "light.kitchen_lamp",
      "features": ["brightness"], "area": "kitchen", "floor": "first floor"},
-    {"name": "kitchen fan", "domain": "fan",
+    {"name": "kitchen fan", "domain": "fan", "entity_id": "fan.kitchen",
      "features": ["set_speed"], "area": "kitchen", "floor": "first floor"},
-    {"name": "garage door", "domain": "cover",
+    {"name": "garage door", "domain": "cover", "entity_id": "cover.garage_door",
      "features": [], "area": "living room", "floor": "first floor"},
-    {"name": "front door", "domain": "lock",
+    {"name": "front door", "domain": "lock", "entity_id": "lock.front_door",
      "features": [], "area": "living room", "floor": "first floor"},
 ]
 
@@ -181,14 +181,16 @@ async def _entity_records(api_url: str, token: str) -> List[dict]:
         domain = eid.split(".", 1)[0] if "." in eid else ""
         if not domain:
             continue
-        names: List[str] = []
         primary = info.get("name") or info.get("original_name")
-        if primary:
-            names.append(primary)
-        names.extend(a for a in (info.get("aliases") or []) if a)
-        friendly = attrs.get(eid, {}).get("friendly_name")
-        if not names and friendly:
-            names.append(friendly)
+        aliases = [a for a in (info.get("aliases") or []) if a]
+        if not primary and not aliases:
+            primary = attrs.get(eid, {}).get("friendly_name")
+        # (spoken name, the registry name it stands in for). An alias becomes a
+        # record of its own -- the grammar is trained on names, not entity ids --
+        # so `alias_of` is the only thing that remembers where it came from.
+        named: List[Tuple[str, Optional[str]]] = (
+            [(primary, None)] if primary else []
+        ) + [(a, primary) for a in aliases]
 
         area_id = info.get("area_id") or device_area.get(info.get("device_id"))
         area = area_name.get(area_id) if area_id else None
@@ -196,12 +198,14 @@ async def _entity_records(api_url: str, token: str) -> List[dict]:
         features = sorted(gating.capabilities_from_attributes(domain, attrs.get(eid, {})))
         device_class = attrs.get(eid, {}).get("device_class")
 
-        for name in names:
-            name = name.strip()
+        for name, alias_of in named:
+            name = (name or "").strip()
             if name:
                 records.append({
                     "name": name,
                     "domain": domain,
+                    "entity_id": eid,
+                    "alias_of": alias_of,
                     "device_class": device_class,
                     "features": features,
                     "area": area,

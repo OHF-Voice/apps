@@ -118,7 +118,14 @@
   /* device/area/floor rows */
   .val-row { display:flex; align-items:center; gap:9px; padding:4px 0; }
   .val-row .v-name { font-size:14px; }
-  .val-row.voice-off .v-name { text-decoration:line-through; color:var(--mut); }
+  .val.voice-off .v-name { text-decoration:line-through; color:var(--mut); }
+  .val.voice-off .v-src { opacity:.55; }
+  .v-count { font-size:12px; color:var(--mut); }
+  /* Where a name comes from: the entity ids behind it, and what it's an alias
+     of. Indented to sit under the name, clear of the toggle. */
+  .v-src { margin:0 0 5px; padding:0 0 0 52px; list-style:disc; }
+  .v-src li { font-size:12px; color:var(--mut); margin:1px 0; }
+  .v-src code { font-size:12px; }
   .cmd { border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:12px; background:#fcfcfd; }
   .field { margin:8px 0; } .field > label { font-weight:600; font-size:13px; display:block; margin-bottom:3px; }
   .doms { display:flex; flex-wrap:wrap; gap:8px; }
@@ -218,7 +225,8 @@
       <p class="sub">Names pulled from Home Assistant and baked into the grammar.
         Switch one off to stop recognizing it by voice — it drops out of every
         command, which makes the grammar smaller and the rest easier to tell
-        apart.</p>
+        apart. A name shared by several entities, or standing in as an alias for
+        another, lists what's behind it.</p>
       <div id="lists"></div>
     </div>
   </section>
@@ -544,13 +552,31 @@ function ovSpec(kind, value) {
   return (section[value] ||= {});
 }
 
-function valueRow(kind, value) {
+function sourceLabel(s) {
+  const eid = s.entity_id ? `<code>${escapeHtml(s.entity_id)}</code>` : "unknown entity";
+  return s.alias_of ? `${eid} — alias of ${escapeHtml(s.alias_of)}` : eid;
+}
+
+/* One row per spoken name. Areas and floors arrive as plain strings; devices
+   arrive as {name, sources}, because a name can be shared by several entities
+   or be an alias of another name. The switch belongs to the name — that is what
+   the grammar holds — so switching "Media Player" off silences every entity
+   called that; the sources are listed so you can see which ones. */
+function valueRow(kind, entry) {
+  const value = (typeof entry === "string") ? entry : entry.name;
+  const sources = (typeof entry === "string") ? [] : (entry.sources || []);
   const on = ovSpec(kind, value).voice !== false;
-  return `<div class="val-row ${on ? "" : "voice-off"}" data-kind="${kind}" data-value="${escapeHtml(value)}">
-    <label class="sw" title="Recognize this by voice">
-      <input type="checkbox" class="v-voice" ${on ? "checked" : ""}><span class="track"></span>
-    </label>
-    <span class="v-name">${escapeHtml(value)}</span>
+  // A single plainly-named entity needs no explanation; anything else does.
+  const explain = sources.length > 1 || sources.some(s => s.alias_of);
+  return `<div class="val ${on ? "" : "voice-off"}" data-kind="${kind}" data-value="${escapeHtml(value)}">
+    <div class="val-row">
+      <label class="sw" title="Recognize this by voice">
+        <input type="checkbox" class="v-voice" ${on ? "checked" : ""}><span class="track"></span>
+      </label>
+      <span class="v-name">${escapeHtml(value)}</span>
+      ${sources.length > 1 ? `<span class="v-count">${sources.length} entities</span>` : ""}
+    </div>
+    ${explain ? `<ul class="v-src">${sources.map(s => `<li>${sourceLabel(s)}</li>`).join("")}</ul>` : ""}
   </div>`;
 }
 
@@ -571,7 +597,7 @@ function renderLists() {
     rows.push(sec(escapeHtml(d), "{name}", "entities", dom[d].values, dom[d].used_by));
   $("lists").innerHTML = rows.join("");
 
-  $("lists").querySelectorAll(".val-row").forEach(row => {
+  $("lists").querySelectorAll(".val").forEach(row => {
     const { kind, value } = row.dataset;
     const spec = ovSpec(kind, value);
     row.querySelector(".v-voice").addEventListener("change", e => {

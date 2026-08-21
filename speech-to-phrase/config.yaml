@@ -15,8 +15,6 @@ ingress: true
 ingress_port: 8099
 ports:
   "10300/tcp": null
-map:
-  - share:rw
 options:
   language: "en"
   backend: "auto"

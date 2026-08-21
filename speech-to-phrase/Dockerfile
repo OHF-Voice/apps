@@ -28,6 +28,8 @@ RUN \
 # home-assistant-intents package's speech_to_phrase tagged subset).
 COPY src/ ./src/
 COPY example_values.yaml ./example_values.yaml
+# Read at runtime for the version advertised over Wyoming.
+COPY config.yaml ./config.yaml
 
 WORKDIR /
 COPY rootfs /

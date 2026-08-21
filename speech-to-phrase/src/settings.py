@@ -9,7 +9,7 @@ on each utterance so a change takes effect without a restart.
 import json
 import logging
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,13 +59,21 @@ def read_max_score_file(settings_path: Path, default: float) -> float:
     return default if v is None else _coerce_max_score(v, default)
 
 
-def set_max_score(data_dir: Union[str, Path], lang: str, value) -> float:
+def set_max_score(data_dir: Union[str, Path], lang: str, value) -> Optional[float]:
     """Persist the gate for `lang` (clamped to the valid range). Returns the
-    stored value. Merges into any existing settings so future keys survive."""
+    stored value, or None if `value` could not be parsed, in which case nothing
+    is written and the previous setting (or the per-backend default) stands.
+
+    Writing on a parse failure used to pin the gate at MIN_MAX_SCORE, i.e. 0.1 --
+    a value that accepts nothing, silently killing recognition."""
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        _LOGGER.warning("Ignoring unparseable max_score %r for '%s'", value, lang)
+        return None
     p = path(data_dir, lang)
     p.parent.mkdir(parents=True, exist_ok=True)
     data = _read(p)
-    stored = _coerce_max_score(value, data.get("max_score", MIN_MAX_SCORE))
-    data["max_score"] = stored
+    data["max_score"] = stored = min(MAX_MAX_SCORE, max(MIN_MAX_SCORE, parsed))
     p.write_text(json.dumps(data, indent=2))
     return stored

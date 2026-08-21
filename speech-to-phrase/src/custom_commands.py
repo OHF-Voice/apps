@@ -21,6 +21,11 @@ A custom command is one object (persisted per language in
 sentences go into the STT grammar only, so Home Assistant's own agent (or
 another) deals with the transcript. All three modes contribute their sentences
 to the grammar; only intent/action are added to the matcher.
+
+The add-on currently ships speech-to-text only, so ``stt`` is the only mode the
+web UI writes and the only one with any effect: ``intent`` and ``action`` are
+handled by ``intent_server.py``, which is not started unless app.py is given
+``--intent``. Loading still accepts all three so an older file keeps working.
 """
 import json
 import logging

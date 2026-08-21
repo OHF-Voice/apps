@@ -29,6 +29,16 @@
   read them.
 - Fixed: the add-on's run script passed a `--intents-yaml` flag app.py does not
   accept, which aborted startup.
+- Fixed: the background watch thread raised `UnboundLocalError` on its first
+  pass and never retrained, and applied one language's voice-targeting
+  overrides to all of them.
+- Fixed: the Wyoming service advertised a hardcoded version `0.1.0`; it now
+  reports the add-on manifest version.
+- Fixed: `wyoming_server.py --backend auto` always chose Citrinet instead of
+  the per-language backend, so a Coqui-only language found no model.
+- Fixed: an unparseable `max_score` was persisted as `0.1`, a gate that accepts
+  nothing; it is now rejected and the previous value stands.
+- Dropped the unused `share:rw` mapping from the add-on manifest.
 
 ## 0.1.0
 

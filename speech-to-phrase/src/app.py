@@ -246,8 +246,8 @@ def create_app(cfg) -> Flask:
                 resp.update(ok=False, message=f"Saved, but training failed: {e}")
         else:
             resp["message"] = (
-                f"Saved ({len(templates)} sentences). No model configured — "
-                "skipped retrain (matcher still updates)."
+                f"Saved ({len(templates)} sentences). No speech model for "
+                f"'{lang}' — skipped retrain."
             )
         return jsonify(resp)
 

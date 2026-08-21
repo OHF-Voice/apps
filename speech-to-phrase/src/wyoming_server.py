@@ -20,7 +20,7 @@ import argparse
 import asyncio
 import logging
 import math
-from functools import partial
+from functools import lru_cache, partial
 from pathlib import Path
 from typing import Optional
 
@@ -39,6 +39,21 @@ from vad import normalize_level, trim_silence
 
 _LOGGER = logging.getLogger("wyoming-speech-to-phrase")
 NAME = "speech-to-phrase"
+ADDON_ROOT = Path(__file__).resolve().parent.parent
+
+
+@lru_cache(maxsize=1)
+def addon_version() -> str:
+    """Version to advertise over Wyoming, read from the add-on manifest rather
+    than duplicated here -- a second copy only ever drifts from the one
+    Supervisor actually installed."""
+    try:
+        import yaml
+
+        return str(yaml.safe_load((ADDON_ROOT / "config.yaml").read_text())["version"])
+    except Exception:  # noqa: BLE001 (running from a checkout, or no manifest)
+        _LOGGER.debug("could not read version from config.yaml", exc_info=True)
+        return "0.0.0"
 
 
 class GrammarHolder:
@@ -164,20 +179,21 @@ class S2PEventHandler(AsyncEventHandler):
 
 
 def build_info(language: str, model_name: str) -> Info:
+    version = addon_version()
     return Info(
         asr=[
             AsrProgram(
                 name=NAME,
                 description="Constrained speech-to-text",
                 installed=True,
-                version="0.1.0",
+                version=version,
                 attribution=Attribution(name="OHF Voice", url="https://openhomefoundation.org"),
                 models=[
                     AsrModel(
                         name=model_name,
                         installed=True,
                         description=model_name,
-                        version="0.1.0",
+                        version=version,
                         attribution=Attribution(name="", url=""),
                         languages=[language],
                     )
@@ -250,7 +266,9 @@ def main() -> None:
     ap.add_argument("--debug", action="store_true")
     cfg = ap.parse_args()
     if cfg.backend == "auto":
-        cfg.backend = "citrinet"  # TODO: per-language auto-selection table
+        # Same per-language selection app.py uses, so a coqui-only language
+        # (sl/nl/cs) picks coqui here too instead of failing to find a model.
+        cfg.backend = models.resolve_backend(cfg.language, "auto")
     if cfg.max_score is None:
         cfg.max_score = models.default_max_score(cfg.backend)
     if cfg.token_bonus is None:

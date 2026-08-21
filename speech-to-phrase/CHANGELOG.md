@@ -15,6 +15,11 @@
     exclusion is global. Spoken aliases are gone.
   - The **Test** tab and its `/api/test` and `/api/validate_sentence` endpoints
     are gone.
+- Added the `token_bonus` option (`--token-bonus`, also on
+  `tools/audio_test.py` for sweeping). The library has supported a
+  word-insertion reward all along; the add-on never passed one, leaving the
+  CTC length bias unopposed — long commands could decode as short in-grammar
+  phrases. Default `0`, i.e. unchanged behaviour.
 - Removed the `expansion_budget` and `use_score_gating` add-on options: nothing
   read them.
 - Fixed: the add-on's run script passed a `--intents-yaml` flag app.py does not

@@ -21,6 +21,11 @@ if bashio::config.has_value 'max_score'; then
     flags+=('--max-score' "$(bashio::config 'max_score')")
 fi
 
+# Likewise for the word-insertion reward; unset means 0 (off).
+if bashio::config.has_value 'token_bonus'; then
+    flags+=('--token-bonus' "$(bashio::config 'token_bonus')")
+fi
+
 cd /usr/src/src
 
 exec python3 app.py \

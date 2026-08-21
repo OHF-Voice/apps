@@ -503,6 +503,13 @@ def main():
     ap.add_argument("--max-score", type=float, default=None,
                     help="score gate; if unset, a per-backend default is used "
                          "(citrinet 5.0, coqui 2.0)")
+    # The FST decode picks the lowest-cost path, and audio the path doesn't
+    # account for is absorbed by CTC blanks almost for free -- so a shorter
+    # in-grammar phrase can beat the longer one that was actually spoken. This
+    # rewards each emitted token to offset that. 0 = off (the library default).
+    ap.add_argument("--token-bonus", type=float, default=0.0,
+                    help="word-insertion reward per emitted token (0 = off); "
+                         "raise it if long commands decode as short ones")
     ap.add_argument("--no-wyoming", action="store_true", help="UI only (don't serve Wyoming STT)")
     # Off by default: the add-on ships as speech-to-text only, and Home Assistant
     # handles the transcript with its own conversation agent.
@@ -521,7 +528,8 @@ def main():
     if cfg.model and not cfg.no_wyoming:
         grammar = Path(cfg.data) / cfg.language / "grammar.fst"
         wyoming_server.start_background(
-            cfg.wyoming_uri, cfg.backend, cfg.model, cfg.language, grammar, cfg.max_score
+            cfg.wyoming_uri, cfg.backend, cfg.model, cfg.language, grammar,
+            cfg.max_score, cfg.token_bonus
         )
     elif cfg.no_wyoming:
         _LOGGER.info("Wyoming server disabled (--no-wyoming)")

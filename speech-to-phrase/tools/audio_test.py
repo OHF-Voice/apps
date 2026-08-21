@@ -362,6 +362,9 @@ def main() -> int:
     ap.add_argument("--noise-dir", type=Path, help="dir of noise wavs (default: <repo>/tests/wav/noise; empty = no stress)")
     ap.add_argument("--cache-dir", type=Path, default=Path("tests/wav/.tts_cache"))
     ap.add_argument("--oov-dir", type=Path, help="dir of OOV wavs (default: <repo>/tests/wav/oov)")
+    ap.add_argument("--token-bonus", type=float, default=0.0,
+                    help="word-insertion reward per emitted token (0 = off); "
+                         "sweep this when long commands decode as short ones")
     ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--no-vad", action="store_true",
@@ -388,7 +391,8 @@ def main() -> int:
     if args.limit:
         templates = templates[: args.limit]
 
-    rec = load_recognizer(args.backend, args.model, language=args.language)
+    rec = load_recognizer(args.backend, args.model, language=args.language,
+                          token_bonus=args.token_bonus)
     rec.train(templates, list_values=LIST_VALUES)
     gate = GATE_THRESHOLD.get(args.backend, 4.0)
 

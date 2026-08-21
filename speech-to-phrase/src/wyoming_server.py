@@ -49,8 +49,9 @@ class GrammarHolder:
 
     def __init__(self, backend: str, model_dir: Path, language: str,
                  grammar_path: Path, default_max_score: float,
-                 beam: Optional[float] = None):
-        self._rec = load_recognizer(backend, model_dir, language=language, beam=beam)
+                 beam: Optional[float] = None, token_bonus: float = 0.0):
+        self._rec = load_recognizer(backend, model_dir, language=language,
+                                    beam=beam, token_bonus=token_bonus)
         self.language = language
         self._grammar_path = grammar_path
         self._settings_path = Path(grammar_path).parent / settings.FILENAME
@@ -187,29 +188,32 @@ def build_info(language: str, model_name: str) -> Info:
 
 
 async def serve(uri: str, backend: str, model_dir, language: str,
-                grammar_path, max_score: float) -> None:
+                grammar_path, max_score: float, token_bonus: float = 0.0) -> None:
     """Run the Wyoming server against an already-resolved model directory."""
     model_dir = Path(model_dir)
     holder = GrammarHolder(backend, model_dir, language, Path(grammar_path),
-                           default_max_score=max_score)
+                           default_max_score=max_score, token_bonus=token_bonus)
     await holder.maybe_reload()
     info = build_info(language, model_dir.name)
     server = AsyncServer.from_uri(uri)
-    _LOGGER.info("Wyoming server ready on %s (grammar=%s, ready=%s, max_score=%s)",
-                 uri, grammar_path, holder.ready, holder.max_score)
+    _LOGGER.info("Wyoming server ready on %s (grammar=%s, ready=%s, max_score=%s, "
+                 "token_bonus=%s)",
+                 uri, grammar_path, holder.ready, holder.max_score, token_bonus)
     await server.run(
         partial(S2PEventHandler, holder=holder, info=info)
     )
 
 
 def start_background(uri: str, backend: str, model_dir, language: str,
-                     grammar_path, max_score: float) -> "threading.Thread":
+                     grammar_path, max_score: float,
+                     token_bonus: float = 0.0) -> "threading.Thread":
     """Run serve() in a daemon thread with its own asyncio loop, so it can sit
     alongside a blocking server (e.g. Flask) in the same process."""
     import threading
 
     def _runner():
-        asyncio.run(serve(uri, backend, model_dir, language, grammar_path, max_score))
+        asyncio.run(serve(uri, backend, model_dir, language, grammar_path,
+                          max_score, token_bonus))
 
     t = threading.Thread(target=_runner, name="wyoming", daemon=True)
     t.start()
@@ -220,7 +224,8 @@ async def run(cfg) -> None:
     model_dir = models.resolve(cfg.model, Path(cfg.models_dir), cfg.language, cfg.backend)
     if model_dir is None:
         raise SystemExit("No acoustic model: pass --model or add a MODEL_NAMES entry")
-    await serve(cfg.uri, cfg.backend, model_dir, cfg.language, cfg.grammar, cfg.max_score)
+    await serve(cfg.uri, cfg.backend, model_dir, cfg.language, cfg.grammar,
+                cfg.max_score, cfg.token_bonus)
 
 
 def main() -> None:
@@ -236,6 +241,10 @@ def main() -> None:
     ap.add_argument("--max-score", type=float, default=None,
                     help="score gate; if unset, a per-backend default is used "
                          "(citrinet 5.0, coqui 2.0)")
+    ap.add_argument("--token-bonus", type=float, default=0.0,
+                    help="word-insertion reward per emitted token (0 = off). "
+                         "Counters the CTC length bias that lets a short parse "
+                         "win over a longer, better-fitting one")
     ap.add_argument("--debug", action="store_true")
     cfg = ap.parse_args()
     if cfg.backend == "auto":

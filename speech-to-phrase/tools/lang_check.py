@@ -66,11 +66,17 @@ TTS_LANGUAGE = {
 
 
 def norm(text: str) -> str:
-    # Fold the orthographic differences between what TTS is handed and what a
-    # lowercase acoustic vocab emits (German "schließe" decodes as "schliesse").
-    text = unicodedata.normalize("NFC", text.strip().casefold()).replace("ß", "ss")
-    text = text.replace("-", " ")
-    return " ".join(text.split())
+    """Case/whitespace fold only.
+
+    Deliberately does not fold anything else: what the recognizer emits is
+    exactly what Home Assistant will try to match, so rewriting it here would
+    hide real failures (and inventing a fold -- e.g. German ss/ß -- invents
+    failures too: the model emits "schließe", spelled correctly).
+    """
+    # lower(), not casefold(): casefold maps "ß" to "ss", which would rewrite a
+    # correct German transcript into one Home Assistant cannot match and make
+    # the check report failures that do not exist.
+    return " ".join(unicodedata.normalize("NFC", text.strip().lower()).split())
 
 
 def expected_decode(example: str, language: str) -> str:
@@ -141,6 +147,36 @@ def build_grammar(language: str, entities: Dict[str, str], areas, floors):
         repo_root, language, enabled, [], entities, slot_lists
     )
     return templates, list_values
+
+
+def build_matcher(language: str, entities: Dict[str, str], areas, floors):
+    """A hassil recognizer over the same Speech-to-Phrase blocks the grammar was
+    built from -- i.e. what Home Assistant does with the transcript we emit."""
+    import intent_matcher  # noqa: PLC0415
+    import presets as bi  # noqa: PLC0415
+
+    repo_root = Path(__file__).resolve().parent.parent
+    meta = bi.load_intents_meta()
+    combos = bi.available_combos(repo_root, language, meta)
+    enabled = bi.default_enabled(combos, "optional")
+    return intent_matcher.build_matcher(
+        repo_root, language, enabled, entities,
+        {"area": list(areas), "floor": list(floors)},
+    )
+
+
+def matched_combo(matcher, text: str) -> Optional[Tuple[str, str]]:
+    """(intent, slot_combination) hassil assigns to ``text``, or None."""
+    if matcher is None or not text:
+        return None
+    try:
+        result = matcher.match(text)
+    except Exception:  # noqa: BLE001
+        return None
+    if result is None:
+        return None
+    metadata = getattr(result, "intent_metadata", None) or {}
+    return (result.intent.name, str(metadata.get("combo") or ""))
 
 
 def lean_examples(intents_repo: Path, language: str) -> List[Tuple[str, str]]:
@@ -243,42 +279,66 @@ def main() -> int:
     rec.train(templates, list_values=list_values)
     print(f"trained ({args.backend}, token_bonus={token_bonus})")
 
+    matcher = build_matcher(args.language, entities, areas, floors)
+    print(f"matcher: {'built' if matcher else 'UNAVAILABLE'}")
+
     gate = GATE[args.backend]
     tts_language = TTS_LANGUAGE.get(args.language, f"{args.language}-{args.language.upper()}")
-    in_grammar = {norm(t) for t in templates}
 
     cases = lean_examples(args.intents_repo, args.language)
     if args.limit:
         cases = cases[: args.limit]
 
     results = []
-    exact = accepted = 0
+    exact = usable = accepted = 0
     for combo, example in cases:
         audio = tts_wav(example, args.engine_id, tts_language, args.cache_dir)
         audio = trim_silence(normalize_level(audio))
         result = rec.transcribe(audio)
         heard = norm(result.text if result else "")
         score = float(result.score) if result else float("inf")
-        is_exact = heard == expected_decode(example, args.language)
         gated = score > gate
+
+        is_exact = heard == expected_decode(example, args.language)
+        # What actually matters is not the string but whether Home Assistant
+        # would resolve the transcript to the command that was spoken. The
+        # decoder legitimately picks a different in-grammar realization -- Dutch
+        # drops the article ("sluit woonkamerraam" for "sluit de Woonkamerraam")
+        # -- and that is the same command, not an error.
+        want = matched_combo(matcher, expected_decode(example, args.language))
+        got = matched_combo(matcher, heard)
+        same_command = bool(got) and got == want
+
         if is_exact:
             exact += 1
+        if same_command:
+            usable += 1
             if not gated:
                 accepted += 1
-        status = "EXACT" if is_exact else ("OTHER" if heard else "NO_PARSE")
+
+        if is_exact:
+            status = "EXACT"
+        elif same_command:
+            status = "SAME_CMD"
+        elif heard:
+            status = "WRONG_CMD"
+        else:
+            status = "NO_PARSE"
         if gated:
             status += "/gated"
         results.append(
             {"combo": combo, "spoke": example, "heard": heard,
-             "score": round(score, 2), "status": status}
+             "score": round(score, 2), "status": status,
+             "want": want, "got": got}
         )
-        flag = " " if is_exact and not gated else "!"
-        print(f"{flag} {combo:38} score={score:6.2f} {status:12} "
+        flag = " " if same_command and not gated else "!"
+        print(f"{flag} {combo:38} score={score:6.2f} {status:14} "
               f"spoke={example!r} heard={heard!r}")
 
     total = len(results)
     print(f"\n{args.language}: EXACT {exact}/{total}, "
-          f"accepted (exact and score<={gate}) {accepted}/{total}")
+          f"same command {usable}/{total}, "
+          f"accepted (same command and score<={gate}) {accepted}/{total}")
     if args.json_out:
         args.json_out.write_text(
             json.dumps({"language": args.language, "backend": args.backend,

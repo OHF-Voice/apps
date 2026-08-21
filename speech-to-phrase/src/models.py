@@ -83,7 +83,11 @@ MODEL_NAMES = {
     "hr": {"citrinet": "stt_hr_conformer_ctc_large"},
     "hi": {"citrinet": "stt_hi_conformer_ctc_medium"},
     "ca": {"citrinet": "stt_ca_conformer_ctc_large", "coqui": "ca_ES-coqui"},
-    "nl": {"coqui": "nl_NL-coqui"},
+    # Dutch prefers Citrinet: nl_NL-coqui misrecognises below the score gate
+    # ("doe de lichten uit" decoding as "...aan"), so it acts on the wrong
+    # command instead of deferring to the cloud. The Citrinet model does not
+    # have that failure.
+    "nl": {"citrinet": "stt_nl_citrinet_256", "coqui": "nl_NL-coqui"},
     "cs": {"coqui": "cs_CZ-coqui"},
     "sl": {"coqui": "sl_SL-coqui"},
 }

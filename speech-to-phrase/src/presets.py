@@ -191,6 +191,49 @@ def _render(sentence: str, slot_fn) -> str:
     return "".join(out).strip()
 
 
+# What a {name} slot is called when the command is scoped to one domain. A bare
+# "entity" would be ambiguous: "turn on the entity" is the same row for lights,
+# fans, switches, media players and toggles, so the domain noun is what keeps
+# them apart. Only domains whose own name reads badly are listed.
+_PLACEHOLDER_NOUN = {
+    "media_player": "media player",
+    "input_boolean": "toggle",
+    "binary_sensor": "sensor",
+    "climate": "thermostat",
+}
+
+
+def _placeholder(content: str, domain: Optional[str] = None) -> str:
+    """A slot rendered as its own name rather than one of its values -- the
+    domain noun (or ``entity``) for ``{name}``, otherwise the slot name
+    (``area``, ``brightness``, ``minutes``). Keeps a command's row in the UI
+    about its *shape*, so it reads the same for every user and doesn't turn into
+    a wall of device names."""
+    m = re.fullmatch(
+        r"-?\d+\s*\.\.\s*-?\d+(?:\s*[,/]\s*-?\d+)?(?::([a-z_]+))?", content
+    )
+    if m:
+        slot = m.group(1) or "number"
+    elif content == "name":
+        slot = "name"
+    else:
+        list_name, _, slot_name = content.partition(":")
+        slot = slot_name or list_name
+    if slot == "name":
+        text = (
+            _PLACEHOLDER_NOUN.get(domain, domain.replace("_", " "))
+            if domain else "entity"
+        )
+    else:
+        text = slot.replace("_", " ")
+    return _span(text, slot)
+
+
+def _example_shape(sentence: str, domain: Optional[str] = None) -> str:
+    """One example with every slot shown as a placeholder (see _placeholder)."""
+    return _render(_canonical(sentence), lambda c: _placeholder(c, domain))
+
+
 def _example_html(
     sentence: str, domains: Optional[Sequence[str]],
     entities: Dict[str, str], slot_lists: Dict[str, List[str]],
@@ -387,10 +430,21 @@ def combo_examples(
     s2p_repo: Path, lang: str, intent: str, combo: str,
     entities: Dict[str, str], slot_lists: Dict[str, List[str]],
 ) -> dict:
-    """Highlighted examples for a combo:
-      * ``examples``  -- one per data block (used when the combo isn't split), and
-      * ``by_domain`` -- one per targeted domain (for per-domain checkboxes),
-                         each rendered with a {name} of that domain.
+    """Highlighted examples for a combo, in two flavours.
+
+    The list row shows the command's *shape* -- slots as placeholders, so it
+    reads the same for everyone and stays one line::
+
+      ``shapes``    -- one per data block, for combos that target no domain
+      ``by_domain`` -- one per targeted domain (``turn on the {light}``)
+
+    The drill-down shows the *specifics* -- slots as picklists of the user's
+    real values, plus the "N more ways to say this" expander::
+
+      ``examples``       -- one per data block
+      ``by_domain_full`` -- one per targeted domain, with only that domain's
+                            phrasings
+
     Plus the ordered ``domains`` list.
     """
     import gating
@@ -400,7 +454,8 @@ def combo_examples(
     info = training.as_entity_info(entities)
     blocks = s2p_intents.combo_blocks(lang, intent, combo)
     if not blocks:
-        return {"domains": [], "by_domain": {}, "examples": []}
+        return {"domains": [], "by_domain": {}, "by_domain_full": {},
+                "examples": [], "shapes": [], "uses": []}
     # Example slot values: numeric samples by slot name (user-overridable via
     # example_values.yaml) + text-list samples by list name; caller-supplied
     # lists (area/floor) win.
@@ -420,7 +475,10 @@ def combo_examples(
 
     domains: List[str] = []
     by_domain: Dict[str, str] = {}
+    by_domain_full: Dict[str, str] = {}
     examples: List[str] = []
+    shapes: List[str] = []
+    uses: List[str] = []  # which of name/area/floor the combo's sentences bind
     for block in blocks:
         sents = block.get("sentences") or []
         if not sents:
@@ -459,6 +517,12 @@ def combo_examples(
         ex = _example_card(resolved, nd, ent_map, block_slots)
         if ex and ex not in examples:
             examples.append(ex)
+        shape = _example_shape(resolved[0])
+        if shape and shape not in shapes:
+            shapes.append(shape)
+        for slot in ("name", "area", "floor"):
+            if slot not in uses and any("{" + slot + "}" in s for s in resolved):
+                uses.append(slot)
         for d in training.block_domains(block):
             d_map = _entity_map([d])
             if nd and not d_map:  # name-based domain with no capable entity
@@ -466,12 +530,18 @@ def combo_examples(
             if d not in domains:
                 domains.append(d)
             if d not in by_domain:
-                # Per-domain rows stay compact: canonical wording + selects, no
-                # phrasing expander.
-                by_domain[d] = _example_interactive(
-                    resolved[0], [d], d_map or name_domain, block_slots
+                by_domain[d] = _example_shape(resolved[0], d)
+                by_domain_full[d] = _example_card(
+                    resolved, [d], d_map or name_domain, block_slots
                 )
-    return {"domains": domains, "by_domain": by_domain, "examples": examples}
+    return {
+        "domains": domains,
+        "by_domain": by_domain,
+        "by_domain_full": by_domain_full,
+        "examples": examples,
+        "shapes": shapes,
+        "uses": uses,
+    }
 
 
 def load_intents_meta() -> dict:

@@ -37,6 +37,7 @@ import extra_sentences as ex
 import hass_actions
 from hass_satellite import resolve_area_async
 from intent_matcher import IntentMatcher, build_matcher, canonical_slot
+import overrides
 from responses import load_responses, response_for
 
 _LOGGER = logging.getLogger("speech-to-phrase.intent")
@@ -145,6 +146,7 @@ class MatcherHolder:
             matcher = build_matcher(
                 self._s2p_repo, self._lang, enabled, entities, slot_lists,
                 custom_commands=commands, extra_sentences=extras,
+                ov=overrides.load(self._data_dir, self._lang),
             )
             if matcher is None:
                 _LOGGER.warning(

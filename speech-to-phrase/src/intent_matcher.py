@@ -80,23 +80,29 @@ def build_matcher(
     slot_lists: Dict[str, List[str]],
     custom_commands: Optional[Sequence[dict]] = None,
     extra_sentences: Optional[Dict[str, List[str]]] = None,
+    ov=None,
 ) -> Optional[IntentMatcher]:
     """Build an :class:`IntentMatcher` for the enabled combos + custom commands,
     or ``None`` if nothing is matchable."""
     import gating
+    import overrides as ovr
     import s2p_intents
     import training
 
+    ov = ov or ovr.EMPTY
     info = training.as_entity_info(entities)
     extras = extra_sentences or {}
     intents_dict: Dict[str, dict] = {}
-    # Domain-scoped lists (name__*/area__*/floor__*) collected while scoping,
-    # in original case so matched slot values are HA-friendly.
-    scoped_lists: Dict[str, List[str]] = {}
+    # Domain-scoped lists (name__*/area__*/floor__*) collected while scoping, as
+    # (spoken, canonical) pairs: the user may have aliased a device, and what
+    # comes back from a match has to be the name Home Assistant knows.
+    scoped_lists: Dict[str, List[Tuple[str, str]]] = {}
 
-    def scope(sentences, name_domains, capability) -> List[str]:
+    def scope(sentences, name_domains, capability, key: str = "") -> List[str]:
         """Rewrite {name} to a domain-scoped list and apply the same capability
-        gate as the grammar (gating.scope_sentence)."""
+        gate as the grammar (gating.scope_sentence), then the user's per-command
+        exclusions and aliases -- exactly as training._expand_block does, so the
+        matcher accepts precisely what the grammar can produce."""
         out: List[str] = []
         for sentence in sentences:
             rewritten, lists = gating.scope_sentence(
@@ -104,8 +110,34 @@ def build_matcher(
             )
             if rewritten is None:
                 continue
-            for key, values in lists.items():
-                scoped_lists.setdefault(key, values)
+            dropped = False
+            for list_key, values in lists.items():
+                narrowed_key, kept = ov.narrow(key, "name", values)
+                if not kept:
+                    dropped = True
+                    break
+                if narrowed_key != "name":
+                    scoped = training._rebind(list_key, narrowed_key)
+                    rewritten = rewritten.replace(
+                        "{" + list_key + "}", "{" + scoped + "}")
+                    list_key = scoped
+                scoped_lists.setdefault(list_key, ov.pairs("entities", kept))
+            if dropped:
+                continue
+            for slot, kind in (("area", "areas"), ("floor", "floors")):
+                token = "{" + slot + "}"
+                if token not in rewritten:
+                    continue
+                narrowed_key, kept = ov.narrow(key, slot, (slot_lists or {}).get(slot, []))
+                if narrowed_key == slot:
+                    continue
+                if not kept:
+                    dropped = True
+                    break
+                rewritten = rewritten.replace(token, "{" + narrowed_key + "}")
+                scoped_lists.setdefault(narrowed_key, ov.pairs(kind, kept))
+            if dropped:
+                continue
             out.append(rewritten)
         return out
 
@@ -124,7 +156,8 @@ def build_matcher(
                 eff_nd, inferred, capability, gating.capability_domains(intent), info
             ):
                 continue
-            sentences = scope(ss.get("sentences", []), eff_nd, capability)
+            sentences = scope(ss.get("sentences", []), eff_nd, capability,
+                              ovr.combo_key(intent, combo))
             if not sentences:
                 continue
             metadata: Dict[str, object] = {
@@ -172,20 +205,22 @@ def build_matcher(
         return None
 
     hassil_slot_lists: Dict[str, TextSlotList] = {}
-    for key, names in scoped_lists.items():
-        hassil_slot_lists[key] = TextSlotList.from_strings(
-            sorted(set(names)), name=key
+    for key, pairs in scoped_lists.items():
+        # from_tuples binds (spoken, canonical): saying an alias yields the
+        # Home Assistant name, which is the only thing HA can act on.
+        hassil_slot_lists[key] = TextSlotList.from_tuples(
+            sorted(set(pairs)), name=key
         )
     # Domain-scoped lists (above) plus the un-narrowed area/floor (for name-based
     # combos) are supplied at runtime; the other text lists (color, state, ...)
     # and numeric ranges come from the package's `lists`, and `<rules>` from its
     # `expansion_rules`, both handed to hassil below so it resolves the raw
     # templates natively.
-    for key in ("area", "floor"):
+    for key, kind in (("area", "areas"), ("floor", "floors")):
         values = (slot_lists or {}).get(key)
         if values and key not in hassil_slot_lists:
-            hassil_slot_lists[key] = TextSlotList.from_strings(
-                sorted(set(values)), name=key
+            hassil_slot_lists[key] = TextSlotList.from_tuples(
+                sorted(set(ov.pairs(kind, values))), name=key
             )
 
     intents = Intents.from_dict(

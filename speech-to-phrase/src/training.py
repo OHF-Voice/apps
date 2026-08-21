@@ -311,12 +311,24 @@ def _expand_block(
     info,
     templates: List[str],
     list_values: Dict[str, List[str]],
+    ov=None,
+    combo_key: str = "",
+    canonical_lists: Optional[Dict[str, List[str]]] = None,
 ) -> None:
     """Append a block's sentences to `templates`, rewriting `{name}` to a
     domain-scoped list and applying the capability gate (see
     gating.scope_sentence). Slot values are normalised to the acoustic vocab; a
-    sentence with no matching capable entity is dropped."""
+    sentence with no matching capable entity is dropped.
+
+    `ov` (overrides.Overrides) applies the user's per-command exclusions and
+    aliases: an excluded slot is rebound to a command-scoped list so narrowing it
+    can't leak into other commands, and every value is expanded to its spoken
+    forms (the grammar only ever needs those -- the canonical name is recovered
+    by the matcher)."""
     import gating
+    import overrides as ovr
+
+    ov = ov or ovr.EMPTY
 
     for sentence in sentences:
         rewritten, lists = gating.scope_sentence(
@@ -324,9 +336,41 @@ def _expand_block(
         )
         if rewritten is None:
             continue
+        dropped = False
         for key, values in lists.items():
-            list_values[key] = _norm_values(values)
+            narrowed_key, kept = ov.narrow(combo_key, "name", values)
+            if not kept:
+                dropped = True  # every entity excluded from this command
+                break
+            if narrowed_key != "name":  # exclusions apply: give it its own list
+                scoped = _rebind(key, narrowed_key)
+                rewritten = rewritten.replace("{" + key + "}", "{" + scoped + "}")
+                key = scoped
+            list_values[key] = _norm_values(ov.spoken_values("entities", kept))
+        if dropped:
+            continue
+        for slot, kind in (("area", "areas"), ("floor", "floors")):
+            token = "{" + slot + "}"
+            if token not in rewritten:
+                continue
+            scoped_key, kept = ov.narrow(combo_key, slot, (canonical_lists or {}).get(slot, []))
+            if scoped_key == slot:
+                continue  # nothing excluded: the shared list already covers it
+            if not kept:
+                dropped = True
+                break
+            rewritten = rewritten.replace(token, "{" + scoped_key + "}")
+            list_values[scoped_key] = _norm_values(ov.spoken_values(kind, kept))
+        if dropped:
+            continue
         templates.append(rewritten)
+
+
+def _rebind(key: str, scoped: str) -> str:
+    """Command-scoped variant of a domain-scoped ``{name}`` list key: keep the
+    domain/capability scope (``name__light__brightness``) and append the command
+    suffix that ``Overrides.narrow`` produced (``...__x_hassturnon_name_only``)."""
+    return key + scoped[len("name"):]
 
 
 def assemble(
@@ -337,17 +381,27 @@ def assemble(
     entities: Dict[str, str],
     slot_lists: Dict[str, List[str]],
     extra_sentences: Optional[Dict[str, List[str]]] = None,
+    ov=None,
 ) -> Tuple[List[str], Dict[str, List[str]]]:
-    """Build (templates, list_values) for the enabled built-ins + custom commands."""
+    """Build (templates, list_values) for the enabled built-ins + custom commands.
+
+    `ov` (overrides.Overrides) supplies the user's aliases and per-command target
+    exclusions; the default changes nothing."""
     import custom_commands as cc
     import gating
+    import overrides as ovr
     import s2p_intents
 
+    ov = ov or ovr.EMPTY
     info = as_entity_info(entities)
     extras = extra_sentences or {}
     templates: List[str] = []
-    # Slot values are normalized to match the lowercase acoustic vocab.
+    # Slot values are normalized to match the lowercase acoustic vocab. The
+    # shared area/floor lists carry their aliases (the matcher maps them back).
     list_values: Dict[str, List[str]] = {k: _norm_values(v) for k, v in slot_lists.items()}
+    for slot, kind in (("area", "areas"), ("floor", "floors")):
+        if slot in slot_lists:
+            list_values[slot] = _norm_values(ov.spoken_values(kind, slot_lists[slot]))
     # Text lists (color, on/off states, ...) come from the package; name/area/
     # floor stay from the registry-provided slot_lists above.
     for name, values in s2p_intents.text_list_values(lang).items():
@@ -381,13 +435,15 @@ def assemble(
             _expand_block(
                 flat_templates, eff_nd, capability,
                 info, templates, list_values,
+                ov=ov, combo_key=ovr.combo_key(intent, combo),
+                canonical_lists=slot_lists,
             )
 
     # Custom commands (all modes contribute their sentences to the grammar).
     for block in cc.grammar_sentences(list(custom_commands or [])):
         _expand_block(
             block["sentences"], block.get("name_domains") or None, None,
-            info, templates, list_values,
+            info, templates, list_values, ov=ov, canonical_lists=slot_lists,
         )
 
     templates = list(dict.fromkeys(templates))
@@ -399,6 +455,59 @@ def assemble(
         referenced.update(re.findall(r"\{([^}]+)\}", t))
     list_values = {k: v for k, v in list_values.items() if k in referenced}
     return templates, list_values
+
+
+# --- grammar size (UI cost indicator) ----------------------------------------
+#
+# The reason to disable a command is grammar size: every active command widens
+# the FST search space and costs recognition accuracy. "Phrases" is the number of
+# distinct utterances a set of templates can produce -- templates multiplied out
+# by the size of each list they reference -- which tracks that cost far better
+# than a template count ("turn on {name}" is one template but 40 phrases).
+
+_RANGE_REF_RE = re.compile(r"^(-?\d+)\s*\.\.\s*(-?\d+)(?:\s*[,/]\s*(-?\d+))?$")
+
+
+def phrase_count(templates: Sequence[str], list_values: Dict[str, List[str]]) -> int:
+    """Distinct utterances `templates` can produce with `list_values` bound."""
+    total = 0
+    for template in templates:
+        n = 1
+        for ref in re.findall(r"\{([^}]+)\}", template):
+            ref = ref.strip()
+            m = _RANGE_REF_RE.match(ref)
+            if m:
+                lo, hi = int(m.group(1)), int(m.group(2))
+                step = abs(int(m.group(3) or 1)) or 1
+                n *= max(1, (abs(hi - lo) // step) + 1)
+            else:
+                n *= max(1, len(list_values.get(ref.split(":", 1)[0], [])))
+        total += n
+    return total
+
+
+def combo_cost(
+    s2p_repo: Path,
+    lang: str,
+    intent: str,
+    combo: str,
+    domain: Optional[str],
+    entities,
+    slot_lists: Dict[str, List[str]],
+    extra_sentences: Optional[Dict[str, List[str]]] = None,
+    ov=None,
+) -> Dict[str, int]:
+    """Grammar cost of one combo (optionally narrowed to a single domain), as
+    ``{"sentences": n_templates, "phrases": n_utterances}``."""
+    entry = [intent, combo, [domain]] if domain else [intent, combo]
+    templates, list_values = assemble(
+        s2p_repo, lang, [entry], [], entities, slot_lists,
+        extra_sentences=extra_sentences, ov=ov,
+    )
+    return {
+        "sentences": len(templates),
+        "phrases": phrase_count(templates, list_values),
+    }
 
 
 def train(

@@ -27,9 +27,11 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import custom_commands as cc
 import extra_sentences as ex
+import gating
 import hass_actions
 import intent_matcher
 import models
+import overrides
 import presets as bi
 import settings
 import training
@@ -116,9 +118,10 @@ def create_app(cfg) -> Flask:
         combos = bi.available_combos(ADDON_ROOT, lang, meta)
         amap = training.enabled_domain_map(read_enabled(lang, combos))
         extras = ex.load(data_dir, lang)
-        records = _current_records(cfg)
+        ov = _overrides(cfg, lang)
+        records = _current_records(cfg, lang)
         entities = _entities_mapping(records)
-        slot_lists = _current_slot_lists(cfg)
+        slot_lists = _current_slot_lists(cfg, lang)
         for c in combos:
             key = (c["intent"], c["combo"])
             c["extra"] = extras.get(ex.key(c["intent"], c["combo"]), [])
@@ -127,8 +130,40 @@ def create_app(cfg) -> Flask:
             )
             c["domains"] = ce["domains"]
             c["examples"] = ce["examples"]
+            c["shapes"] = ce["shapes"]
             c["examples_by_domain"] = ce["by_domain"]
+            c["examples_by_domain_full"] = ce["by_domain_full"]
             c["group"] = bi.intent_group(c["intent"])
+            # Grammar cost, per card: one number per targeted domain (the UI
+            # splits a combo into one card per domain), or a single number for
+            # combos that target none ("what time is it").
+            c["cost"] = training.combo_cost(
+                ADDON_ROOT, lang, c["intent"], c["combo"], None, records,
+                slot_lists, ov=ov
+            )
+            c["cost_by_domain"] = {
+                d: training.combo_cost(
+                    ADDON_ROOT, lang, c["intent"], c["combo"], d, records,
+                    slot_lists, ov=ov
+                )
+                for d in c["domains"]
+            }
+            # Values this command can target, so the drill-down can offer them
+            # (already narrowed by domain/capability gating).
+            c["targets"] = {
+                "name": {
+                    d: training.as_entity_info(records).names(
+                        [d], gating.required_capability(c["intent"], c["combo"])
+                    )
+                    for d in c["domains"]
+                },
+                "area": slot_lists.get("area", []) if "area" in ce["uses"] else [],
+                "floor": slot_lists.get("floor", []) if "floor" in ce["uses"] else [],
+            }
+            c["exclude"] = {
+                slot: sorted(ov.excluded(overrides.combo_key(c["intent"], c["combo"]), slot))
+                for slot in overrides.SLOT_KINDS
+            }
             if key in amap:
                 c["enabled"] = True
                 allowed = amap[key]
@@ -142,9 +177,13 @@ def create_app(cfg) -> Flask:
         present = {c["group"] for c in combos}
         groups = [g for g in bi.group_order() if g in present]
         commands = cc.load(data_dir, lang)
+        # Devices/areas/floors are listed *unfiltered* here: the lists tab is
+        # where the user switches one off for voice, so a switched-off one still
+        # has to be visible (greyed) rather than vanishing.
+        raw_lists = _raw_slot_lists(cfg)
         by_domain: Dict[str, List[str]] = {}
-        for name, domain in sorted(entities.items()):
-            by_domain.setdefault(domain, []).append(name)
+        for rec in sorted(_raw_records(cfg), key=lambda r: r["name"]):
+            by_domain.setdefault(rec["domain"], []).append(rec["name"])
 
         # "How are devices/areas/floors used?" -- which commands consume each list.
         area_used, floor_used, name_used = _usage(lang, set(amap), commands)
@@ -167,8 +206,10 @@ def create_app(cfg) -> Flask:
                     cfg.hass_api, cfg.hass_token
                 ) if cfg.hass_token else [],
                 "devices_by_domain": devices,
-                "areas": {"values": slot_lists.get("area", []), "used_by": area_used},
-                "floors": {"values": slot_lists.get("floor", []), "used_by": floor_used},
+                "areas": {"values": raw_lists.get("area", []), "used_by": area_used},
+                "floors": {"values": raw_lists.get("floor", []), "used_by": floor_used},
+                # Voice targeting + aliases, round-tripped by the UI.
+                "overrides": overrides.load_doc(data_dir, lang),
             }
         )
 
@@ -183,16 +224,18 @@ def create_app(cfg) -> Flask:
         (d / "enabled.json").write_text(json.dumps(enabled, indent=2))
         cc.save(data_dir, lang, commands)
         ex.save(data_dir, lang, extras)
+        if body.get("overrides") is not None:
+            overrides.save(data_dir, lang, body["overrides"])
         # Score gate: persisted per-language and hot-reloaded by the STT server
         # (no retrain needed — it only affects runtime gating, not the grammar).
         if body.get("max_score") is not None:
             settings.set_max_score(data_dir, lang, body["max_score"])
 
-        entities = _current_records(cfg)
-        slot_lists = _current_slot_lists(cfg)
+        entities = _current_records(cfg, lang)
+        slot_lists = _current_slot_lists(cfg, lang)
         templates, _ = training.assemble(
             ADDON_ROOT, lang, enabled, commands, entities, slot_lists,
-            extra_sentences=ex.load(data_dir, lang),
+            extra_sentences=ex.load(data_dir, lang), ov=_overrides(cfg, lang),
         )
         resp = {"ok": True, "n_templates": len(templates), "trained": False}
         if _model_dir_for(cfg, lang) is not None:
@@ -227,9 +270,9 @@ def create_app(cfg) -> Flask:
         enabled = [list(e) for e in read_enabled(lang, combos)]
         commands = cc.load(data_dir, lang)
         matcher = intent_matcher.build_matcher(
-            ADDON_ROOT, lang, enabled, _current_records(cfg),
-            _current_slot_lists(cfg), custom_commands=commands,
-            extra_sentences=ex.load(data_dir, lang),
+            ADDON_ROOT, lang, enabled, _current_records(cfg, lang),
+            _current_slot_lists(cfg, lang), custom_commands=commands,
+            extra_sentences=ex.load(data_dir, lang), ov=_overrides(cfg, lang),
         )
         result = matcher.match(text) if (matcher and text) else None
         if result is None:
@@ -276,9 +319,9 @@ def create_app(cfg) -> Flask:
         if not (sentence and intent and combo):
             return jsonify({"ok": False, "error": "missing sentence/intent/combo"})
 
-        records = _current_records(cfg)
+        records = _current_records(cfg, lang)
         entities = _entities_mapping(records)
-        slot_lists = _current_slot_lists(cfg)
+        slot_lists = _current_slot_lists(cfg, lang)
         combos = bi.available_combos(ADDON_ROOT, lang, meta)
         enabled = [list(e) for e in read_enabled(lang, combos)]
         if not any(e[0] == intent and e[1] == combo for e in enabled):
@@ -291,6 +334,7 @@ def create_app(cfg) -> Flask:
             matcher = intent_matcher.build_matcher(
                 ADDON_ROOT, lang, enabled, records, slot_lists,
                 custom_commands=cc.load(data_dir, lang), extra_sentences=cand,
+                ov=_overrides(cfg, lang),
             )
             sample = bi.sample_sentence(sentence, domains, entities, slot_lists)
             result = matcher.match(sample) if (matcher and sample) else None
@@ -367,11 +411,24 @@ def _load_json(path, default):
     return default
 
 
-def _current_records(cfg) -> list:
+def _current_records(cfg, lang: Optional[str] = None) -> list:
     """Live enriched entity records (name/domain/device_class/features/area/
     floor): HA registry in the container, fixture/dev otherwise. Re-fetched at
     each training event so renames/adds/feature changes are picked up. Drives the
-    entity-aware gating in training/intent_matcher."""
+    entity-aware gating in training/intent_matcher.
+
+    Entities the user switched off for voice are removed here, so gating, the
+    examples and the UI all see the same set."""
+    return _overrides(cfg, lang).filter_records(_raw_records(cfg))
+
+
+def _overrides(cfg, lang: Optional[str] = None):
+    return overrides.load(Path(cfg.data), lang or cfg.language)
+
+
+def _raw_records(cfg) -> list:
+    """Entity records straight from Home Assistant / the fixture, before the
+    user's voice-targeting overrides are applied."""
     if cfg.hass_token:
         try:
             recs = training.entity_records_from_hass(cfg.hass_api, cfg.hass_token)
@@ -397,11 +454,16 @@ def _current_entities(cfg) -> Dict[str, str]:
     return _entities_mapping(_current_records(cfg))
 
 
-def _current_slot_lists(cfg) -> Dict[str, List[str]]:
+def _current_slot_lists(cfg, lang: Optional[str] = None) -> Dict[str, List[str]]:
     """Slot value lists for training/display. area + floor come live from the HA
     registries (all of them); language lists (color, brightness_level, ...) come
     from the fixture/file. Re-fetched per training event so registry edits are
-    picked up (and change the fingerprint -> retrain)."""
+    picked up (and change the fingerprint -> retrain). Areas/floors the user
+    switched off for voice are removed."""
+    return _overrides(cfg, lang).filter_slot_lists(_raw_slot_lists(cfg))
+
+
+def _raw_slot_lists(cfg) -> Dict[str, List[str]]:
     lists = {k: list(v) for k, v in
              _load_json(cfg.slot_lists_file, training.DEV_SLOT_LISTS).items()}
     if cfg.hass_token:
@@ -517,6 +579,7 @@ def _ensure_trained(cfg, lang, meta, entities, slot_lists, data_dir: Path,
     templates, list_values = training.assemble(
         ADDON_ROOT, lang, enabled, commands, entities, slot_lists,
         extra_sentences=ex.load(data_dir, lang),
+        ov=overrides.load(data_dir, lang),
     )
     fp = _fingerprint(templates, list_values, cfg.backend)
 
@@ -563,7 +626,7 @@ def _start_watch(cfg, meta, data_dir: Path) -> None:
             time.sleep(interval)
             try:
                 entities = _current_records(cfg)
-                slot_lists = _current_slot_lists(cfg)
+                slot_lists = _current_slot_lists(cfg, lang)
                 langs = {cfg.language} | {
                     p.name for p in data_dir.iterdir()
                     if p.is_dir() and (p / "grammar.fst").exists()

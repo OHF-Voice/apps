@@ -77,14 +77,68 @@
   .slot-legend { margin:0 0 12px; padding:0; list-style:none; display:flex;
                  flex-wrap:wrap; gap:4px 8px; font-size:12px; }
   .slot-legend li { margin:0; }
-  .combo { display:flex; align-items:flex-start; gap:10px; padding:7px 0; }
-  .combo .meta { flex:1; } .combo .ex { font-size:14px; line-height:1.5; }
-  .combo .ex.muted { color:var(--mut); }
-  .combo-tag { font-size:12px; color:var(--mut); margin-top:2px; }
-  .domrows { margin:4px 0 2px 4px; padding-left:14px; border-left:2px solid var(--line); }
-  .domrow { display:flex; align-items:flex-start; gap:8px; padding:3px 0; }
-  .domrow .dlabel { min-width:120px; font-size:13px; color:var(--mut); }
-  .domrow .ex { font-size:14px; }
+  /* ---- command list (one row per command, grouped) ---- */
+  .cmdbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .cmdbar input[type=text] { flex:1; min-width:180px; }
+  .segs { display:inline-flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; background:#fff; }
+  .segs button { background:transparent; color:var(--mut); border-radius:0; padding:6px 12px; font-size:13px; }
+  .segs button.on { background:#eef2ff; color:#1e3a8a; }
+  .meter { display:flex; align-items:center; gap:10px; font-size:13px; color:var(--mut);
+           background:#f8fafc; border:1px solid var(--line); border-radius:10px;
+           padding:8px 12px; margin-bottom:12px; }
+  .meter .bar { flex:1; height:6px; border-radius:999px; background:#e5e7eb; overflow:hidden; min-width:80px; }
+  .meter .fill { height:100%; background:var(--b); transition:width .18s ease; }
+  .meter b { color:#111; font-weight:600; }
+  .grp { border-top:1px solid var(--line); }
+  .grp > summary { list-style:none; cursor:pointer; padding:9px 0; }
+  .grp > summary::-webkit-details-marker { display:none; }
+  .grp-head { display:flex; align-items:center; gap:9px; }
+  .grp-head::before { content:"\25B8"; color:var(--mut); font-size:11px; width:9px; }
+  .grp[open] > .grp-head::before, .grp[open] > summary .grp-head::before { content:"\25BE"; }
+  .grp-head h3 { margin:0; flex:0 0 auto; } .grp-head .gcount { font-size:12px; }
+  .cmd-row { display:flex; align-items:center; gap:11px; padding:7px 2px 7px 6px;
+             border-radius:10px; }
+  .cmd-row:hover { background:#f8fafc; }
+  .cmd-row.off .cmd-say { opacity:.5; }
+  .cmd-row.na { opacity:.55; } .cmd-row.na:hover { background:transparent; }
+  .cmd-row.na .cmd-say { font-style:italic; }
+  .cmd-main { flex:1; min-width:0; }
+  .cmd-say { font-size:14px; line-height:1.55; }
+  .cmd-sub { font-size:12px; color:var(--mut); margin-top:1px;
+             white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cmd-row .det { background:transparent; color:var(--mut); border:1px solid transparent;
+                  border-radius:8px; padding:3px 9px; font-size:12px; flex:0 0 auto; }
+  .cmd-row:hover .det { border-color:var(--line); color:var(--b); background:#fff; }
+  /* toggle switch */
+  .sw { flex:0 0 auto; display:inline-block; position:relative; width:34px; height:20px; cursor:pointer; }
+  .sw input { position:absolute; opacity:0; width:100%; height:100%; margin:0; cursor:pointer; }
+  .sw .track { position:absolute; inset:0; background:#cbd5e1; border-radius:999px; transition:background .15s; }
+  .sw .track::after { content:""; position:absolute; top:2px; left:2px; width:16px; height:16px;
+                      background:#fff; border-radius:50%; transition:transform .15s; }
+  .sw input:checked + .track { background:var(--b); }
+  .sw input:checked + .track::after { transform:translateX(14px); }
+  .sw input:focus-visible + .track { outline:2px solid var(--b); outline-offset:2px; }
+  .sw input:indeterminate + .track { background:#93b4fb; }
+  .sw input:indeterminate + .track::after { transform:translateX(7px); }
+  /* details dialog */
+  dialog { border:0; border-radius:14px; padding:0; max-width:620px; width:calc(100% - 32px); }
+  dialog::backdrop { background:rgba(15,23,42,.4); }
+  .dlg-head { display:flex; align-items:flex-start; gap:10px; padding:16px 18px 10px; }
+  .dlg-head .dlg-say { flex:1; font-size:16px; line-height:1.5; }
+  .dlg-body { padding:0 18px 18px; }
+  .dlg-x { background:transparent; color:var(--mut); padding:2px 8px; font-size:18px; }
+  .dlg-sec { border-top:1px solid var(--line); padding:11px 0 3px; }
+  .dlg-sec h4 { margin:0 0 6px; font-size:13px; }
+  .targets { display:flex; flex-wrap:wrap; gap:4px 14px; margin-bottom:5px; }
+  .tgt { display:inline-flex; align-items:center; gap:5px; font-size:13px; cursor:pointer; }
+  /* editable device/area/floor rows */
+  .val-row { display:flex; align-items:center; gap:9px; padding:4px 0; }
+  .val-row .v-name { flex:0 0 auto; min-width:130px; font-size:14px; }
+  .val-row .v-alias { flex:1; min-width:120px; padding:4px 8px; font-size:13px; }
+  .val-row .v-replace { font-size:12px; color:var(--mut); display:inline-flex;
+                        align-items:center; gap:4px; cursor:pointer; }
+  .val-row.voice-off .v-name { text-decoration:line-through; color:var(--mut); }
+  .val-row.voice-off .v-alias { opacity:.5; }
   details.extras { margin-top:4px; }
   details.extras > summary { cursor:pointer; font-size:12px; color:var(--b); }
   .extra-list { margin:6px 0; }
@@ -129,21 +183,36 @@
 
 <div class="wrap">
   <nav class="tabs">
-    <button data-tab="builtin" class="active">Built-in commands</button>
+    <button data-tab="builtin" class="active">Commands</button>
     <button data-tab="custom">Custom commands</button>
     <button data-tab="lists">Devices &amp; Lists</button>
     <button data-tab="test">Test</button>
     <button data-tab="settings">Settings</button>
   </nav>
 
-  <!-- BUILT-IN COMMANDS --------------------------------------------------- -->
+  <!-- COMMANDS -------------------------------------------------------------- -->
   <section id="tab-builtin">
     <div class="card">
-      <h2>Built-in commands</h2>
-      <p class="sub">Pre-defined commands mapped to Home Assistant intents. Toggle a
-        whole group with its header checkbox. Disable unused ones to keep
-        recognition fast and accurate.</p>
-      <ul class="slot-legend">
+      <h2>Commands</h2>
+      <p class="sub">Everything this device can understand, written the way you'd say
+        it. Turn off what you don't use — a smaller set is recognized faster and more
+        accurately. Highlighted words are the parts you can change.</p>
+      <div class="cmdbar">
+        <input type="text" id="cmd-search" placeholder="Search commands, e.g. brightness">
+        <div class="segs" id="cmd-filter">
+          <button data-filter="all" class="on">All</button>
+          <button data-filter="on">On</button>
+          <button data-filter="off">Off</button>
+        </div>
+        <button id="cmd-reset" class="ghost mini">Reset to recommended</button>
+      </div>
+      <div class="meter">
+        <span><b id="m-count">0</b> of <span id="m-total">0</span> on</span>
+        <div class="bar"><div class="fill" id="m-fill" style="width:0%"></div></div>
+        <span>~<b id="m-phrases">0</b> phrases in the grammar</span>
+      </div>
+      <div id="commands-list"></div>
+      <ul class="slot-legend" style="margin-top:14px">
         <li><span class="slot slot-name">name</span></li>
         <li><span class="slot slot-area">area</span></li>
         <li><span class="slot slot-floor">floor</span></li>
@@ -153,9 +222,17 @@
         <li><span class="slot slot-state">state</span></li>
         <li><span class="slot slot-other">other</span></li>
       </ul>
-      <div id="combos"></div>
     </div>
   </section>
+
+  <!-- COMMAND DETAILS (drill-down) ------------------------------------------ -->
+  <dialog id="detail">
+    <div class="dlg-head">
+      <div class="dlg-say" id="d-say"></div>
+      <button class="dlg-x" id="d-close" aria-label="Close">✕</button>
+    </div>
+    <div class="dlg-body" id="d-body"></div>
+  </dialog>
 
   <!-- CUSTOM COMMANDS ----------------------------------------------------- -->
   <section id="tab-custom" hidden>
@@ -175,9 +252,13 @@
   <section id="tab-lists" hidden>
     <div class="card">
       <h2>Devices &amp; Lists</h2>
-      <p class="sub">Names pulled from Home Assistant and baked into the grammar,
-        shown with the commands that use them. Rename or expose one in HA and it's
-        picked up on the next retrain.</p>
+      <p class="sub">Names pulled from Home Assistant and baked into the grammar.
+        Switch one off to stop recognizing it by voice at all, or add names of
+        your own — comma separated — for anything Home Assistant calls something
+        awkward. Tick <b>only</b> to drop the Home Assistant name and keep just
+        yours, which is the one change that makes the grammar <em>smaller</em>.
+        Aliases are resolved back to the Home Assistant name before the command
+        runs, so they work here but not in Home Assistant's own assistant.</p>
       <div id="lists"></div>
     </div>
   </section>
@@ -382,120 +463,269 @@ function collectCommands() {
   });
 }
 
-/* ---- built-in combos, grouped by function ---- */
+/* ---- commands -------------------------------------------------------------
+   One card per (slot combination × targeted domain), so every row can be named
+   the way you'd say it ("turn on the lights in the kitchen") instead of by its
+   intent/slot-combination. A combo that targets no domain ("what time is it")
+   is a single card. The label IS the rendered example sentence: it comes from
+   the localized templates and the user's own entities, so it needs no separate
+   translation and can't drift from what the grammar actually accepts. */
+
+const RECOMMENDED = ["required", "usable"];
+let filter = "all", search = "";
+
+function cards() {
+  const out = [];
+  S.combos.forEach((c, i) => {
+    // Row label: the command's shape, slots as placeholders (see _example_shape).
+    const label = (d) => (d ? (c.examples_by_domain || {})[d] : (c.shapes || [])[0]) || "";
+    const mk = (d) => {
+      const cost = (d ? (c.cost_by_domain || {})[d] : c.cost) || {};
+      // No phrases => the entity gate dropped it (no device of this kind, or
+      // none with the needed capability). It can't be trained, so it's shown as
+      // unavailable rather than as a toggle that does nothing.
+      return { c, i, domain: d, key: i + ":" + (d || ""), say: label(d), cost,
+               available: (cost.phrases || 0) > 0 };
+    };
+    if ((c.domains || []).length) c.domains.forEach(d => out.push(mk(d)));
+    else out.push(mk(null));
+  });
+  return out;
+}
+
+function cardOn(card) {
+  return card.domain
+    ? (card.c.enabled_domains || []).includes(card.domain)
+    : !!card.c.enabled;
+}
+
+function setCard(card, on) {
+  const c = card.c;
+  if (card.domain) {
+    const set = new Set(c.enabled_domains || []);
+    on ? set.add(card.domain) : set.delete(card.domain);
+    c.enabled_domains = (c.domains || []).filter(d => set.has(d));
+    c.enabled = c.enabled_domains.length > 0;
+  } else {
+    c.enabled = on;
+    c.enabled_domains = [];
+  }
+}
+
+function fmt(n) {
+  if (n == null) return "?";
+  if (n < 1000) return String(n);
+  if (n < 100000) return (n / 1000).toFixed(n < 10000 ? 1 : 0) + "k";
+  return (n / 1000000).toFixed(1) + "M";
+}
+
+function plain(html) {
+  const t = document.createElement("div");
+  t.innerHTML = html || "";
+  return t.textContent.toLowerCase();
+}
+
+function visible(card) {
+  if (filter !== "all" && !card.available) return false;
+  if (filter === "on" && !cardOn(card)) return false;
+  if (filter === "off" && cardOn(card)) return false;
+  if (search && !(plain(card.say) + " " + (card.c.description || "").toLowerCase()
+                  + " " + (card.domain || "")).includes(search)) return false;
+  return true;
+}
+
 function renderCombos() {
+  const all = cards();
+  const shown = all.filter(visible);
   const byGroup = {};
-  for (const c of S.combos) (byGroup[c.group] ||= []).push(c);
+  for (const card of shown) (byGroup[card.c.group] ||= []).push(card);
+  // Unavailable commands sink to the bottom of their group.
+  for (const g in byGroup)
+    byGroup[g].sort((a, b) => (a.available === b.available) ? 0 : (a.available ? -1 : 1));
   const order = (S.groups && S.groups.length) ? S.groups : Object.keys(byGroup);
-  $("combos").innerHTML = order.filter(g => byGroup[g]).map(group => `
-    <details class="group">
-      <summary>
-        <span class="group-head">
-          <input type="checkbox" class="group-toggle" data-group="${group}">
-          <h3>${group}</h3>
-          <span class="muted gcount" data-group="${group}"></span>
-        </span>
-      </summary>
-      <div class="group-body">
-      ${byGroup[group].map(c => {
-        const idx = S.combos.indexOf(c);
-        const split = (c.domains && c.domains.length > 1);
-        let body;
-        if (split) {
-          body = `<div class="domrows">` + c.domains.map(d => `
-            <div class="domrow">
-              <input type="checkbox" class="dom-cb" data-i="${idx}" data-group="${group}" data-domain="${d}" ${(c.enabled_domains||[]).includes(d)?"checked":""}>
-              <span class="dlabel">${d}</span>
-              <span class="ex">${(c.examples_by_domain||{})[d]||""}</span>
-            </div>`).join("") + `</div>`;
-        } else {
-          const examples = (c.examples && c.examples.length) ? c.examples : (c.example ? [c.example] : []);
-          body = examples.map(e => `<div class="ex">${e}</div>`).join("")
-               || `<div class="ex muted">${c.description||""}</div>`;
-        }
-        return `<div class="combo">
-          <input type="checkbox" data-i="${idx}" data-group="${group}" class="combo-cb" ${c.enabled?"checked":""} id="c${idx}">
-          <div class="meta">
-            <div class="combo-tag">${c.intent} · ${c.combo}</div>
-            ${body}
-            <details class="extras" data-i="${idx}">
-              <summary>${extraSummary(c)}</summary>
-              <div class="extra-list" data-i="${idx}"></div>
-              <div class="extra-add">
-                <input type="text" class="extra-input" data-i="${idx}" placeholder="add a phrasing, e.g. {0..100:minutes} minute timer">
-                <button class="mini extra-btn" data-i="${idx}">Add</button>
-                <span class="extra-fb" data-i="${idx}"></span>
-              </div>
-            </details>
-          </div></div>`;
-      }).join("")}
-      </div>
+  const host = $("commands-list");
+
+  if (!shown.length) {
+    host.innerHTML = '<p class="empty">No commands match.</p>';
+    updateMeter(all);
+    return;
+  }
+
+  host.innerHTML = order.filter(g => byGroup[g]).map(group => `
+    <details class="grp" open>
+      <summary><span class="grp-head">
+        <label class="sw" onclick="event.stopPropagation()">
+          <input type="checkbox" class="grp-cb" data-group="${escapeHtml(group)}"><span class="track"></span>
+        </label>
+        <h3>${escapeHtml(group)}</h3>
+        <span class="muted gcount" data-group="${escapeHtml(group)}"></span>
+      </span></summary>
+      ${byGroup[group].map(card => card.available ? `
+        <div class="cmd-row ${cardOn(card) ? "" : "off"}" data-key="${card.key}">
+          <label class="sw">
+            <input type="checkbox" class="card-cb" data-key="${card.key}" ${cardOn(card) ? "checked" : ""}>
+            <span class="track"></span>
+          </label>
+          <div class="cmd-main">
+            <div class="cmd-say">${card.say}</div>
+            <div class="cmd-sub">${escapeHtml(card.c.description || "")}</div>
+          </div>
+          <button class="det" data-key="${card.key}">Details</button>
+        </div>` : `
+        <div class="cmd-row na" title="No matching device in Home Assistant">
+          <label class="sw"><input type="checkbox" disabled><span class="track"></span></label>
+          <div class="cmd-main">
+            <div class="cmd-say muted">${escapeHtml(card.c.description || card.c.example || "")}</div>
+            <div class="cmd-sub">You have no device that can do this</div>
+          </div>
+        </div>`).join("")}
     </details>`).join("");
-  $("combos").querySelectorAll(".combo-cb").forEach(cb =>
-    cb.addEventListener("change", () => {
-      const c = S.combos[cb.dataset.i];
-      c.enabled = cb.checked;
-      c.enabled_domains = cb.checked ? [...(c.domains||[])] : [];
-      // reflect on any per-domain checkboxes
-      $("combos").querySelectorAll(`.dom-cb[data-i="${cb.dataset.i}"]`)
-        .forEach(d => { d.checked = cb.checked; });
-      cb.indeterminate = false;
-      updateGroupToggle(cb.dataset.group); markDirty();
-    }));
-  $("combos").querySelectorAll(".dom-cb").forEach(cb =>
-    cb.addEventListener("change", () => {
-      const c = S.combos[cb.dataset.i];
-      const set = new Set(c.enabled_domains || []);
-      cb.checked ? set.add(cb.dataset.domain) : set.delete(cb.dataset.domain);
-      c.enabled_domains = (c.domains || []).filter(d => set.has(d));
-      c.enabled = c.enabled_domains.length > 0;
-      updateComboParent(cb.dataset.i);
-      updateGroupToggle(cb.dataset.group); markDirty();
-    }));
-  S.combos.forEach((c, i) => updateComboParent(i));
-  S.combos.forEach((c, i) => renderExtraList(i));
-  $("combos").querySelectorAll(".extra-btn").forEach(b =>
-    b.addEventListener("click", () => addExtra(b.dataset.i)));
-  $("combos").querySelectorAll(".extra-input").forEach(inp =>
-    inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addExtra(inp.dataset.i); } }));
-  $("combos").querySelectorAll(".group-toggle").forEach(t =>
-    // Don't let the checkbox click bubble to <summary> and toggle the section.
-    t.addEventListener("click", e => e.stopPropagation()));
-  $("combos").querySelectorAll(".group-toggle").forEach(t =>
-    t.addEventListener("change", () => {
-      S.combos.forEach((c, i) => {
-        if (c.group === t.dataset.group) {
-          c.enabled = t.checked;
-          c.enabled_domains = t.checked ? [...(c.domains || [])] : [];
-          const el = $("c" + i);
-          if (el) { el.checked = t.checked; el.indeterminate = false; }
-          $("combos").querySelectorAll(`.dom-cb[data-i="${i}"]`)
-            .forEach(d => { d.checked = t.checked; });
-        }
-      });
-      updateGroupToggle(t.dataset.group); markDirty();
-    }));
-  order.forEach(updateGroupToggle);
+
+  const index = Object.fromEntries(all.map(c => [c.key, c]));
+  host.querySelectorAll(".card-cb").forEach(cb => cb.addEventListener("change", () => {
+    setCard(index[cb.dataset.key], cb.checked);
+    cb.closest(".cmd-row").classList.toggle("off", !cb.checked);
+    refreshGroups(all); markDirty();
+    if (filter !== "all") renderCombos();   // row may no longer belong here
+  }));
+  host.querySelectorAll(".grp-cb").forEach(t => t.addEventListener("change", () => {
+    all.filter(c => c.c.group === t.dataset.group && c.available && visible(c))
+       .forEach(c => setCard(c, t.checked));
+    renderCombos(); markDirty();
+  }));
+  host.querySelectorAll(".det").forEach(b =>
+    b.addEventListener("click", () => openDetail(index[b.dataset.key])));
+  refreshGroups(all);
 }
 
-/* Combo parent checkbox reflects its per-domain children (checked/indeterminate). */
-function updateComboParent(i) {
-  const c = S.combos[i];
-  const el = $("c" + i);
-  if (!el) return;
-  const total = (c.domains || []).length;
-  if (total <= 1) { el.checked = !!c.enabled; el.indeterminate = false; return; }
-  const on = (c.enabled_domains || []).length;
-  el.checked = on === total;
-  el.indeterminate = on > 0 && on < total;
+/* Group switch + counts reflect the cards currently listed under them. */
+function refreshGroups(all) {
+  const shown = all.filter(c => c.available && visible(c));
+  document.querySelectorAll("#commands-list .grp-cb").forEach(t => {
+    const items = shown.filter(c => c.c.group === t.dataset.group);
+    const on = items.filter(cardOn).length;
+    t.checked = items.length > 0 && on === items.length;
+    t.indeterminate = on > 0 && on < items.length;
+    const cnt = document.querySelector(`#commands-list .gcount[data-group="${CSS.escape(t.dataset.group)}"]`);
+    if (cnt) cnt.textContent = `${on}/${items.length}`;
+  });
+  updateMeter(all);
 }
 
-/* ---- extra phrasings on built-in commands ---- */
+/* Grammar-size meter: why you'd turn anything off. Phrase counts are per card,
+   so the total is an upper bound (identical phrasings shared by two commands
+   are counted twice); good enough to compare choices. */
+function updateMeter(all) {
+  const usable = all.filter(c => c.available);
+  const on = usable.filter(cardOn);
+  const phrases = on.reduce((n, c) => n + (c.cost.phrases || 0), 0);
+  $("m-count").textContent = on.length;
+  $("m-total").textContent = usable.length;
+  $("m-phrases").textContent = fmt(phrases);
+  const ceiling = usable.reduce((n, c) => n + (c.cost.phrases || 0), 0) || 1;
+  $("m-fill").style.width = Math.round(100 * phrases / ceiling) + "%";
+}
+
+/* Per-command target exclusions, kept in the same overrides doc the lists tab
+   edits. `c.exclude` is what the server sent; S.overrides.exclude is what we
+   send back, so read through both. */
+function excludeKey(c){ return `${c.intent}/${c.combo}`; }
+function excluded(c, slot) {
+  const doc = (S.overrides ||= {});
+  const mine = ((doc.exclude || {})[excludeKey(c)] || {})[slot];
+  return mine || (c.exclude || {})[slot] || [];
+}
+function setExcluded(c, slot, values) {
+  const doc = (S.overrides ||= {});
+  const ex = (doc.exclude ||= {});
+  const entry = (ex[excludeKey(c)] ||= {});
+  // Seed the slots we aren't touching from the server's view, so writing one
+  // slot doesn't silently clear the others.
+  for (const s of ["name", "area", "floor"])
+    if (entry[s] === undefined) entry[s] = [...((c.exclude || {})[s] || [])];
+  entry[slot] = values;
+}
+
+/* ---- details drill-down ----
+   Stub for the fuller editor: shows every phrasing the command accepts and the
+   values each slot can take, plus the extra-phrasing editor. Narrowing which
+   names/areas/floors a command targets is not wired up yet (see note below). */
+function openDetail(card) {
+  const c = card.c;
+  $("d-say").innerHTML = card.say || escapeHtml(c.description || "");
+  // What this command can target, and what the user excluded from *this* command.
+  const t = c.targets || {};
+  const groups = [
+    ["name", `${card.domain || "Device"}s this command targets`,
+     card.domain ? (t.name || {})[card.domain] || [] : []],
+    ["area", "Areas this command targets", t.area || []],
+    ["floor", "Floors this command targets", t.floor || []],
+  ].filter(([, , vals]) => vals.length);
+
+  $("d-body").innerHTML = `
+    <div class="cmd-sub">${escapeHtml(c.description || "")} · adds ~<b>${
+      fmt(card.cost.phrases)}</b> phrases (${fmt(card.cost.sentences)} templates)
+      to the grammar</div>
+    <div class="dlg-sec">
+      <h4>Ways to say it</h4>
+      ${(card.domain
+          ? [(c.examples_by_domain_full || {})[card.domain] || card.say]
+          : (c.examples || [])
+        ).filter(Boolean).map(e => `<div class="cmd-say">${e}</div>`).join("")
+        || '<div class="empty">none</div>'}
+    </div>
+    ${groups.map(([slot, title, vals]) => `
+      <div class="dlg-sec">
+        <h4>${escapeHtml(title)}</h4>
+        <div class="targets" data-slot="${slot}">${vals.map(v => `
+          <label class="tgt"><input type="checkbox" class="t-cb" value="${escapeHtml(v)}"
+            ${excluded(c, slot).includes(v) ? "" : "checked"}>${escapeHtml(v)}</label>`).join("")}</div>
+        <div class="muted" style="font-size:12px">Unchecked stays out of this
+          command only. To switch one off everywhere, or give it another name,
+          use <a href="#" class="to-lists">Devices &amp; Lists</a>.</div>
+      </div>`).join("")}
+    <div class="dlg-sec">
+      <h4>Your own phrasings</h4>
+      <div class="extra-list" data-i="${card.i}"></div>
+      <div class="extra-add">
+        <input type="text" class="extra-input" data-i="${card.i}"
+               placeholder="add a phrasing, e.g. {0..100:minutes} minute timer">
+        <button class="mini extra-btn" data-i="${card.i}">Add</button>
+        <span class="extra-fb" data-i="${card.i}"></span>
+      </div>
+    </div>
+    <div class="dlg-sec">
+      <span class="muted" style="font-size:12px">Technical id:
+      <code>${c.intent}/${c.combo}${card.domain ? " · " + card.domain : ""}</code></span>
+    </div>`;
+
+  $("d-body").querySelectorAll(".targets").forEach(host => {
+    const slot = host.dataset.slot;
+    host.querySelectorAll(".t-cb").forEach(cb => cb.addEventListener("change", () => {
+      const drop = new Set(excluded(c, slot));
+      cb.checked ? drop.delete(cb.value) : drop.add(cb.value);
+      setExcluded(c, slot, [...drop]);
+      markDirty();
+    }));
+  });
+  $("d-body").querySelectorAll(".to-lists").forEach(a => a.addEventListener("click", e => {
+    e.preventDefault();
+    $("detail").close();
+    document.querySelector('nav.tabs button[data-tab="lists"]').click();
+  }));
+  renderExtraList(card.i);
+  $("d-body").querySelector(".extra-btn").addEventListener("click", e => addExtra(e.target.dataset.i));
+  $("d-body").querySelector(".extra-input").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); addExtra(e.target.dataset.i); }
+  });
+  $("detail").showModal();
+}
+
+/* ---- extra phrasings on built-in commands (inside the details dialog) ---- */
 function escapeHtml(s){ return s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
-function extraSummary(c){ const n=(c.extra||[]).length; return "Customize" + (n?` (${n})`:""); }
 
 function renderExtraList(i) {
-  const host = $("combos").querySelector(`.extra-list[data-i="${i}"]`);
+  const host = $("d-body").querySelector(`.extra-list[data-i="${i}"]`);
   if (!host) return;
   const c = S.combos[i];
   host.innerHTML = (c.extra||[]).map((s,j) =>
@@ -503,15 +733,13 @@ function renderExtraList(i) {
   host.querySelectorAll(".ex-rm").forEach(btn => btn.addEventListener("click", () => {
     S.combos[i].extra.splice(+btn.dataset.j, 1);
     renderExtraList(i); markDirty();
-    const sum = $("combos").querySelector(`details.extras[data-i="${i}"] > summary`);
-    if (sum) sum.textContent = extraSummary(S.combos[i]);
   }));
 }
 
 async function addExtra(i) {
   const c = S.combos[i];
-  const input = $("combos").querySelector(`.extra-input[data-i="${i}"]`);
-  const fb = $("combos").querySelector(`.extra-fb[data-i="${i}"]`);
+  const input = $("d-body").querySelector(`.extra-input[data-i="${i}"]`);
+  const fb = $("d-body").querySelector(`.extra-fb[data-i="${i}"]`);
   const s = input.value.trim();
   if (!s) return;
   fb.className = "extra-fb muted"; fb.textContent = "checking…";
@@ -525,8 +753,6 @@ async function addExtra(i) {
   if (r.ok) {
     (c.extra || (c.extra = [])).push(s);
     renderExtraList(i); input.value = "";
-    const sum = $("combos").querySelector(`details.extras[data-i="${i}"] > summary`);
-    if (sum) sum.textContent = extraSummary(c);
     fb.className = "extra-fb ok";
     fb.textContent = `✓ ${r.intent} ${JSON.stringify(r.slots||{})}`;
     markDirty();
@@ -536,29 +762,74 @@ async function addExtra(i) {
   }
 }
 
-function updateGroupToggle(group) {
-  const items = S.combos.filter(c => c.group === group);
-  if (!items.length) return;
-  const on = items.filter(c => c.enabled).length;
-  const sel = `[data-group="${CSS.escape(group)}"]`;
-  const t = document.querySelector(".group-toggle" + sel);
-  if (t) { t.checked = on === items.length; t.indeterminate = on > 0 && on < items.length; }
-  const cnt = document.querySelector(".gcount" + sel);
-  if (cnt) cnt.textContent = `${on}/${items.length}`;
-}
+/* ---- devices & lists -------------------------------------------------------
+   The global half of targeting: switch a device/area/floor off for voice, and
+   give it names of your own. An alias is resolved back to the Home Assistant
+   name before the intent is sent, so it only works through Speech-to-Phrase --
+   Home Assistant itself has never heard of it. */
 
-/* ---- devices & lists ---- */
-function chips(items){ return (items&&items.length) ? items.map(x=>`<span class="chip">${x}</span>`).join("") : '<span class="empty">none</span>'; }
+function chips(items){ return (items&&items.length) ? items.map(x=>`<span class="chip">${escapeHtml(x)}</span>`).join("") : '<span class="empty">none</span>'; }
 function usedBy(items){ return (items&&items.length) ? `<div class="usedby"><b>Used by:</b> ${items.join(", ")}</div>` : '<div class="usedby empty">Used by no enabled command</div>'; }
 
+/* Mutable override entry for one value; defaults mean "unchanged". */
+function ovSpec(kind, value) {
+  const doc = (S.overrides ||= {});
+  const section = (doc[kind] ||= {});
+  return (section[value] ||= {});
+}
+function ovVoice(kind, value){ return ovSpec(kind, value).voice !== false; }
+function ovAliases(kind, value){ return ovSpec(kind, value).aliases || []; }
+
+function valueRow(kind, value) {
+  const spec = ovSpec(kind, value);
+  const aliases = (spec.aliases || []).join(", ");
+  const on = spec.voice !== false;
+  return `<div class="val-row ${on ? "" : "voice-off"}" data-kind="${kind}" data-value="${escapeHtml(value)}">
+    <label class="sw" title="Recognize this by voice">
+      <input type="checkbox" class="v-voice" ${on ? "checked" : ""}><span class="track"></span>
+    </label>
+    <span class="v-name">${escapeHtml(value)}</span>
+    <input type="text" class="v-alias" placeholder="also called…" value="${escapeHtml(aliases)}">
+    <label class="v-replace ${aliases ? "" : "hide"}" title="Stop recognizing the Home Assistant name">
+      <input type="checkbox" class="v-repl" ${spec.replace ? "checked" : ""}> only
+    </label>
+  </div>`;
+}
+
 function renderLists() {
-  const rows = [];
-  rows.push(`<div class="list-row"><h3>Areas</h3>${chips(S.areas.values)}${usedBy(S.areas.used_by)}</div>`);
-  rows.push(`<div class="list-row"><h3>Floors</h3>${chips(S.floors.values)}${usedBy(S.floors.used_by)}</div>`);
+  const sec = (title, sub, kind, values, used) => `
+    <div class="list-row">
+      <h3>${title} <span class="muted">${sub}</span></h3>
+      ${usedBy(used)}
+      ${(values || []).length ? (values.map(v => valueRow(kind, v)).join(""))
+                              : '<div class="empty">none</div>'}
+    </div>`;
+  const rows = [
+    sec("Areas", "{area}", "areas", S.areas.values, S.areas.used_by),
+    sec("Floors", "{floor}", "floors", S.floors.values, S.floors.used_by),
+  ];
   const dom = S.devices_by_domain || {};
   for (const d of Object.keys(dom).sort())
-    rows.push(`<div class="list-row"><h3>${d} <span class="muted">{name}</span></h3>${chips(dom[d].values)}${usedBy(dom[d].used_by)}</div>`);
+    rows.push(sec(escapeHtml(d), "{name}", "entities", dom[d].values, dom[d].used_by));
   $("lists").innerHTML = rows.join("");
+
+  $("lists").querySelectorAll(".val-row").forEach(row => {
+    const { kind, value } = row.dataset;
+    const spec = ovSpec(kind, value);
+    row.querySelector(".v-voice").addEventListener("change", e => {
+      spec.voice = e.target.checked;
+      row.classList.toggle("voice-off", !e.target.checked);
+      markDirty();
+    });
+    row.querySelector(".v-alias").addEventListener("input", e => {
+      spec.aliases = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
+      row.querySelector(".v-replace").classList.toggle("hide", !spec.aliases.length);
+      markDirty();
+    });
+    row.querySelector(".v-repl").addEventListener("change", e => {
+      spec.replace = e.target.checked; markDirty();
+    });
+  });
 }
 
 /* ---- test ---- */
@@ -614,11 +885,11 @@ async function runTest() {
 /* enabled.json entry for a combo: [intent,combo] (all), [intent,combo,[domains]]
    (subset), or null (off). */
 function comboSelection(c) {
-  if ((c.domains || []).length > 1) {
+  const doms = c.domains || [];
+  if (doms.length) {
     const ed = c.enabled_domains || [];
     if (!ed.length) return null;
-    if (ed.length === c.domains.length) return [c.intent, c.combo];
-    return [c.intent, c.combo, ed];
+    return ed.length === doms.length ? [c.intent, c.combo] : [c.intent, c.combo, ed];
   }
   return c.enabled ? [c.intent, c.combo] : null;
 }
@@ -637,6 +908,7 @@ async function save() {
         extra_sentences: Object.fromEntries(
           S.combos.filter(c => c.extra && c.extra.length).map(c => [`${c.intent}/${c.combo}`, c.extra])),
         commands: collectCommands(),
+        overrides: S.overrides || {},
       })
     })).json();
     st.className = res.ok ? "ok" : "err";
@@ -656,6 +928,26 @@ $("add-cmd").addEventListener("click", () => {
   renderCustom(); markDirty();
 });
 $("max-score").addEventListener("input", markDirty);
+$("cmd-search").addEventListener("input", e => {
+  search = e.target.value.trim().toLowerCase(); renderCombos();
+});
+$("cmd-filter").addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  filter = b.dataset.filter;
+  [...e.currentTarget.children].forEach(x => x.classList.toggle("on", x === b));
+  renderCombos();
+});
+$("cmd-reset").addEventListener("click", () => {
+  S.combos.forEach(c => {
+    const on = RECOMMENDED.includes(c.importance);
+    c.enabled = on;
+    c.enabled_domains = on ? [...(c.domains || [])] : [];
+  });
+  renderCombos(); markDirty();
+});
+$("d-close").addEventListener("click", () => $("detail").close());
+$("detail").addEventListener("click", e => { if (e.target.id === "detail") $("detail").close(); });
 $("test-btn").addEventListener("click", runTest);
 $("test-text").addEventListener("keydown", e => { if (e.key==="Enter") runTest(); });
 $("lang").addEventListener("change", () => {

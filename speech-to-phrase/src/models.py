@@ -5,6 +5,11 @@ Models are downloaded from the rhasspy-speech HuggingFace dataset
 as ``<name>.tar.gz`` (e.g. ``en_US-coqui``) and extracted into a local models
 directory given on the command line (``--models-dir``, default ``/data/models``
 in the add-on). Re-download is skipped if the model is already present.
+
+The container image may also ship a model under ``<addon_root>/models`` (see the
+Dockerfile's ``BUNDLE_MODEL``). That copy is used in preference to downloading,
+so a fresh install starts without network access; it is read-only and never
+written to, and ``--models-dir`` still wins if the same model is present there.
 """
 import logging
 import os
@@ -19,6 +24,8 @@ from typing import Optional
 _LOGGER = logging.getLogger("speech-to-phrase.models")
 
 HF_BASE = "https://huggingface.co/datasets/rhasspy/rhasspy-speech/resolve/main/models"
+# Models baked into the image at build time, if any.
+BUNDLED_MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 TOOLS_BASE = "https://huggingface.co/datasets/rhasspy/rhasspy-speech/resolve/main/tools"
 
 # machine() -> stt_onlyprobs binary name (needed only for the coqui backend).
@@ -118,11 +125,19 @@ def resolve_backend(language: str, requested: str) -> str:
 
 
 def ensure_model(name: str, models_dir: Path) -> Path:
-    """Return <models_dir>/<name>, downloading + extracting it if absent."""
+    """Return <models_dir>/<name>, downloading + extracting it if absent.
+
+    A copy bundled into the image is used before reaching for the network, so a
+    fresh install with the default language never waits on a download."""
     models_dir = Path(models_dir)
     target = models_dir / name
     if _present(target):
         return target
+
+    bundled = BUNDLED_MODELS_DIR / name
+    if _present(bundled):
+        _LOGGER.debug("Using acoustic model '%s' bundled in the image", name)
+        return bundled
 
     url = f"{HF_BASE}/{name}.tar.gz"
     _LOGGER.info("Downloading acoustic model '%s' from %s", name, url)

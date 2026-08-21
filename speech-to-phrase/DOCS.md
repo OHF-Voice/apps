@@ -51,6 +51,21 @@ the grammar.
 | `token_bonus` | Word-insertion reward per emitted token. Leave it unset to use a per-backend default (Citrinet `2.0`, Coqui `0.0` — the cost scales differ and Coqui has not been measured); `0` disables it. The FST decode picks the lowest-cost path, and audio a path doesn't account for is absorbed by CTC blanks almost for free — so without a bonus a shorter in-grammar phrase can beat the longer one actually spoken ("set the office light brightness to ten percent" heard as "office light off"). Too high and the decoder starts inserting words. Re-fit with `tools/audio_test.py --token-bonus`. |
 | `debug_logging` | Verbose logs. |
 
+## Image size and the bundled model
+
+The build compiles speech-to-phrase-lib's native OpenFST module, so it needs
+`cmake`, `g++`, `libfst-dev` and `git`. Those are purged in the same layer they
+are installed in (~200 MB of toolchain that never reaches the shipped image);
+the OpenFST *runtime* library is detected from what the built module links and
+marked manual so `--auto-remove` can't take it with them.
+
+The default English Citrinet model (~140 MB) is baked in, so a fresh install
+starts without downloading anything. A model already present in `--models-dir`
+(`/data/models`, which survives add-on updates) still wins, so a user who
+downloaded one keeps using it. Build a lean image that downloads on demand with:
+
+    docker build --build-arg BUNDLE_MODEL= ...
+
 ## Developer notes
 
 - Curated templates: `sentences/<lang>/<Intent>/<slot_combination>.yaml`

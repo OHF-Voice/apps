@@ -9,27 +9,73 @@ ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 COPY requirements.txt ./
 
+# cmake/g++/libfst-dev/git exist only to compile speech-to-phrase-lib's native
+# _fst module, and are purged in the same layer so they never reach the shipped
+# image (~200 MB of toolchain).
+#
+# The OpenFST *runtime* library has to survive that purge: _fst links
+# libfst.so.<N> dynamically, and only the -dev package was asked for by name, so
+# apt considers the runtime one auto-installed and --auto-remove would take it
+# with the rest. Rather than hardcode a package name that tracks the soname
+# (libfst26 today), every shared library the built module actually links is
+# looked up and marked manual. Nothing to update when OpenFST bumps.
+#
+# readlink -f matters: ldd reports /lib/..., dpkg records /usr/lib/... under
+# usrmerge, so querying ldd's path directly matches nothing and the loop would
+# quietly keep nothing at all. The counter turns that into a build failure, and
+# the import at the end is the backstop -- it loads _fst, so a missing runtime
+# library fails the build rather than shipping a broken image.
 RUN \
     apt-get update \
     && apt-get install -y --no-install-recommends \
         netcat-traditional \
         python3 \
         python3-pip \
-        git \
-        libfst-dev \
-        libfst-tools \
+    && apt-get install -y --no-install-recommends \
         cmake \
         g++ \
+        git \
+        libfst-dev \
     && pip3 install --no-cache-dir -U setuptools wheel \
     && pip3 install --no-cache-dir -r requirements.txt \
-    && rm -rf /var/lib/apt/lists/*
+    && fst_so="$(python3 -c 'import glob, pathlib, speech_to_phrase as s; print(glob.glob(str(pathlib.Path(s.__file__).parent / "_fst*.so"))[0])')" \
+    && ldd "$fst_so" \
+    && kept=0 \
+    && for lib in $(ldd "$fst_so" | awk '/=> \// {print $3}'); do \
+           pkg="$(dpkg -S "$(readlink -f "$lib")" 2>/dev/null | cut -d: -f1 | head -1)"; \
+           if [ -n "$pkg" ]; then \
+               echo "keeping $pkg (provides $lib)"; \
+               apt-mark manual "$pkg"; \
+               kept=$((kept + 1)); \
+           fi; \
+       done \
+    && if [ "$kept" -eq 0 ]; then \
+           echo "ERROR: mapped none of _fst's shared libraries to packages; refusing to purge" >&2; \
+           exit 1; \
+       fi \
+    && apt-get purge -y --auto-remove cmake g++ git libfst-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /root/.cache \
+    && python3 -c "import speech_to_phrase; print('speech-to-phrase-lib import OK after purge')"
+
+# Bundle the default acoustic model so a fresh install works offline and doesn't
+# spend its first boot downloading ~140 MB. Only src/models.py is copied first,
+# so editing the rest of the app doesn't invalidate this layer and re-download.
+# Build with --build-arg BUNDLE_MODEL= for a lean image that fetches on demand.
+ARG BUNDLE_MODEL=stt_en_citrinet_512
+COPY src/models.py ./src/models.py
+RUN \
+    if [ -n "${BUNDLE_MODEL}" ]; then \
+        python3 -c "import sys; sys.path.insert(0, 'src'); import models; from pathlib import Path; \
+                    models.ensure_model('${BUNDLE_MODEL}', Path('/usr/src/models'))" \
+        && du -sh "/usr/src/models/${BUNDLE_MODEL}"; \
+    fi
 
 # Add-on application + intents metadata (sentences/responses now come from the
-# home-assistant-intents package's speech_to_phrase tagged subset).
+# home-assistant-intents package's speech_to_phrase tagged subset). config.yaml
+# is read at runtime for the version advertised over Wyoming.
 COPY src/ ./src/
-COPY example_values.yaml ./example_values.yaml
-# Read at runtime for the version advertised over Wyoming.
-COPY config.yaml ./config.yaml
+COPY example_values.yaml config.yaml ./
 
 WORKDIR /
 COPY rootfs /

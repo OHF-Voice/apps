@@ -39,6 +39,13 @@
 - Fixed: an unparseable `max_score` was persisted as `0.1`, a gate that accepts
   nothing; it is now rejected and the previous value stands.
 - Dropped the unused `share:rw` mapping from the add-on manifest.
+- Smaller image: the C++/CMake/git toolchain needed to build the native OpenFST
+  module is now purged in the layer that installs it (~200 MB), keeping only
+  the shared libraries the built module actually links against.
+- The default English Citrinet model is bundled into the image, so a fresh
+  install no longer downloads ~140 MB on first boot and works offline. A model
+  already in `/data/models` still takes precedence; `--build-arg BUNDLE_MODEL=`
+  builds without it.
 
 ## 0.1.0
 

@@ -1,6 +1,8 @@
 data/
 local/
 .claude/
+# Populated only inside the container image (Dockerfile BUNDLE_MODEL).
+/models/
 tests/wav/.tts_cache/
 __pycache__/
 *.pyc

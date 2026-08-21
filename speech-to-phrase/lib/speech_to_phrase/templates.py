@@ -522,6 +522,41 @@ def _spellout_words(num: int, locale: str) -> Tuple[str, ...]:
     return tuple(unicodedata.normalize("NFC", text).replace("-", " ").split())
 
 
+# Numerals that inflect for the gender of the noun they count. ICU has separate
+# rulesets for these (%spellout-cardinal-feminine and friends) but the icu_rbnf
+# binding exposes no ruleset argument, so it always returns a single reading --
+# the masculine. A grammar built from that has no path for the other forms:
+# Czech "nastav časovač na dvě hodiny" (feminine "hodiny" needs "dvě", not
+# "dva") cannot be decoded at all, however clearly it is spoken. Only the low
+# numerals inflect; from five up the counted noun takes the genitive plural and
+# the numeral stops changing.
+_NUMBER_VARIANTS: Dict[str, Dict[int, Tuple[str, ...]]] = {
+    "cs": {1: ("jeden", "jedna", "jedno"), 2: ("dva", "dvě")},
+    "sk": {1: ("jeden", "jedna", "jedno"), 2: ("dva", "dve")},
+    "ru": {1: ("один", "одна", "одно"), 2: ("два", "две")},
+    "uk": {1: ("один", "одна", "одне"), 2: ("два", "дві")},
+    "pl": {1: ("jeden", "jedna", "jedno"), 2: ("dwa", "dwie")},
+    "hr": {1: ("jedan", "jedna", "jedno"), 2: ("dva", "dvije")},
+    "sl": {1: ("en", "ena", "eno"), 2: ("dva", "dve")},
+}
+
+
+def _spellout_variants(num: int, locale: str) -> Tuple[Tuple[str, ...], ...]:
+    """Every spoken form of ``num``, each as a tuple of words.
+
+    Usually just what ICU gives. Where a language's low numerals agree in
+    gender, every form is offered so the grammar accepts whichever one the
+    speaker's noun requires; the FST just gains an alternative branch.
+    """
+    base = _spellout_words(num, locale)
+    variants = _NUMBER_VARIANTS.get(
+        locale.split("-")[0].split("_")[0].lower(), {}
+    ).get(num)
+    if not variants:
+        return (base,)
+    return tuple(dict.fromkeys((base, *((v,) for v in variants))))
+
+
 def _expand_ref(
     node: Node, list_values: Mapping[str, Sequence[str]], locale: str
 ) -> List[Sequence[str]]:
@@ -534,7 +569,7 @@ def _expand_ref(
         range_words: List[Sequence[str]] = []
         for item in node.items:
             if len(item) == 1:
-                range_words.append(_spellout_words(item[0], locale))
+                range_words.extend(_spellout_variants(item[0], locale))
             else:
                 start, end, step = item
                 if start <= end:
@@ -543,7 +578,7 @@ def _expand_ref(
                     step = -abs(step)
 
                 for num in range(start, end + step, step):
-                    range_words.append(_spellout_words(num, locale))
+                    range_words.extend(_spellout_variants(num, locale))
 
         return range_words
 

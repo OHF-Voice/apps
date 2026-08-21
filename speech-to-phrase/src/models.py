@@ -76,7 +76,13 @@ MODEL_NAMES = {
     "en": {"citrinet": "stt_en_citrinet_512", "coqui": "en_US-coqui"},
     "de": {"citrinet": "stt_de_citrinet_1024", "coqui": "de_DE-coqui"},
     "es": {"citrinet": "stt_es_citrinet_512", "coqui": "es_ES-coqui"},
-    "fr": {"citrinet": "stt_fr_citrinet_1024_gamma_0_25", "coqui": "fr_FR-rhasspy"},
+    # French uses the Conformer, not stt_fr_citrinet_1024_gamma_0_25: that model
+    # cannot resolve the "verrouille"/"déverrouille" prefix, decoding "unlock the
+    # front door" as "lock the front door" at 0.73 -- confidently, so the score
+    # gate does not catch it. Choosing a different lock verb only moves the error
+    # to the more dangerous direction. The Conformer decodes both correctly
+    # (0.17/0.23) and takes the language from 55/56 to 56/56 commands resolved.
+    "fr": {"citrinet": "stt_fr_conformer_ctc_large", "coqui": "fr_FR-rhasspy"},
     "it": {"citrinet": "stt_it_conformer_ctc_large", "coqui": "it_IT-coqui"},
     "zh": {"citrinet": "stt_zh_citrinet_512"},
     "ru": {"citrinet": "stt_ru_conformer_ctc_large"},

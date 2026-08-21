@@ -106,25 +106,31 @@ def expected_decode(example: str, language: str) -> str:
 # intents repo's own test fixtures so the grammar is trained on realistic
 # localized names rather than English placeholders.
 # --------------------------------------------------------------------------
-WANTED_DOMAINS = ("light", "fan", "cover", "lock", "switch", "media_player", "climate", "sensor")
+WANTED_DOMAINS = (
+    "light", "fan", "cover", "lock", "valve", "switch", "media_player",
+    "climate", "sensor",
+)
 
 
-def load_fixtures(intents_repo: Path, language: str, per_domain: int = 2):
+def load_fixtures(intents_repo: Path, language: str):
+    """Every entity of an addressable domain, not a sample of them.
+
+    The examples are written against the whole fixture set, so training on a
+    per-domain sample makes an example name an entity the grammar cannot emit
+    -- which then fails as an out-of-grammar utterance and looks like a template
+    problem. Taking all of them also builds a more realistic grammar: a real
+    install has many devices per domain, not two.
+    """
     sys.path.insert(0, str(intents_repo))
     from script.intentfest.util import load_fixtures as _load  # noqa: PLC0415
 
     fixtures = _load(language)
     entities: Dict[str, str] = {}
-    counts: Dict[str, int] = {}
     for entity in fixtures.get("entities") or []:
         domain = str(entity.get("id", "")).split(".")[0]
         name = str(entity.get("name") or "").strip()
-        if domain not in WANTED_DOMAINS or not name:
-            continue
-        if counts.get(domain, 0) >= per_domain:
-            continue
-        entities[name] = domain
-        counts[domain] = counts.get(domain, 0) + 1
+        if domain in WANTED_DOMAINS and name:
+            entities[name] = domain
 
     areas = [str(a.get("name")) for a in (fixtures.get("areas") or [])][:3]
     floors = [str(f.get("name")) for f in (fixtures.get("floors") or [])][:2]
@@ -192,6 +198,32 @@ def lean_examples(intents_repo: Path, language: str) -> List[Tuple[str, str]]:
             if example:
                 out.append((f"{path.parent.name}/{path.stem}", example))
     return out
+
+
+def names_in_grammar(list_values: Dict[str, List[str]]) -> set:
+    """Every entity name the compiled grammar can actually produce."""
+    names = set()
+    for key, values in list_values.items():
+        if key.startswith("name"):
+            names.update(norm(v) for v in values)
+    return names
+
+
+def unreachable_name(example: str, entities: Dict[str, str], in_grammar: set) -> str:
+    """The entity an example names, when the grammar cannot produce it.
+
+    A tagged block can be dropped from the Speech-to-Phrase grammar and still
+    belong in home-assistant-intents: capability gating removes, say, the valve
+    branch of HassSetPosition when no valve supports set_position. An example
+    built on that block names an entity no template can emit, so decoding it
+    measures nothing about the templates -- it just samples what out-of-grammar
+    audio happens to hit. Report those separately instead of scoring them.
+    """
+    spoken = norm(example)
+    for name in entities:
+        if norm(name) in spoken and norm(name) not in in_grammar:
+            return name
+    return ""
 
 
 # --------------------------------------------------------------------------
@@ -289,9 +321,15 @@ def main() -> int:
     if args.limit:
         cases = cases[: args.limit]
 
+    in_grammar = names_in_grammar(list_values)
     results = []
+    skipped = []
     exact = usable = accepted = 0
     for combo, example in cases:
+        unreachable = unreachable_name(example, entities, in_grammar)
+        if unreachable:
+            skipped.append((combo, example, unreachable))
+            continue
         audio = tts_wav(example, args.engine_id, tts_language, args.cache_dir)
         audio = trim_silence(normalize_level(audio))
         result = rec.transcribe(audio)
@@ -336,9 +374,14 @@ def main() -> int:
               f"spoke={example!r} heard={heard!r}")
 
     total = len(results)
+    for combo, example, name in skipped:
+        print(f"~ {combo:38} {'NOT_IN_GRAMMAR':14} "
+              f"'{name}' is gated out of the grammar; not scored ({example!r})")
     print(f"\n{args.language}: EXACT {exact}/{total}, "
           f"same command {usable}/{total}, "
-          f"accepted (same command and score<={gate}) {accepted}/{total}")
+          f"accepted (same command and score<={gate}) {accepted}/{total}"
+          + (f"; {len(skipped)} not scored (block gated out of the grammar)"
+             if skipped else ""))
     if args.json_out:
         args.json_out.write_text(
             json.dumps({"language": args.language, "backend": args.backend,

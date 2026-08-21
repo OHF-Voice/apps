@@ -147,7 +147,8 @@ def sample_words(node: Node, rng: random.Random, locale: str) -> List[str]:
         return sample_words(rng.choice(node.options), rng, locale)
     if isinstance(node, NumberRangeNode):
         item = rng.choice(node.items)
-        return _spellout_words(rng.choice(_range_values(item)), locale)
+        # _spellout_words is memoized and returns an immutable tuple; copy it.
+        return list(_spellout_words(rng.choice(_range_values(item)), locale))
     if isinstance(node, ListRefNode):
         return rng.choice(LIST_VALUES[node.name]).split()
     if isinstance(node, SequenceNode):
@@ -180,7 +181,9 @@ def enumerate_realizations(
             out = []
             for item in n.items:
                 for v in _range_values(item):
-                    out.append(_spellout_words(v, locale))
+                    # Memoized -> tuple; the sequence builder below concatenates
+                    # onto lists, so copy rather than aliasing the cache entry.
+                    out.append(list(_spellout_words(v, locale)))
             return out
         if isinstance(n, ListRefNode):
             return [v.split() for v in LIST_VALUES[n.name]]
@@ -203,21 +206,29 @@ def enumerate_realizations(
 
 
 def load_templates(s2p_repo: Path, language: str) -> List[str]:
-    """Load templates, rewriting {name} to a domain-scoped name list per
-    sentence-set. A sentence whose name_domains match no entity is dropped (no
-    such device -> not a useful command), mirroring the add-on's entity gating."""
-    out: List[str] = []
-    for f in sorted((s2p_repo / "sentences" / language).rglob("*.yaml")):
-        for ss in (yaml.safe_load(f.read_text()) or {}).get("data", []):
-            domains = ss.get("name_domains")
-            for s in ss.get("sentences", []):
-                if "{name}" in s and domains:
-                    key = _name_list(domains)
-                    if not LIST_VALUES[key]:
-                        continue  # no entities in these domains -> drop sentence
-                    s = s.replace("{name}", "{" + key + "}")
-                out.append(s)
-    return list(dict.fromkeys(out))
+    """Templates for the whole enabled grammar, built by the add-on's own
+    trainer.
+
+    This used to walk a ``sentences/<lang>/*.yaml`` tree and do its own {name}
+    scoping. That tree is gone -- templates come from the home-assistant-intents
+    package now -- and a second copy of the scoping rules would drift from the
+    real one anyway. Going through training.assemble means the sweep measures
+    the grammar production actually compiles, and picks up the domain/capability
+    gating for free. Everything is enabled ("optional" tier) so the test hits the
+    widest grammar, which is the hardest case for the decoder."""
+    import presets as bi
+    import training
+
+    meta = bi.load_intents_meta()
+    combos = bi.available_combos(s2p_repo, language, meta)
+    enabled = bi.default_enabled(combos, "optional")
+    templates, list_values = training.assemble(
+        s2p_repo, language, enabled, [], ENTITIES, STATIC_LISTS
+    )
+    # sample_words/enumerate_realizations resolve {list} refs through this.
+    LIST_VALUES.clear()
+    LIST_VALUES.update({k: list(v) for k, v in list_values.items()})
+    return templates
 
 
 # --------------------------------------------------------------------------

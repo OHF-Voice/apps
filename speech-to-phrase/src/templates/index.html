@@ -136,6 +136,27 @@
   .usedby { color:var(--mut); font-size:12px; margin-top:3px; }
   .usedby b { color:#374151; font-weight:600; }
   .empty { color:var(--mut); font-style:italic; }
+  /* ---- debug mode: live recognition feed ---- */
+  .warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e;
+          border-radius:10px; padding:8px 12px; font-size:13px; margin:10px 0 0; }
+  .feed { margin-top:12px; overflow-x:auto; }
+  .feed table { width:100%; border-collapse:collapse; font-size:13px; }
+  .feed th { text-align:left; font-weight:600; color:var(--mut); font-size:12px;
+             padding:4px 10px 5px 0; border-bottom:1px solid var(--line);
+             white-space:nowrap; }
+  .feed td { padding:6px 10px 6px 0; border-bottom:1px solid #f1f5f9;
+             vertical-align:top; }
+  .feed td.num { font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .feed .said { font-size:14px; }
+  .feed tr.rejected .said { color:var(--mut); }
+  .feed .verdict { font-size:12px; white-space:nowrap; }
+  .tag { display:inline-block; font-size:11px; border-radius:999px; padding:1px 8px;
+         background:#eef2ff; color:#1e3a8a; white-space:nowrap; }
+  .tag.trig { background:#d7e9fb; color:#14538c; }
+  .tag.ans  { background:#d4f1ee; color:#0d6b64; }
+  .tag.cust { background:#fbe2cf; color:#8a4310; }
+  .tag.none { background:#e8e8e8; color:#555; }
+  .feed .detail { font-size:12px; color:var(--mut); margin-top:1px; }
 </style>
 </head>
 <body>
@@ -255,6 +276,24 @@
         source off to keep the grammar to what you configured here.</p>
       <div id="hass-sentences"></div>
     </div>
+
+    <div class="card">
+      <h2>Debug mode</h2>
+      <p class="sub">Watch what the recognizer hears: every utterance, the
+        command it matched and where that command came from, its score, and
+        whether the score gate accepted it. Use it to tune <b>Max score</b> —
+        rejections show you what the gate is turning away.</p>
+      <div class="val-row">
+        <label class="sw">
+          <input type="checkbox" id="debug-mode"><span class="track"></span>
+        </label>
+        <span class="v-name">Debug mode</span>
+        <span id="debug-count" class="v-count"></span>
+      </div>
+      <p class="usedby">Applies immediately — no save or retrain needed.</p>
+      <div id="debug-warn"></div>
+      <div id="debug-feed"></div>
+    </div>
   </section>
 </div>
 
@@ -288,6 +327,10 @@ async function loadState() {
   renderCustom();
   renderCombos();
   renderLists();
+  // A language switch means a different recognizer log; start the feed over.
+  debugSince = 0; debugRows = [];
+  renderDebug();
+  setDebugPolling(!!S.debug_mode);
   clearDirty();
 }
 
@@ -366,6 +409,94 @@ function renderHassSentences() {
     updateMeter(cards());
     markDirty();
   }));
+}
+
+/* ---- debug mode ------------------------------------------------------------
+   A live view of what the recognizer heard. While it's on the STT server hands
+   Home Assistant an empty transcript, so tuning the gate against commands that
+   *should* be rejected can't fire the ones that pass. Polled rather than pushed:
+   an utterance every few seconds doesn't justify a websocket. */
+const FEED_ROWS = 50;
+let debugTimer = null, debugSince = 0, debugRows = [];
+
+/* Source label -> (what to call it, tag colour, extra detail). */
+function originLabel(origin) {
+  if (!origin) return ["Not in the grammar", "none", ""];
+  const [kind, ...rest] = origin.source.split(":");
+  const detail = rest.join(":");
+  if (kind === "builtin") return ["Built-in command", "", detail];
+  if (kind === "custom") return ["Custom command", "cust", ""];
+  if (kind === "sentence_triggers") return ["Sentence trigger", "trig", ""];
+  if (kind === "question_answers") return ["Question answer", "ans", ""];
+  return [origin.source, "", ""];
+}
+
+function feedRow(e) {
+  const [label, tag, detail] = originLabel(e.origin);
+  const said = e.text
+    ? `<span class="said">${escapeHtml(e.text)}</span>`
+    : '<span class="said empty">no match</span>';
+  const when = new Date(e.at * 1000).toLocaleTimeString();
+  return `<tr class="${e.accepted ? "" : "rejected"}">
+    <td class="num muted">${when}</td>
+    <td>${said}${e.origin && e.origin.template !== e.text
+          ? `<div class="detail">${escapeHtml(e.origin.template)}</div>` : ""}</td>
+    <td><span class="tag ${tag}">${escapeHtml(label)}</span>${
+      detail ? `<div class="detail">${escapeHtml(detail)}</div>` : ""}</td>
+    <td class="num">${e.score == null ? "—" : e.score.toFixed(2)}
+      <span class="muted">/ ${Number(e.max_score).toFixed(2)}</span></td>
+    <td class="verdict">${e.accepted
+      ? '<span class="ok">accepted</span>'
+      : '<span class="err">rejected</span>'}</td>
+  </tr>`;
+}
+
+function renderDebugFeed() {
+  const host = $("debug-feed");
+  if (!$("debug-mode").checked) { host.innerHTML = ""; return; }
+  if (!debugRows.length) {
+    host.innerHTML = '<p class="empty">Listening — say something to your voice assistant.</p>';
+    return;
+  }
+  host.innerHTML = `<div class="feed"><table>
+    <thead><tr><th>Time</th><th>Heard</th><th>Source</th><th>Score</th><th></th></tr></thead>
+    <tbody>${debugRows.map(feedRow).join("")}</tbody></table></div>`;
+}
+
+function renderDebug() {
+  const on = !!S.debug_mode;
+  $("debug-mode").checked = on;
+  $("debug-count").textContent = on ? "on — Home Assistant receives nothing" : "off";
+  // The Wyoming server serves one language. A toggle on any other is stored but
+  // has nothing listening, which is worth saying rather than looking broken.
+  const other = S.stt_language && S.lang && S.stt_language !== S.lang;
+  $("debug-warn").innerHTML = other
+    ? `<p class="warn">Speech-to-text is running for
+       <b>${escapeHtml(S.stt_language)}</b>, so nothing will appear here while
+       <b>${escapeHtml(S.lang)}</b> is selected.</p>`
+    : (on ? '<p class="warn">Home Assistant is receiving an empty transcript for '
+          + 'every utterance. Switch debug mode off when you\'re done.</p>' : "");
+  renderDebugFeed();
+}
+
+async function pollTranscriptions() {
+  try {
+    const r = await (await fetch("api/transcriptions?lang="
+      + encodeURIComponent($("lang").value) + "&since=" + debugSince)).json();
+    if (!r.debug_mode) {   // switched off elsewhere (or the server restarted)
+      S.debug_mode = false; setDebugPolling(false); renderDebug(); return;
+    }
+    if (r.entries && r.entries.length) {
+      debugSince = r.last_id;
+      debugRows = r.entries.reverse().concat(debugRows).slice(0, FEED_ROWS);
+      renderDebugFeed();
+    }
+  } catch (e) { /* transient: the next tick retries */ }
+}
+
+function setDebugPolling(on) {
+  if (debugTimer) { clearInterval(debugTimer); debugTimer = null; }
+  if (on) { pollTranscriptions(); debugTimer = setInterval(pollTranscriptions, 1500); }
 }
 
 /* ---- domains available for {name} filtering ---- */
@@ -751,6 +882,26 @@ $("add-cmd").addEventListener("click", () => {
   renderCustom(); markDirty();
 });
 $("max-score").addEventListener("input", markDirty);
+/* Debug mode applies at once (it doesn't touch the grammar), so it posts on
+   change rather than waiting for Save -- and therefore never marks dirty. */
+$("debug-mode").addEventListener("change", async e => {
+  const on = e.target.checked;
+  S.debug_mode = on;
+  debugSince = 0; debugRows = [];
+  renderDebug();
+  try {
+    await fetch("api/debug_mode", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ lang: $("lang").value, enabled: on }),
+    });
+  } catch (err) {
+    S.debug_mode = !on; renderDebug();
+    $("status").className = "err";
+    $("status").textContent = "Could not change debug mode: " + err;
+    return;
+  }
+  setDebugPolling(on);
+});
 $("cmd-search").addEventListener("input", e => {
   search = e.target.value.trim().toLowerCase(); renderCombos();
 });

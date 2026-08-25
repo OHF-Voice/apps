@@ -31,6 +31,7 @@ from flask import Flask, jsonify, render_template, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 import custom_commands as cc
+import debug_log
 import extra_sentences as ex
 import hass_sentences as hs
 import models
@@ -211,8 +212,49 @@ def create_app(cfg) -> Flask:
                 # global on/off switches; anything else already in the document
                 # (aliases, per-command exclusions) rides along untouched.
                 "overrides": overrides.load_doc(data_dir, lang),
+                "debug_mode": settings.get_bool(data_dir, lang, "debug_mode", False),
+                # The Wyoming server serves one language; a debug toggle on any
+                # other is stored but has nothing listening.
+                "stt_language": cfg.language,
             }
         )
+
+    @app.route("/api/debug_mode", methods=["POST"])
+    def api_debug_mode():
+        """Toggle debug mode. Applied immediately -- it changes only how the STT
+        server reports and whether it answers Home Assistant, not the grammar, so
+        making the user save (and retrain) for it would be a lie about the cost."""
+        body = request.get_json(force=True)
+        lang = body.get("lang", cfg.language)
+        enabled = bool(body.get("enabled"))
+        settings.set_bool(data_dir, lang, "debug_mode", enabled)
+        if not enabled:
+            debug_log.clear()
+        _LOGGER.info("Debug mode %s for '%s'", "on" if enabled else "off", lang)
+        return jsonify({"ok": True, "debug_mode": enabled})
+
+    @app.route("/api/transcriptions")
+    def api_transcriptions():
+        """Recognitions since `since`, each tagged with the sentence source that
+        produced it. Polled by the UI while debug mode is on."""
+        lang = request.args.get("lang", cfg.language)
+        try:
+            since = int(request.args.get("since", 0))
+        except (TypeError, ValueError):
+            since = 0
+        entries = debug_log.entries(since=since)
+        if entries:
+            attributor = _attributor(cfg, lang)
+            for entry in entries:
+                entry["origin"] = (
+                    attributor.attribute(entry["text"])
+                    if (attributor and entry["text"]) else None
+                )
+        return jsonify({
+            "entries": entries,
+            "last_id": debug_log.last_id(),
+            "debug_mode": settings.get_bool(data_dir, lang, "debug_mode", False),
+        })
 
     @app.route("/api/save", methods=["POST"])
     def api_save():
@@ -336,6 +378,49 @@ def _hass_sentences_grouped(cfg, lang: str) -> Dict[str, List[str]]:
 def _hass_sentences(cfg, lang: str) -> List[str]:
     grouped = _hass_sentences_grouped(cfg, lang)
     return [s for source in hs.SOURCES for s in grouped[source]]
+
+
+# Source attributor per (language, grammar fingerprint). Built only when the
+# debug view asks for one, and thrown away when the grammar is retrained -- an
+# attributor from the previous grammar would name a source for a phrase the
+# recognizer can no longer produce.
+_attributors: Dict[tuple, object] = {}
+
+
+def _attributor(cfg, lang: str):
+    """A sources.Attributor for `lang`'s current grammar, or None if the grammar
+    can't be assembled. Cached on the fingerprint the trainer recorded."""
+    import sources
+
+    data_dir = Path(cfg.data)
+    fp = None
+    meta_path = data_dir / lang / "grammar.meta.json"
+    if meta_path.exists():
+        try:
+            fp = json.loads(meta_path.read_text()).get("fingerprint")
+        except Exception:  # noqa: BLE001
+            fp = None
+    key = (lang, fp)
+    if key in _attributors:
+        return _attributors[key]
+    try:
+        combos = bi.available_combos(ADDON_ROOT, lang, bi.load_intents_meta())
+        by_source, list_values = training.assemble_sources(
+            ADDON_ROOT, lang,
+            _read_enabled(data_dir, lang, combos, cfg.default_importance),
+            cc.load(data_dir, lang),
+            _current_records(cfg, lang), _current_slot_lists(cfg, lang),
+            extra_sentences=ex.load(data_dir, lang),
+            ov=_overrides(cfg, lang),
+            hass_sentences=_hass_sentences_grouped(cfg, lang),
+        )
+        attributor = sources.build(by_source, list_values, lang)
+    except Exception:  # noqa: BLE001 -- the debug view must not 500
+        _LOGGER.exception("could not build the source index for '%s'", lang)
+        attributor = None
+    _attributors.clear()  # only the current grammar is ever of interest
+    _attributors[key] = attributor
+    return attributor
 
 
 def _hass_sentences_state(cfg, lang: str, records, slot_lists, ov) -> dict:

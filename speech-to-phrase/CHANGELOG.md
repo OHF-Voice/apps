@@ -2,6 +2,15 @@
 
 ## 0.2.0
 
+- Added **debug mode** (web UI, **Settings → Debug mode**): a live list of what
+  the recognizer heard, with the phrasing it matched, the source that phrasing
+  came from (built-in command / custom command / sentence trigger / question
+  answer), its score against the gate, and whether the gate accepted it. While
+  it is on the STT server hands Home Assistant an empty transcript for every
+  utterance, so tuning `max_score` against commands that *should* be rejected
+  cannot fire the ones that pass. Applies immediately — the toggle changes only
+  runtime reporting, not the grammar, so it needs no retrain.
+
 - Sentence triggers and question answers configured in Home Assistant are added
   to the grammar again, each behind its own option (`sentence_triggers`,
   `question_answers`, both on by default). A `conversation:` trigger phrase or an

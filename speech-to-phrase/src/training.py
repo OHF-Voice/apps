@@ -27,7 +27,7 @@ import logging
 import re
 import unicodedata
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 import aiohttp
 import yaml
@@ -328,11 +328,16 @@ def _expand_block(
     ov=None,
     combo_key: str = "",
     canonical_lists: Optional[Dict[str, List[str]]] = None,
+    labels: Optional[List[str]] = None,
+    label: str = "",
 ) -> None:
     """Append a block's sentences to `templates`, rewriting `{name}` to a
     domain-scoped list and applying the capability gate (see
     gating.scope_sentence). Slot values are normalised to the acoustic vocab; a
     sentence with no matching capable entity is dropped.
+
+    `labels`, when given, receives `label` once per appended template, so a
+    caller can recover which source produced each one (see `assemble_sources`).
 
     `ov` (overrides.Overrides) applies the user's per-command exclusions and
     aliases: an excluded slot is rebound to a command-scoped list so narrowing it
@@ -378,6 +383,8 @@ def _expand_block(
         if dropped:
             continue
         templates.append(rewritten)
+        if labels is not None:
+            labels.append(label)
 
 
 def _rebind(key: str, scoped: str) -> str:
@@ -412,7 +419,7 @@ def assemble(
     slot_lists: Dict[str, List[str]],
     extra_sentences: Optional[Dict[str, List[str]]] = None,
     ov=None,
-    hass_sentences: Optional[Sequence[str]] = None,
+    hass_sentences=None,
 ) -> Tuple[List[str], Dict[str, List[str]]]:
     """Build (templates, list_values) for the enabled built-ins + custom commands.
 
@@ -421,7 +428,57 @@ def assemble(
 
     `hass_sentences` are phrases Home Assistant itself is waiting to hear --
     sentence triggers and ask_question answers (see hass_sentences.py) -- added
-    to the grammar as plain sentences."""
+    to the grammar as plain sentences. Either a flat sequence, or
+    ``{source: [sentence]}`` to keep the sources apart in `assemble_sources`."""
+    templates, _labels, list_values = _assemble(
+        s2p_repo, lang, enabled, custom_commands, entities, slot_lists,
+        extra_sentences=extra_sentences, ov=ov, hass_sentences=hass_sentences,
+    )
+    return templates, list_values
+
+
+def assemble_sources(
+    s2p_repo: Path,
+    lang: str,
+    enabled: Sequence[Tuple[str, str]],
+    custom_commands: Sequence[dict],
+    entities: Dict[str, str],
+    slot_lists: Dict[str, List[str]],
+    extra_sentences: Optional[Dict[str, List[str]]] = None,
+    ov=None,
+    hass_sentences=None,
+) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
+    """Same grammar as :func:`assemble`, but grouped: ``({source: [template]},
+    list_values)``.
+
+    Source labels are ``builtin:<Intent>/<combo>``, ``custom:<n>``, and the
+    ``hass_sentences`` keys (``sentence_triggers`` / ``question_answers``). Used
+    by debug mode to say where a transcript came from -- grouping here rather
+    than reconstructing it later is what keeps that answer honest, since this is
+    the code that decided.
+    """
+    templates, labels, list_values = _assemble(
+        s2p_repo, lang, enabled, custom_commands, entities, slot_lists,
+        extra_sentences=extra_sentences, ov=ov, hass_sentences=hass_sentences,
+    )
+    by_source: Dict[str, List[str]] = {}
+    for template, label in zip(templates, labels):
+        by_source.setdefault(label, []).append(template)
+    return by_source, list_values
+
+
+def _assemble(
+    s2p_repo: Path,
+    lang: str,
+    enabled: Sequence[Tuple[str, str]],
+    custom_commands: Sequence[dict],
+    entities: Dict[str, str],
+    slot_lists: Dict[str, List[str]],
+    extra_sentences: Optional[Dict[str, List[str]]] = None,
+    ov=None,
+    hass_sentences=None,
+) -> Tuple[List[str], List[str], Dict[str, List[str]]]:
+    """(templates, per-template source labels, list_values)."""
     import custom_commands as cc
     import gating
     import overrides as ovr
@@ -431,6 +488,7 @@ def assemble(
     info = as_entity_info(entities)
     extras = extra_sentences or {}
     templates: List[str] = []
+    labels: List[str] = []
     # Slot values are normalized to match the lowercase acoustic vocab. The
     # shared area/floor lists carry their aliases (the matcher maps them back).
     list_values: Dict[str, List[str]] = {k: _norm_values(v) for k, v in slot_lists.items()}
@@ -472,30 +530,37 @@ def assemble(
                 info, templates, list_values,
                 ov=ov, combo_key=ovr.combo_key(intent, combo),
                 canonical_lists=slot_lists,
+                labels=labels, label=f"builtin:{intent}/{combo}",
             )
 
     # Custom commands (all modes contribute their sentences to the grammar).
-    for block in cc.grammar_sentences(list(custom_commands or [])):
+    for idx, block in enumerate(cc.grammar_sentences(list(custom_commands or []))):
         _expand_block(
             block["sentences"], block.get("name_domains") or None, None,
             info, templates, list_values, ov=ov, canonical_lists=slot_lists,
+            labels=labels, label=f"custom:{idx}",
         )
 
     # Sentence triggers / question answers configured in Home Assistant. They
     # carry no domain scope of their own, so `{name}` (if one somehow appears)
     # binds to every entity, exactly like a custom command's.
-    if hass_sentences:
+    for source, sentences in _hass_groups(hass_sentences):
         import hass_sentences as hs
 
         _expand_block(
             hs.grammar_templates(
-                hass_sentences, lang, bindable_lists(lang, slot_lists)
+                sentences, lang, bindable_lists(lang, slot_lists)
             ),
             None, None, info, templates, list_values,
             ov=ov, canonical_lists=slot_lists,
+            labels=labels, label=source,
         )
 
-    templates = list(dict.fromkeys(templates))
+    # Dedupe, keeping the first label for a template two sources both produce.
+    first: Dict[str, str] = {}
+    for template, label in zip(templates, labels):
+        first.setdefault(template, label)
+    templates, labels = list(first), list(first.values())
     # Keep only the lists actually referenced, so the grammar (and its retrain
     # fingerprint) depends only on values that affect it -- e.g. changing areas
     # only matters if some enabled sentence uses {area}.
@@ -503,7 +568,19 @@ def assemble(
     for t in templates:
         referenced.update(re.findall(r"\{([^}]+)\}", t))
     list_values = {k: v for k, v in list_values.items() if k in referenced}
-    return templates, list_values
+    return templates, labels, list_values
+
+
+def _hass_groups(hass_sentences) -> List[Tuple[str, List[str]]]:
+    """Normalise the `hass_sentences` argument to ``[(source_label, sentences)]``.
+
+    A mapping keeps its keys as labels (so debug mode can tell a sentence trigger
+    from a question answer); a flat sequence becomes one unattributed group."""
+    if not hass_sentences:
+        return []
+    if isinstance(hass_sentences, Mapping):
+        return [(str(k), list(v)) for k, v in hass_sentences.items() if v]
+    return [("hass_sentences", list(hass_sentences))]
 
 
 # --- grammar size (UI cost indicator) ----------------------------------------

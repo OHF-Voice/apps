@@ -12,6 +12,13 @@ low-confidence, so we return an EMPTY transcript — Home Assistant then treats 
 as a failed local recognition and can fall back (e.g. to cloud STT) instead of
 acting on a guessed command.
 
+Debug mode (``debug_mode`` in ``<lang>/settings.json``, toggled in the web UI and
+re-read every utterance): every recognition is logged for the UI to display —
+text, score, and whether the gate accepted it — and Home Assistant is sent an
+empty transcript regardless. Tuning the gate means speaking commands that
+*should* be rejected, and you do not want the ones that pass to be acted on
+while you do it.
+
 Run locally:
     python src/wyoming_server.py --uri tcp://0.0.0.0:10300 \
         --backend citrinet --model <model_dir> --grammar ./data/en/grammar.fst
@@ -33,6 +40,7 @@ from wyoming.server import AsyncEventHandler, AsyncServer
 from speech_to_phrase import load_recognizer
 from speech_to_phrase.audio import SAMPLE_RATE
 
+import debug_log
 import models
 import settings
 from vad import normalize_level, trim_silence
@@ -58,9 +66,9 @@ def addon_version() -> str:
 
 class GrammarHolder:
     """Owns the Recognizer (acoustic model + grammar) and hot-reloads the
-    grammar file when its mtime changes. Also tracks the per-language score gate
-    (``max_score``), re-read from ``<lang>/settings.json`` so edits in the web UI
-    take effect without a restart."""
+    grammar file when its mtime changes. Also tracks the per-language settings
+    (``max_score``, ``debug_mode``), re-read from ``<lang>/settings.json`` so
+    edits in the web UI take effect without a restart."""
 
     def __init__(self, backend: str, model_dir: Path, language: str,
                  grammar_path: Path, default_max_score: float,
@@ -72,6 +80,7 @@ class GrammarHolder:
         self._settings_path = Path(grammar_path).parent / settings.FILENAME
         self._default_max_score = default_max_score
         self.max_score = default_max_score
+        self.debug_mode = False
         self._mtime: Optional[float] = None
         self._lock = asyncio.Lock()
 
@@ -81,9 +90,12 @@ class GrammarHolder:
 
     async def maybe_reload(self) -> None:
         async with self._lock:
-            # Cheap: re-read the gate every utterance so UI saves apply at once.
+            # Cheap: re-read every utterance so UI changes apply at once.
             self.max_score = settings.read_max_score_file(
                 self._settings_path, self._default_max_score
+            )
+            self.debug_mode = settings.read_bool_file(
+                self._settings_path, "debug_mode", False
             )
             if not self._grammar_path.exists():
                 return
@@ -165,11 +177,28 @@ class S2PEventHandler(AsyncEventHandler):
                     None, trim_silence, samples
                 )
                 result = await self._holder.transcribe(samples)
-                if result.score <= self._holder.max_score and result.score != math.inf:
+                accepted = (
+                    result.score <= self._holder.max_score
+                    and result.score != math.inf
+                )
+                if accepted:
                     text = result.text
                     _LOGGER.debug("matched (score=%.3f): %r", result.score, result.text)
                 else:
                     _LOGGER.debug("gated (score=%.3f): %r", result.score, result.text)
+                if self._holder.debug_mode:
+                    debug_log.record(
+                        language=self._holder.language,
+                        text=result.text,
+                        score=result.score,
+                        margin=result.margin,
+                        accepted=accepted,
+                        max_score=self._holder.max_score,
+                        duration=len(samples) / SAMPLE_RATE,
+                    )
+                    # Debug mode observes; it does not act. Handing HA a
+                    # transcript here would run the command being diagnosed.
+                    text = ""
             await self.write_event(
                 Transcript(text=text, language=self._holder.language).event()
             )

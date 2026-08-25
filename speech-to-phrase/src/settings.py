@@ -65,6 +65,13 @@ def read_max_score_file(settings_path: Path, default: float) -> float:
     return default if v is None else _coerce_max_score(v, default)
 
 
+def read_bool_file(settings_path: Path, key: str, default: bool = False) -> bool:
+    """Same as get_bool but from an explicit file path (see
+    read_max_score_file)."""
+    v = _read(settings_path).get(key)
+    return v if isinstance(v, bool) else default
+
+
 def get_bool(data_dir: Union[str, Path], lang: str, key: str, default: bool) -> bool:
     """Persisted flag for `lang`, or `default` if unset. Anything stored that
     isn't a bool is ignored rather than coerced -- `"false"` reading as True is

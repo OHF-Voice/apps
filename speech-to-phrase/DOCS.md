@@ -51,6 +51,25 @@ the grammar.
   spoken form, or one using a list Speech-to-Phrase can't fill in. These
   phrases are part of the grammar, so they're included in the Commands meter's
   total. The switches override the add-on options for the selected language.
+  Also **Debug mode** — see below.
+
+## Debug mode
+
+**Settings → Debug mode** shows a live list of what the recognizer hears: each
+utterance, the phrasing it matched, which source that phrasing came from (a
+built-in command, one of your custom commands, a sentence trigger, or a question
+answer), its score against the current gate, and whether the gate accepted it.
+It applies immediately — no save or retrain.
+
+**While debug mode is on, Home Assistant receives an empty transcript for every
+utterance, so nothing you say is acted on.** That is the point: tuning
+`max_score` means deliberately speaking commands that *should* be rejected, and
+the ones that pass shouldn't run your lights while you do it. The UI keeps a
+warning on screen the whole time it's on; switch it off when you're done.
+
+Rejected rows are the useful ones — they show what a phrase was misheard as and
+by how much it missed, which tells you whether to raise the gate or to add the
+phrase as a custom command.
 
 ## Options
 

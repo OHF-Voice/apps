@@ -120,6 +120,13 @@ downloaded one keeps using it. Build a lean image that downloads on demand with:
   the curated language is a **subset** of home-assistant-intents (FST difference).
 - `tools/audio_test.py` — pipeline sanity check: TTS → device RIR + noise sweep →
   recognizer, plus OOV false-accept detection.
+- `tools/lang_check.py` — per-language round trip: every `speech_to_phrase`
+  example in home-assistant-intents, spoken by that language's HA Cloud TTS
+  voice and decoded against the grammar built from the package. It binds
+  `speech_to_phrase` to the vendored `lib/` explicitly (an editable install of
+  the upstream library otherwise shadows it and the numbers describe the wrong
+  recognizer), so `lib/` must be built — `pip install ./lib`, or any earlier
+  build under `lib/build/`.
 - Run the UI locally:
   `python src/app.py --data ./data --port 8099`
 - `tools/audio_test.py` needs a Home Assistant instance for TTS; point it at one

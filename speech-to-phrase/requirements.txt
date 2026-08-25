@@ -13,5 +13,5 @@ librosa
 scipy
 pysilero-vad
 hassil
-home-assistant-intents>=2026.7.21
+home-assistant-intents>=2026.8.25
 wyoming[zeroconf]

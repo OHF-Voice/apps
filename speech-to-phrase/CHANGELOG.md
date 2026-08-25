@@ -2,6 +2,20 @@
 
 ## 0.2.0
 
+- Seven more languages: `home-assistant-intents` 2026.8.25 ships the
+  Speech-to-Phrase sentence blocks for **Catalan, Czech, Dutch, French, German,
+  Italian and Spanish**, so those languages now get a grammar instead of
+  nothing. Each one round-trips every example command in its own language
+  through the real path (package templates → grammar → HA Cloud TTS → decode):
+  de 59/59, ca 56/56, cs 59/59, es 55/55, fr 56/56, it 50/50, nl 53/53
+  commands resolved to the right command, all within the score gate.
+- Fixed in `tools/lang_check.py`: it measured whichever `speech_to_phrase` was
+  importable, and on a development machine an editable install of the upstream
+  library shadows the vendored `lib/` through `sys.meta_path` — which
+  `sys.path` cannot override. Upstream has no subword-segmentation lattice, so
+  clearly-spoken commands came back empty or as a different command, and a
+  language looked broken when only the harness was.
+
 - Added **debug mode** (web UI, **Settings → Debug mode**): a live list of what
   the recognizer heard, with the phrasing it matched, the source that phrasing
   came from (built-in command / custom command / sentence trigger / question

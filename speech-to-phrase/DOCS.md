@@ -24,14 +24,18 @@ grammar and decodes audio against it. Four sentence sources feed the grammar:
    in lock phrasings, never "front door on").
 4. **Phrases Home Assistant already listens for** — your automations' sentence
    triggers and the `answers:` of any `assist_satellite.ask_question` action.
-   These are picked up automatically (see the `sentence_triggers` and
-   `question_answers` options): a trigger phrase that isn't in the grammar can
-   never be transcribed, so the trigger would never fire.
+   These are picked up automatically, because a trigger phrase that isn't in the
+   grammar can never be transcribed and the trigger would never fire. Either
+   source can be switched off in the web UI.
 
 ## Configuration UI
 
-Open the add-on's **Web UI** (ingress) and pick a **language**. Saving re-trains
-the grammar.
+Open the add-on's **Web UI** (ingress). Everything about what gets recognized
+lives here rather than in the add-on options, because it belongs to one language
+and its cost is worth seeing next to the choice. Saving re-trains the grammar.
+
+The header shows the language being edited, which is always the one the
+recognizer is running — set it in the add-on options (`language`) and reload.
 
 - **Commands** — one row per built-in command, written the way you'd say it.
   Switch off what you don't use: a smaller grammar is recognized faster and
@@ -44,14 +48,17 @@ the grammar.
 - **Devices & Lists** — the entity, area and floor names pulled from your
   registry. Switching one off removes it from *every* command, which is the
   main way to shrink a grammar cluttered with devices you never speak to.
-- **Settings** — the per-language score gate (see `max_score` below), and a
-  switch per Home-Assistant sentence source (see `sentence_triggers` and
-  `question_answers`). Each switch lists the phrases it currently contributes
-  and what they cost, and flags any that can't be recognized — a phrase with no
-  spoken form, or one using a list Speech-to-Phrase can't fill in. These
-  phrases are part of the grammar, so they're included in the Commands meter's
-  total. The switches override the add-on options for the selected language.
-  Also **Debug mode** — see below.
+- **Settings** — **Max score**, the confidence gate: a decode is accepted only
+  when its score is at or below this, and anything above is handed back to Home
+  Assistant as nothing so it can fall back to cloud speech-to-text. Lower is
+  stricter. It defaults to a value fitted per recognizer backend (Citrinet
+  `5.0`, Coqui `2.0` — the scales differ), applies immediately with no retrain,
+  and **Debug mode** below is how you tune it.
+  Also a switch per Home-Assistant sentence source. Each lists the phrases it
+  currently contributes and what they cost, and flags any that can't be
+  recognized — a phrase with no spoken form, or one using a list
+  Speech-to-Phrase can't fill in. Those phrases are part of the grammar, so
+  they're counted in the Commands meter's total.
 
 ## Debug mode
 
@@ -71,10 +78,10 @@ with grammar size is the signal to turn commands off — a decode and a misheari
 are indistinguishable from the outside otherwise.
 
 **While debug mode is on, Home Assistant receives an empty transcript for every
-utterance, so nothing you say is acted on.** That is the point: tuning
-`max_score` means deliberately speaking commands that *should* be rejected, and
-the ones that pass shouldn't run your lights while you do it. The UI keeps a
-warning on screen the whole time it's on; switch it off when you're done.
+utterance, so nothing you say is acted on.** That is the point: tuning the score
+gate means deliberately speaking commands that *should* be rejected, and the
+ones that pass shouldn't run your lights while you do it. The UI keeps a warning
+on screen the whole time it's on; switch it off when you're done.
 
 Because of that, debug mode is **session-only**: it is held in memory, never
 written to `settings.json`, and a restarted add-on always comes back with it
@@ -88,63 +95,29 @@ phrase as a custom command.
 
 ## Options
 
+There are two, and that is on purpose. Everything else about how
+Speech-to-Phrase behaves belongs to a *language* — which commands you want, how
+confident a decode has to be, whether to pull in the phrases your automations
+listen for — and lives in the web UI, next to the grammar-size meter that shows
+what each choice costs. An add-on option cannot show you that, and would apply
+to every language at once.
+
 | Option | Description |
 |---|---|
-| `language` | Language for the recognizer, and the only one the web UI edits — it has no language picker, because one recognizer runs and editing a language it wasn't serving was a way to wonder why nothing changed. Must be one that home-assistant-intents ships Speech-to-Phrase templates for (`ca`, `cs`, `de`, `en`, `es`, `fr`, `it`, `nl` today) — on anything else the add-on stops at startup and logs the list, rather than coming up with an empty grammar. Change it here and reload the UI; a page left open from before refuses to save and says so. |
-| `backend` | `auto` (picks one that has a model for the language), `citrinet`, or `coqui`. A specific backend is taken literally: if there is no model for that language/backend pairing the add-on runs the web UI only and logs which backends *do* have one. |
-| `default_importance` | Built-ins at/above this tier are on the **first time a language is set up**; after that the web UI owns the choice and changing this option does nothing. The shipped default (`usable`) is about half the catalogue — the larger the grammar, the more ways there are to mishear — so brightness, volume, mute, fan speed, cover position and "is the door open" start off and are one click away in **Commands**. Set it to `optional` to start with everything on. |
-| `sentence_triggers` | Add your automations' `conversation:` sentence-trigger phrases to the grammar (default on). Without this, a trigger phrase that isn't otherwise recognizable is never transcribed, so the automation never fires. Turn it off to keep the grammar to what you configured here. Overridable per-language in the web UI (**Settings → From Home Assistant**). |
-| `question_answers` | Add the `answers:` sentences of every `assist_satellite.ask_question` action to the grammar (default on), so a spoken reply to a question your automation asks can be recognized. Finding them means reading each automation and script config, so on a large installation this costs a little time at every retrain. Sentences containing Jinja2 templates (`{{ … }}`) are skipped — they have no fixed spoken form. Overridable per-language in the web UI. |
-| `max_score` | Defer low-confidence results to the cloud. This is the default score gate (lower = stricter). Leave it unset to use a per-backend default (Citrinet `5.0`, Coqui `2.0` — the scales differ); set it to override for all languages. It can also be overridden per-language in the web UI (**Settings → Recognition**), which the STT server hot-reloads. |
-| `token_bonus` | Word-insertion reward per emitted token. Leave it unset to use a per-backend default (Citrinet `2.0`, Coqui `0.0` — the cost scales differ and Coqui has not been measured); `0` disables it. The FST decode picks the lowest-cost path, and audio a path doesn't account for is absorbed by CTC blanks almost for free — so without a bonus a shorter in-grammar phrase can beat the longer one actually spoken ("set the office light brightness to ten percent" heard as "office light off"). Too high and the decoder starts inserting words. Re-fit with `tools/audio_test.py --token-bonus`. |
-| `debug_logging` | Verbose logs. |
+| `language` | The language to recognize. A list, because only the languages that ship Speech-to-Phrase sentence templates can be recognized at all: `ca`, `cs`, `de`, `en`, `es`, `fr`, `it`, `nl`. Defaults to `en`. This is also the only language the web UI edits — it has no language picker, because one recognizer runs and editing a language it wasn't serving was a way to wonder why nothing changed. Change it here, then reload the UI; a page left open from before refuses to save and says so. |
+| `debug_logging` | Verbose logs. Includes a line per utterance with the score and how long recognition took, whether or not **Debug mode** is on. |
 
-## Self-contained build
+### Things that used to be options
 
-The recognition library lives in `lib/` (package `speech_to_phrase`, built from
-`lib/speech_to_phrase/_fst/fstmodule.cc` against OpenFST) and is installed from
-source by `requirements.txt`'s `./lib` entry. There is no dependency on an
-external checkout or git host, so the image builds from this directory alone.
+Upgrading from an earlier version? These were removed, and nothing you had
+configured per language is lost — the web UI's copy is what was always in
+effect.
 
-## Image size and the bundled model
+| Was | Now |
+|---|---|
+| `default_importance` | Fixed at `usable`, about half the catalogue: a larger grammar has more ways to mishear, so brightness, volume, mute, fan speed, cover position and "is the door open" start off and are one click away in **Commands**. It only ever seeded a language's *first* run — changing it later did nothing at all, which is a poor thing for a settings page to offer. |
+| `sentence_triggers`, `question_answers` | Both on. Switch either off per language in **Settings → From Home Assistant**, which also lists the phrases it contributes and what they cost. |
+| `max_score` | **Settings → Max score**, per language, applied without a retrain. Still defaults to the value fitted per backend (Citrinet `5.0`, Coqui `2.0`). |
+| `backend` | Chosen automatically: whichever has a model for the language. Nobody setting up a voice assistant should have to pick a CTC topology, and the wrong pick only ever produced a model that would not load. |
+| `token_bonus` | Fixed at the value fitted per backend (Citrinet `2.0`, Coqui `0.0`). Re-fit with `tools/audio_test.py --token-bonus` if you are working on the recognizer itself. |
 
-The build compiles the vendored library's native OpenFST module, so it needs
-`cmake`, `g++` and `libfst-dev`. Those are purged in the same layer they
-are installed in (~200 MB of toolchain that never reaches the shipped image);
-the OpenFST *runtime* library is detected from what the built module links and
-marked manual so `--auto-remove` can't take it with them.
-
-The default English Citrinet model (~140 MB) is baked in, so a fresh install
-starts without downloading anything. A model already present in `--models-dir`
-(`/data/models`, which survives add-on updates) still wins, so a user who
-downloaded one keeps using it. Build a lean image that downloads on demand with:
-
-    docker build --build-arg BUNDLE_MODEL= ...
-
-## Developer notes
-
-- Curated templates: `sentences/<lang>/<Intent>/<slot_combination>.yaml`
-  (Speech-to-Phrase template syntax; ranges use hassil's `{from..to[,step]:slot}`).
-- `tools/subset_check.py` — CI gate proving, per `(lang, intent, combo)`, that
-  the curated language is a **subset** of home-assistant-intents (FST difference).
-- `tools/audio_test.py` — pipeline sanity check: TTS → device RIR + noise sweep →
-  recognizer, plus OOV false-accept detection.
-- `tools/lang_check.py` — per-language round trip: every `speech_to_phrase`
-  example in home-assistant-intents, spoken by that language's HA Cloud TTS
-  voice and decoded against the grammar built from the package. It binds
-  `speech_to_phrase` to the vendored `lib/` explicitly (an editable install of
-  the upstream library otherwise shadows it and the numbers describe the wrong
-  recognizer), so `lib/` must be built — `pip install ./lib`, or any earlier
-  build under `lib/build/`.
-- Run the UI locally:
-  `python src/app.py --data ./data --port 8099`
-- `tools/audio_test.py` needs a Home Assistant instance for TTS; point it at one
-  with `HA_TOKEN` (and `HA_URL`, default `http://homeassistant.local:8123`).
-  Clips are cached under `tests/wav/.tts_cache`, so a re-run with the same
-  `--seed` makes no TTS calls.
-- `lib/` is the recognition library; rebuild it after editing with
-  `pip install ./lib` (needs `cmake`, `g++`, `libfst-dev`).
-- `src/intent_server.py` is a Wyoming *intent* service (text in → intent out).
-  It is complete but not started by the add-on; pass `--intent` to app.py to
-  bring it up for development. Custom-command `intent`/`action` modes and the
-  matcher's alias/per-command-exclusion support only take effect through it.

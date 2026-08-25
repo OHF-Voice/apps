@@ -1,5 +1,5 @@
 ---
-version: 0.2.0
+version: 2.0.0
 slug: speech-to-phrase
 name: Speech-to-Phrase
 description: Constrained Wyoming speech-to-text for Home Assistant
@@ -15,39 +15,21 @@ ingress: true
 ingress_port: 8099
 ports:
   "10300/tcp": null
+# Two options, deliberately. Everything else that used to live here -- which
+# commands are on, the score gate, whether to pull in Home Assistant's own
+# trigger phrases -- belongs to a language and is edited in the web UI, where the
+# effect of a change is visible next to it. An add-on option is a bad home for a
+# per-language setting: it applies to all of them at once, and the Supervisor
+# page cannot show you what it costs.
 options:
   language: "en"
-  backend: "auto"
-  default_importance: "usable"
-  sentence_triggers: true
-  question_answers: true
   debug_logging: false
 schema:
-  # Must be a language home-assistant-intents ships Speech-to-Phrase templates
-  # for; the add-on refuses to start on any other and logs the list.
-  language: str
-  # "auto" picks a backend that has a model for the language. A specific one is
-  # honoured as given -- if there is no model for that pairing the add-on runs
-  # UI-only and says so, rather than substituting the other backend's model.
-  backend: "list(auto|citrinet|coqui)"
-  # Which commands are on the first time a language is set up. "usable" is a
-  # deliberate middle: the whole set ("optional") is a much larger grammar, and
-  # a larger grammar has more ways to mishear. The rest are one click away in
-  # the web UI, per command and per domain. Note this only seeds a new
-  # language -- once enabled.json exists, editing this changes nothing.
-  default_importance: "list(required|usable|complete|optional)"
-  # Add the phrases Home Assistant is already listening for to the grammar:
-  # automation sentence triggers, and assist_satellite.ask_question answers.
-  # Both widen the grammar, and the answer crawl reads every automation/script
-  # config, so either can be switched off.
-  sentence_triggers: bool
-  question_answers: bool
-  # Score gate. Left unset by default so a per-backend default applies
-  # (citrinet 5.0, coqui 2.0); set it here to override for all languages.
-  max_score: "float?"
-  # Word-insertion reward per emitted token. Left unset so a per-backend default
-  # applies (citrinet 2.0, coqui 0.0); set it to 0 to disable, or higher if long
-  # commands are still decoded as shorter in-grammar phrases.
-  token_bonus: "float?"
+  # The languages home-assistant-intents ships Speech-to-Phrase templates for.
+  # A dropdown, not free text: a language with no templates has nothing to
+  # recognize, and typing one produced an add-on that refused to start. Keep in
+  # step with the package -- the add-on re-checks this at startup and logs the
+  # real list if it has moved on.
+  language: "list(ca|cs|de|en|es|fr|it|nl)"
   debug_logging: bool
 homeassistant: 2026.3.0

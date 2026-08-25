@@ -758,7 +758,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=os.environ.get("DATA_DIR", "./data"))
     ap.add_argument("--language", default="en")
-    ap.add_argument("--backend", default="citrinet")
+    # "auto" resolves to a backend that has a model for the language, which is
+    # the only sensible production answer -- Czech ships Coqui and nothing else,
+    # so a hardcoded "citrinet" here meant no model at all. There is no add-on
+    # option for this: nobody configuring a voice assistant wants to choose a
+    # CTC topology, and the wrong choice only ever produced a model that would
+    # not load. Still switchable on the command line for testing one backend
+    # against the other.
+    ap.add_argument("--backend", default="auto",
+                    choices=["auto", "citrinet", "coqui"])
     ap.add_argument("--model", default=os.environ.get("MODEL_DIR"),
                     help="model dir (dev) or HuggingFace model name; "
                          "if unset, derived from language+backend")
@@ -767,18 +775,23 @@ def main():
     ap.add_argument("--slot-lists-file", default=os.environ.get("SLOT_LISTS_FILE"))
     ap.add_argument("--hass-api", default=os.environ.get("HASS_API", "http://supervisor/core/api"))
     ap.add_argument("--hass-token", default=os.environ.get("SUPERVISOR_TOKEN"))
-    # Which importance buckets are enabled on a language's first run. This
-    # default applies to the CLI only: the add-on ships `default_importance:
-    # usable` in config.yaml and the run script always passes it, so a container
-    # enables the "usable" half (24 of 46 combos on German) and the rest are a
-    # click away in the web UI. "optional" here means a bare `python src/app.py`
-    # -- and the round-trip checks in tools/ -- exercise every combo the package
-    # ships, which is what you want when validating a language.
-    ap.add_argument("--default-importance", default="optional")
-    # Phrases Home Assistant is already listening for. On by default (the
-    # trigger/question would otherwise never be recognized), but each one widens
-    # the grammar, and the answer crawl costs a websocket round-trip per
-    # automation/script -- so both can be switched off.
+    # Which importance buckets are on the first time a language is set up.
+    # "usable" is a deliberate middle -- 24 of 46 combos on German -- because the
+    # whole catalogue is a much larger grammar and a larger grammar has more ways
+    # to mishear; the rest are one click away in the web UI, per command and per
+    # domain. This is a first-run seed, not a setting: once enabled.json exists
+    # it is never consulted again, which is exactly why it is not an add-on
+    # option (changing one that silently does nothing is worse than not having
+    # it). Pass "optional" to exercise every combo the package ships, which is
+    # what the round-trip checks in tools/ do when validating a language.
+    ap.add_argument("--default-importance", default="usable",
+                    choices=["required", "usable", "complete", "optional"])
+    # Phrases Home Assistant is already listening for. On, because a trigger or
+    # question answer that isn't in the grammar can never be transcribed and the
+    # automation would never fire. Each one widens the grammar and the answer
+    # crawl costs a websocket round-trip per automation/script, so both can be
+    # switched off -- per language, in the web UI, where the cost is shown next
+    # to the switch.
     ap.add_argument("--no-sentence-triggers", dest="sentence_triggers",
                     action="store_false",
                     help="don't add automation sentence-trigger phrases to the grammar")

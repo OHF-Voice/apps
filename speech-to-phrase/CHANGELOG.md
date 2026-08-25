@@ -1,6 +1,23 @@
 # Changelog
 
-## 0.2.0
+## 2.0.0
+
+- The add-on options are down to two: **the language, and verbose logging.**
+  Everything else that was there — which commands are on, the score gate,
+  whether to pull in the phrases Home Assistant already listens for, the
+  recognizer backend, the word-insertion reward — belongs to a language and is
+  edited in the web UI, next to the meter that shows what each choice costs. An
+  add-on option could show none of that and applied to every language at once.
+  Nothing configured per language is lost, and the shipped behaviour is
+  unchanged: the same backend selection (whichever has a model), the same
+  `usable` starting set, both sentence sources on, the same per-backend gate and
+  reward. `default_importance` is the one worth calling out — it only ever
+  seeded a language's *first* run, so changing it later did nothing at all,
+  which is a poor thing for a settings page to offer.
+- `language` is a **list**, defaulting to English, of the languages that ship
+  Speech-to-Phrase templates: `ca`, `cs`, `de`, `en`, `es`, `fr`, `it`, `nl`.
+  It was free text, so it was possible to type a language with no sentences to
+  recognize and get an add-on that refused to start.
 
 - Seven more languages: `home-assistant-intents` 2026.8.25 ships the
   Speech-to-Phrase sentence blocks for **Catalan, Czech, Dutch, French, German,

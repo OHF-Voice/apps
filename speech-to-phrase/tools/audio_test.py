@@ -47,6 +47,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from vad import normalize_level, trim_silence  # noqa: E402  (src on path above)
 
 from speech_to_phrase import load_recognizer
+from speech_to_phrase.audio import resample as resample_audio
 from speech_to_phrase.templates import (
     AlternativesNode,
     ListRefNode,
@@ -262,10 +263,7 @@ def tts_wav(message: str, engine_id: str, cache_dir: Path) -> np.ndarray:
         data, sr = sf.read(io.BytesIO(resp.read()), dtype="float32", always_2d=False)
     if data.ndim > 1:
         data = data.mean(axis=1)
-    if sr != SAMPLE_RATE:
-        from librosa import resample
-
-        data = resample(data, orig_sr=sr, target_sr=SAMPLE_RATE)
+    data = resample_audio(data, sr, SAMPLE_RATE)
     cache_dir.mkdir(parents=True, exist_ok=True)
     sf.write(cached, data, SAMPLE_RATE)
     return data
@@ -278,10 +276,7 @@ def _mono16k(path: Path) -> np.ndarray:
     data, sr = sf.read(path, dtype="float32", always_2d=False)
     if data.ndim > 1:
         data = data.mean(axis=1)
-    if sr != SAMPLE_RATE:
-        from librosa import resample
-
-        data = resample(data, orig_sr=sr, target_sr=SAMPLE_RATE)
+    data = resample_audio(data, sr, SAMPLE_RATE)
     return data
 
 

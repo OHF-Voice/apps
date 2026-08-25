@@ -39,7 +39,7 @@ from wyoming.info import AsrModel, AsrProgram, Attribution, Describe, Info
 from wyoming.server import AsyncEventHandler, AsyncServer
 
 from speech_to_phrase import load_recognizer
-from speech_to_phrase.audio import SAMPLE_RATE
+from speech_to_phrase.audio import SAMPLE_RATE, resample as resample_audio
 
 import debug_log
 import models
@@ -144,10 +144,7 @@ def _pcm_to_float(audio: bytes, rate: int, width: int, channels: int) -> np.ndar
         data /= float(np.iinfo(dtype).max + 1)
     if channels > 1:
         data = data.reshape(-1, channels).mean(axis=1)
-    if rate != SAMPLE_RATE:
-        from librosa import resample
-
-        data = resample(data, orig_sr=rate, target_sr=SAMPLE_RATE)
+    data = resample_audio(data, rate, SAMPLE_RATE)
     return data
 
 
@@ -350,7 +347,6 @@ def main() -> None:
     if cfg.token_bonus is None:
         cfg.token_bonus = models.default_token_bonus(cfg.backend)
     logging.basicConfig(level=logging.DEBUG if cfg.debug else logging.INFO)
-    logging.getLogger("numba").setLevel(logging.INFO)  # silence librosa's JIT traces
     asyncio.run(run(cfg))
 
 

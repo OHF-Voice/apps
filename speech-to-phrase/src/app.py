@@ -823,8 +823,6 @@ def main():
     cfg = ap.parse_args()
 
     logging.basicConfig(level=logging.DEBUG if cfg.debug else logging.INFO)
-    # numba (pulled in by librosa) floods DEBUG with JIT traces.
-    logging.getLogger("numba").setLevel(logging.INFO)
     _check_language(cfg.language)
     app = create_app(cfg)
 

@@ -23,7 +23,11 @@ dependencies = [
     "onnxruntime",
     "sentencepiece",
     "soundfile",
-    "librosa",
+    # scipy for scipy.fft, which is the transform the log-mel front end is
+    # verified bit-identical against (see _dsp.py); soxr for resampling, which
+    # is what librosa used underneath. Neither drags in numba/llvmlite.
+    "scipy",
+    "soxr",
     "icu-rbnf",
 ]
 

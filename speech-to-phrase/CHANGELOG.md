@@ -2,6 +2,20 @@
 
 ## 2.0.0
 
+- The image is **275 MB smaller** (857 → 582 MB), because the log-mel front end
+  no longer needs librosa. It was used for exactly three calls — the mel
+  filterbank, the STFT and resampling — and hard-depends on numba and
+  scikit-learn, hence llvmlite, whose single shared object was 170 MB: about a
+  fifth of the whole image for code the recognizer never executed. The
+  filterbank and transform are now local (`lib/speech_to_phrase/_dsp.py`) and
+  resampling calls soxr, which is what librosa delegated to anyway.
+  Recognition is untouched, and that is checked rather than asserted:
+  `tests/test_features_parity.py` requires the filterbank, the STFT, the
+  featurizer's output *and* the acoustic model's log-probabilities to be
+  bit-identical to librosa's, and all 408 example utterances across the eight
+  supported languages decode to the same transcript with the same score to the
+  last digit.
+
 - Fixed the build: the add-on would not install. The vendored recognition
   library declared `requires-python = ">=3.12"` while the Home Assistant Debian
   base image ships Python 3.11.2, so `pip` refused it with *"Package

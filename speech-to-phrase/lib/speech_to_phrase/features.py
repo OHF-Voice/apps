@@ -5,13 +5,15 @@ exported ONNX graph, so we reproduce it here).
 Defaults match NeMo's Citrinet config: 16 kHz, 80 mel bins, 25 ms window /
 10 ms stride, ``n_fft=512``, preemphasis 0.97, power spectrum, natural log with a
 small guard, and ``per_feature`` normalization. NeMo builds its mel filterbank
-with ``librosa.filters.mel``; we use the same call for parity.
+with ``librosa.filters.mel``; :mod:`._dsp` reproduces that call, and
+``librosa.stft``, bit for bit -- see ``tests/test_features_parity.py``.
 """
 
 from dataclasses import dataclass
 
-import librosa
 import numpy as np
+
+from . import _dsp
 
 
 @dataclass
@@ -27,16 +29,14 @@ class MelFeaturizer:
     norm_eps: float = 1e-5
 
     def __post_init__(self) -> None:
-        # Slaney-normalized HTK=False mel filterbank, as NeMo uses.
-        self._mel_fb = librosa.filters.mel(
-            sr=self.sample_rate,
+        # Slaney-normalized (htk=False) mel filterbank, as NeMo uses.
+        self._mel_fb = _dsp.mel_filterbank(
+            sample_rate=self.sample_rate,
             n_fft=self.n_fft,
             n_mels=self.n_mels,
             fmin=0.0,
             fmax=self.sample_rate / 2.0,
-            norm="slaney",
-            htk=False,
-        ).astype(np.float32)
+        )
         self._window = np.hanning(self.win_length + 1)[:-1].astype(np.float32)
 
     def __call__(self, audio: np.ndarray) -> np.ndarray:
@@ -50,14 +50,12 @@ class MelFeaturizer:
             )
 
         # Short-time Fourier transform -> power spectrum.
-        stft = librosa.stft(
+        stft = _dsp.stft(
             x,
             n_fft=self.n_fft,
             hop_length=self.hop_length,
             win_length=self.win_length,
             window=self._window,
-            center=True,
-            pad_mode="reflect",
         )
         power = np.abs(stft) ** self.mag_power  # [n_fft/2+1, T]
 

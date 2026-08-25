@@ -18,6 +18,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "tools"))
+
+from vendored_lib import bind as _bind_vendored_lib  # noqa: E402
+
+_bind_vendored_lib()  # src/ imports speech_to_phrase; use the vendored copy
 
 from wyoming.asr import Transcript  # noqa: E402
 from wyoming.audio import AudioChunk, AudioStart, AudioStop  # noqa: E402

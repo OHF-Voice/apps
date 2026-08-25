@@ -29,8 +29,6 @@ intents-package ``script/merged_output.py``; omit it to use the installed
 """
 import argparse
 import hashlib
-import importlib.machinery
-import importlib.util
 import io
 import json
 import os
@@ -46,54 +44,12 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(REPO_ROOT / "tools"))
+from vendored_lib import bind as _bind_vendored_lib  # noqa: E402
 
+_bind_vendored_lib()
 
-def use_vendored_lib() -> None:
-    """Bind ``speech_to_phrase`` to the add-on's vendored ``lib/``.
-
-    The image installs ``lib/`` and nothing else, so that is the recognizer this
-    check has to measure. A dev machine usually also has the upstream library
-    installed editable, and scikit-build's editable install hooks
-    ``sys.meta_path`` -- which is consulted *before* ``sys.path``, so it shadows
-    ``lib/`` however the path is ordered. Silently measuring that copy is how a
-    language "regresses": upstream has no subword-segmentation lattice, so
-    perfectly clear commands come back empty or wrong. So put ``lib/`` on
-    ``sys.path`` *and* drop any finder that claims to own the name, leaving the
-    ordinary path-based import as the only one that can answer.
-    """
-    pkg_dir = REPO_ROOT / "lib" / "speech_to_phrase"
-
-    sys.path.insert(0, str(pkg_dir.parent))
-    for finder in list(sys.meta_path):
-        if finder is importlib.machinery.PathFinder:
-            continue  # the one that honours sys.path, i.e. finds lib/
-        try:
-            spec = finder.find_spec("speech_to_phrase", None)
-        except Exception:  # noqa: BLE001  (a finder that objects can't shadow us)
-            continue
-        if spec is not None:
-            sys.meta_path.remove(finder)
-
-    # The native extension is a build artifact, so in a checkout it sits under
-    # lib/build/<wheel-tag>/ rather than next to the sources. Pre-register it so
-    # grammar.py's "from . import _fst" finds it there.
-    if not any(pkg_dir.glob("_fst*.so")):
-        built = sorted((REPO_ROOT / "lib" / "build").glob("*/_fst*.so"))
-        if not built:
-            raise SystemExit(
-                "lib/ has no compiled _fst extension: build it with "
-                "`pip install -e lib` (or `pip wheel lib`) and re-run"
-            )
-        fst_spec = importlib.util.spec_from_file_location(
-            "speech_to_phrase._fst", built[-1]
-        )
-        assert fst_spec and fst_spec.loader
-        fst = importlib.util.module_from_spec(fst_spec)
-        sys.modules["speech_to_phrase._fst"] = fst
-        fst_spec.loader.exec_module(fst)
-
-
-use_vendored_lib()
+from speech_to_phrase.audio import resample as resample_audio  # noqa: E402
 
 HA_URL = os.environ.get("HA_URL", "http://homeassistant.local:8123")
 TOKEN = os.environ.get("HA_TOKEN", "")
@@ -303,10 +259,7 @@ def tts_wav(message: str, engine_id: str, tts_language: str, cache_dir: Path) ->
         data, sr = sf.read(io.BytesIO(resp.read()), dtype="float32", always_2d=False)
     if data.ndim > 1:
         data = data.mean(axis=1)
-    if sr != SAMPLE_RATE:
-        from librosa import resample  # noqa: PLC0415
-
-        data = resample(data, orig_sr=sr, target_sr=SAMPLE_RATE)
+    data = resample_audio(data, sr, SAMPLE_RATE)
     cache_dir.mkdir(parents=True, exist_ok=True)
     sf.write(cached, data, SAMPLE_RATE)
     return data

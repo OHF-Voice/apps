@@ -8,6 +8,28 @@ import numpy as np
 SAMPLE_RATE = 16000
 
 
+def resample(data: np.ndarray, orig_sr: int, target_sr: int = SAMPLE_RATE) -> np.ndarray:
+    """Resample mono float32 audio.
+
+    This is what ``librosa.resample`` does at its default quality: it hands the
+    work to soxr and then fixes the length to ``ceil(n * target / orig)``, which
+    soxr can be a sample off. Calling soxr directly skips librosa's import,
+    which drags in numba and llvmlite.
+    """
+    if orig_sr == target_sr:
+        return data
+
+    import soxr
+
+    resampled = soxr.resample(data, orig_sr, target_sr, quality="HQ")
+    expected = int(np.ceil(data.shape[-1] * target_sr / orig_sr))
+    if resampled.shape[-1] > expected:
+        return resampled[..., :expected]
+    if resampled.shape[-1] < expected:
+        return np.pad(resampled, (0, expected - resampled.shape[-1]))
+    return resampled
+
+
 def load_audio(audio: Union[str, Path, np.ndarray]) -> np.ndarray:
     """Return mono float32 samples in ``[-1, 1]`` at 16 kHz.
 
@@ -22,9 +44,5 @@ def load_audio(audio: Union[str, Path, np.ndarray]) -> np.ndarray:
     data, sample_rate = sf.read(str(audio), dtype="float32", always_2d=True)
     data = data.mean(axis=1)  # downmix to mono
 
-    if sample_rate != SAMPLE_RATE:
-        import librosa
-
-        data = librosa.resample(data, orig_sr=sample_rate, target_sr=SAMPLE_RATE)
-
+    data = resample(data, sample_rate, SAMPLE_RATE)
     return np.ascontiguousarray(data, dtype=np.float32)

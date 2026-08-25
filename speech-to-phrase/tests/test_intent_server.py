@@ -12,6 +12,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "tools"))
+
+from vendored_lib import bind as _bind_vendored_lib  # noqa: E402
+
+_bind_vendored_lib()  # src/ imports speech_to_phrase; use the vendored copy
 
 import training  # noqa: E402
 import intent_server  # noqa: E402

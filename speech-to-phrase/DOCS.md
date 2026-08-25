@@ -58,8 +58,17 @@ the grammar.
 **Settings → Debug mode** shows a live list of what the recognizer hears: each
 utterance, the phrasing it matched, which source that phrasing came from (a
 built-in command, one of your custom commands, a sentence trigger, or a question
-answer), its score against the current gate, and whether the gate accepted it.
-It applies immediately — no save or retrain.
+answer), its score against the current gate, whether the gate accepted it, and
+how long recognition **took**. It applies immediately — no save or retrain.
+
+The **Took** column is the time from the audio stopping to the transcript being
+ready — the pause a user actually experiences, covering format conversion,
+level normalization, silence trimming and the decode. Hover it for the length of
+speech it explains and the ratio between them. Expect tens of milliseconds once
+warm; the first utterance after a start or a retrain is slower, because the
+model and the voice-activity detector are loaded lazily. A number that climbs
+with grammar size is the signal to turn commands off — a decode and a mishearing
+are indistinguishable from the outside otherwise.
 
 **While debug mode is on, Home Assistant receives an empty transcript for every
 utterance, so nothing you say is acted on.** That is the point: tuning
@@ -81,7 +90,7 @@ phrase as a custom command.
 
 | Option | Description |
 |---|---|
-| `language` | Language for the recognizer. Must be one that home-assistant-intents ships Speech-to-Phrase templates for (`ca`, `cs`, `de`, `en`, `es`, `fr`, `it`, `nl` today) — on anything else the add-on stops at startup and logs the list, rather than coming up with an empty grammar. |
+| `language` | Language for the recognizer, and the only one the web UI edits — it has no language picker, because one recognizer runs and editing a language it wasn't serving was a way to wonder why nothing changed. Must be one that home-assistant-intents ships Speech-to-Phrase templates for (`ca`, `cs`, `de`, `en`, `es`, `fr`, `it`, `nl` today) — on anything else the add-on stops at startup and logs the list, rather than coming up with an empty grammar. Change it here and reload the UI; a page left open from before refuses to save and says so. |
 | `backend` | `auto` (picks one that has a model for the language), `citrinet`, or `coqui`. A specific backend is taken literally: if there is no model for that language/backend pairing the add-on runs the web UI only and logs which backends *do* have one. |
 | `default_importance` | Built-ins at/above this tier are on the **first time a language is set up**; after that the web UI owns the choice and changing this option does nothing. The shipped default (`usable`) is about half the catalogue — the larger the grammar, the more ways there are to mishear — so brightness, volume, mute, fan speed, cover position and "is the door open" start off and are one click away in **Commands**. Set it to `optional` to start with everything on. |
 | `sentence_triggers` | Add your automations' `conversation:` sentence-trigger phrases to the grammar (default on). Without this, a trigger phrase that isn't otherwise recognizable is never transcribed, so the automation never fires. Turn it off to keep the grammar to what you configured here. Overridable per-language in the web UI (**Settings → From Home Assistant**). |

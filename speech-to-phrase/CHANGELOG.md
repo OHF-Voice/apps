@@ -37,6 +37,19 @@
   languages the add-on actually serves before it is used to build a path.
   `<data>/<lang>/` is a join, so a crafted value wrote `enabled.json`,
   `settings.json` and `custom_commands.json` outside the data directory.
+- The web UI now follows the `language` option instead of offering a picker.
+  One recognizer runs, for one language, but the UI let you select any of the
+  eight and then edit it — so you could spend a while tuning commands for a
+  language speech-to-text was not serving and conclude the add-on was broken.
+  The header shows the active language, every request is about that language,
+  and a page left open from before the option changed refuses to save rather
+  than applying those edits to the current language.
+- Debug mode reports **how long recognition took** — the time from the audio
+  stopping to the transcript being ready, which is the pause a user actually
+  experiences. Hovering it gives the length of speech and the ratio between
+  them. Tens of milliseconds once warm, and visibly more on the first utterance
+  after a start; a decode that is slow and one that is wrong were previously
+  indistinguishable from the outside.
 - Fixed: a custom command whose text contained markup was rendered as markup in
   the **Devices & Lists** tab. Every value on that page was escaped except the
   "Used by:" labels, and a custom command's label is its own first sentence.

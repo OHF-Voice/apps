@@ -55,13 +55,13 @@ def supported_languages() -> tuple:
 
 
 def _known_lang(lang: str) -> bool:
-    """Whether `lang` is a language we serve.
+    """Whether `lang` is a language we could serve.
 
-    Every route that takes a ``lang`` checks this before it reaches the
-    filesystem. ``<data>/<lang>/`` is built by joining the value onto the data
-    directory, so an unchecked one ("../../x") wrote enabled.json, settings.json
-    and custom_commands.json outside <data> entirely. The set of real languages
-    is small, closed and known, so an allowlist is the whole fix."""
+    ``<data>/<lang>/`` is a path join, so a value like "../../x" reaches outside
+    the data directory; the set of real languages is small, closed and known, so
+    an allowlist is the whole defence. The web routes have a stricter test still
+    (it must be *the* configured language), which leaves this for the watch loop,
+    where the candidates are directory names found on disk."""
     return lang in supported_languages()
 
 
@@ -157,22 +157,31 @@ def create_app(cfg) -> Flask:
     def index():
         return render_template("index.html")
 
-    def bad_lang(lang: str):
-        """400 for a language we don't serve, so a bogus value stops here rather
-        than being joined onto a path."""
-        _LOGGER.warning("Rejected request for unknown language %r", lang)
-        return jsonify({"ok": False, "error": f"unknown language: {lang!r}"}), 400
+    def wrong_lang(lang: str):
+        """409 for a request about some language other than the configured one.
 
-    @app.route("/api/languages")
-    def api_languages():
-        langs = list(supported_languages())
-        return jsonify({"languages": langs, "default": cfg.language if cfg.language in langs else (langs[0] if langs else None)})
+        Only reachable from a page loaded before the `language` option changed:
+        the UI edits whatever `--language` says and offers no choice. Refusing is
+        better than quietly applying those edits to the current language --
+        they were made against a different set of devices and commands."""
+        _LOGGER.warning(
+            "Rejected request for '%s'; this add-on is configured for '%s'",
+            lang, cfg.language,
+        )
+        return jsonify({
+            "ok": False,
+            "error": f"this add-on is set to '{cfg.language}', not {lang!r}. "
+                     f"Reload the page.",
+        }), 409
 
     @app.route("/api/state")
     def api_state():
-        lang = request.args.get("lang", cfg.language)
-        if not _known_lang(lang):
-            return bad_lang(lang)
+        # The one language the recognizer runs. A `lang` parameter is honoured
+        # only to reject a stale page (see wrong_lang); there is nothing to
+        # choose between.
+        lang = request.args.get("lang") or cfg.language
+        if lang != cfg.language:
+            return wrong_lang(lang)
         combos = bi.available_combos(ADDON_ROOT, lang, meta)
         amap = training.enabled_domain_map(read_enabled(lang, combos))
         ov = _overrides(cfg, lang)
@@ -265,9 +274,6 @@ def create_app(cfg) -> Flask:
                 "overrides": overrides.load_doc(data_dir, lang),
                 # Session state, not a setting: off after every restart.
                 "debug_mode": debug_log.enabled(),
-                # One recognizer runs, for this language; debug mode observes it
-                # whichever language the UI happens to be showing.
-                "stt_language": cfg.language,
             }
         )
 
@@ -294,9 +300,9 @@ def create_app(cfg) -> Flask:
     def api_transcriptions():
         """Recognitions since `since`, each tagged with the sentence source that
         produced it. Polled by the UI while debug mode is on."""
-        lang = request.args.get("lang", cfg.language)
-        if not _known_lang(lang):
-            return bad_lang(lang)
+        lang = request.args.get("lang") or cfg.language
+        if lang != cfg.language:
+            return wrong_lang(lang)
         try:
             since = int(request.args.get("since", 0))
         except (TypeError, ValueError):
@@ -318,9 +324,9 @@ def create_app(cfg) -> Flask:
     @app.route("/api/save", methods=["POST"])
     def api_save():
         body = request.get_json(force=True)
-        lang = body.get("lang") or ""
-        if not _known_lang(lang):
-            return bad_lang(lang)
+        lang = body.get("lang") or cfg.language
+        if lang != cfg.language:
+            return wrong_lang(lang)
         enabled = [list(e) for e in body.get("enabled", [])]
         commands = body.get("commands", [])
         d = lang_dir(lang)

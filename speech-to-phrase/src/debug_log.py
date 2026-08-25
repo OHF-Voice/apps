@@ -55,9 +55,14 @@ def record(
     accepted: bool,
     max_score: float,
     duration: Optional[float] = None,
+    processing: Optional[float] = None,
 ) -> dict:
     """Append one recognition. ``accepted`` is what the score gate decided, not
-    what Home Assistant received -- in debug mode HA always gets nothing."""
+    what Home Assistant received -- in debug mode HA always gets nothing.
+
+    ``duration`` is how long the (trimmed) audio was; ``processing`` is how long
+    the add-on took to turn it into a transcript once the audio stopped, which
+    is the part the user spends waiting."""
     global _next_id  # noqa: PLW0603
     with _lock:
         entry = {
@@ -74,6 +79,7 @@ def record(
             "accepted": bool(accepted),
             "max_score": max_score,
             "duration": round(duration, 2) if duration is not None else None,
+            "processing": round(processing, 3) if processing is not None else None,
         }
         _next_id += 1
         _entries.append(entry)

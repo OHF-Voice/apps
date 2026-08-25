@@ -14,6 +14,9 @@
   header .bar { max-width:960px; margin:0 auto; padding:0 16px; display:flex;
                 align-items:center; gap:12px; flex-wrap:wrap; }
   header h1 { margin:0; font-size:20px; flex:0 0 auto; }
+  /* The active language: shown, not chosen (see the header markup). */
+  .lang-badge { font-weight:600; border:1px solid var(--line); border-radius:8px;
+                background:#fff; padding:5px 10px; }
   .grow { flex:1; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
           padding: 16px 18px; margin-bottom: 16px; }
@@ -163,8 +166,11 @@
 <header>
   <div class="bar">
     <h1>Speech-to-Phrase</h1>
-    <label class="muted" for="lang">Language</label>
-    <select id="lang"></select>
+    <!-- Not a choice: one recognizer runs, for the language in the add-on
+         options (`language` / --language). Showing a picker invited editing one
+         language while speech-to-text served another. -->
+    <span class="muted">Language</span>
+    <span id="lang" class="lang-badge" title="Set by the add-on option “language”"></span>
     <span id="trainflag" class="muted"></span>
     <span class="grow"></span>
     <span id="dirty"></span>
@@ -311,15 +317,11 @@ function clearDirty(){ dirty = false; $("dirty").textContent = ""; }
 
 function escapeHtml(s){ return s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
-async function loadLanguages() {
-  const { languages, default: def } = await (await fetch("api/languages")).json();
-  $("lang").innerHTML = languages.map(l => `<option ${l===def?"selected":""}>${l}</option>`).join("");
-  await loadState();
-}
-
 async function loadState() {
-  const lang = $("lang").value;
-  S = await (await fetch("api/state?lang=" + encodeURIComponent(lang))).json();
+  // No lang parameter: the server serves the configured language and tells us
+  // which one it is. There is nothing to pick, so nothing to get out of sync.
+  S = await (await fetch("api/state")).json();
+  $("lang").textContent = S.lang;
   $("trainflag").textContent = S.trainable ? "" : "(no model — saves persist, grammar not retrained)";
   hassKnown = Object.fromEntries(
     HASS_SOURCES.map(([key]) => [key, !!hassSource(key).enabled]));
@@ -328,7 +330,7 @@ async function loadState() {
   renderCustom();
   renderCombos();
   renderLists();
-  // A language switch means a different recognizer log; start the feed over.
+  // Reloading state means the page is starting over; so does the feed.
   debugSince = 0; debugRows = [];
   renderDebug();
   setDebugPolling(!!S.debug_mode);
@@ -446,10 +448,33 @@ function feedRow(e) {
       detail ? `<div class="detail">${escapeHtml(detail)}</div>` : ""}</td>
     <td class="num">${e.score == null ? "—" : e.score.toFixed(2)}
       <span class="muted">/ ${Number(e.max_score).toFixed(2)}</span></td>
+    <td class="num" title="${tookTitle(e)}">${took(e)}</td>
     <td class="verdict">${e.accepted
       ? '<span class="ok">accepted</span>'
       : '<span class="err">rejected</span>'}</td>
   </tr>`;
+}
+
+/* Time from audio-stop to transcript: what Home Assistant waited for. Sub-second
+   in milliseconds, because that is the range it lives in and "0.3 s" hides the
+   difference between a fast decode and a slow one. */
+function took(e) {
+  if (e.processing == null) return "—";
+  return e.processing < 1
+    ? `${Math.round(e.processing * 1000)} ms`
+    : `${e.processing.toFixed(2)} s`;
+}
+
+/* The same number against the length of audio it explains, since a long command
+   is expected to take longer than a short one. */
+function tookTitle(e) {
+  if (e.processing == null) return "";
+  const parts = ["Time to recognize, after the audio stopped"];
+  if (e.duration) {
+    parts.push(`${e.duration.toFixed(2)} s of speech`,
+      `${(e.processing / e.duration).toFixed(2)}× real time`);
+  }
+  return parts.join(" · ");
 }
 
 function renderDebugFeed() {
@@ -460,7 +485,7 @@ function renderDebugFeed() {
     return;
   }
   host.innerHTML = `<div class="feed"><table>
-    <thead><tr><th>Time</th><th>Heard</th><th>Source</th><th>Score</th><th></th></tr></thead>
+    <thead><tr><th>Time</th><th>Heard</th><th>Source</th><th>Score</th><th>Took</th><th></th></tr></thead>
     <tbody>${debugRows.map(feedRow).join("")}</tbody></table></div>`;
 }
 
@@ -468,19 +493,13 @@ function renderDebug() {
   const on = !!S.debug_mode;
   $("debug-mode").checked = on;
   $("debug-count").textContent = on ? "on — Home Assistant receives nothing" : "off";
-  // One recognizer runs, so debug mode isn't per-language: what shows up is
-  // whatever that recognizer heard, whichever language tab you're on.
-  const other = S.stt_language && S.lang && S.stt_language !== S.lang;
+  // The page and the recognizer are always the same language now, so there is
+  // no longer a mismatch to warn about.
   const notes = [];
   if (on) {
     notes.push("Home Assistant is receiving an empty transcript for every "
       + "utterance, so nothing you say is acted on. Switch debug mode off when "
       + "you're done — it also switches off by itself if the add-on restarts.");
-  }
-  if (other) {
-    notes.push(`Speech-to-text is running for <b>${escapeHtml(S.stt_language)}</b>,`
-      + ` so these are ${escapeHtml(S.stt_language)} utterances, not`
-      + ` ${escapeHtml(S.lang)} ones.`);
   }
   $("debug-warn").innerHTML =
     notes.map(n => `<p class="warn">${n}</p>`).join("");
@@ -489,8 +508,7 @@ function renderDebug() {
 
 async function pollTranscriptions() {
   try {
-    const r = await (await fetch("api/transcriptions?lang="
-      + encodeURIComponent($("lang").value) + "&since=" + debugSince)).json();
+    const r = await (await fetch("api/transcriptions?since=" + debugSince)).json();
     if (!r.debug_mode) {   // switched off elsewhere (or the server restarted)
       S.debug_mode = false; setDebugPolling(false); renderDebug(); return;
     }
@@ -866,7 +884,9 @@ async function save() {
     const res = await (await fetch("api/save", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
-        lang: $("lang").value,
+        // Sent so the server can refuse a page loaded before the `language`
+        // option changed, rather than applying these edits to another language.
+        lang: S.lang,
         max_score: parseFloat($("max-score").value),
         enabled: S.combos.map(comboSelection).filter(Boolean),
         commands: collectCommands(),
@@ -877,7 +897,10 @@ async function save() {
       })
     })).json();
     st.className = res.ok ? "ok" : "err";
-    st.textContent = res.message || (res.ok?"Saved.":"Failed.");
+    // `error` carries the reason a request was refused outright — a page loaded
+    // before the language option changed, say. Showing a bare "Failed." there
+    // would hide the one thing that tells you what to do about it.
+    st.textContent = res.message || res.error || (res.ok?"Saved.":"Failed.");
     if (res.ok) { clearDirty(); await loadState(); }
   } catch (e) { st.className="err"; st.textContent = "Save failed: " + e; }
   finally { btn.disabled = false; }
@@ -903,7 +926,7 @@ $("debug-mode").addEventListener("change", async e => {
   try {
     await fetch("api/debug_mode", {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ lang: $("lang").value, enabled: on }),
+      body: JSON.stringify({ enabled: on }),  // debug mode is global, not per-language
     });
   } catch (err) {
     S.debug_mode = !on; renderDebug();
@@ -933,13 +956,9 @@ $("cmd-reset").addEventListener("click", () => {
 });
 $("d-close").addEventListener("click", () => $("detail").close());
 $("detail").addEventListener("click", e => { if (e.target.id === "detail") $("detail").close(); });
-$("lang").addEventListener("change", () => {
-  if (dirty && !confirm("Discard unsaved changes and switch language?")) return;
-  loadState();
-});
 $("save").addEventListener("click", save);
 window.addEventListener("beforeunload", e => { if (dirty){ e.preventDefault(); e.returnValue=""; } });
-loadLanguages();
+loadState();
 </script>
 </body>
 </html>

@@ -27,6 +27,7 @@ import argparse
 import asyncio
 import logging
 import math
+import time
 from functools import lru_cache, partial
 from pathlib import Path
 from typing import Optional
@@ -200,6 +201,13 @@ class S2PEventHandler(AsyncEventHandler):
         if AudioStop.is_type(event.type):
             text = ""
             if self._holder.ready and self._buf:
+                # Everything from here to the transcript is what Home Assistant
+                # waits on: the audio has stopped, so this is dead air in the
+                # conversation. Timed as one number (conversion, level, VAD and
+                # decode) because that is the latency a user perceives, and
+                # surfaced in debug mode -- a slow decode and a mis-decode look
+                # the same from the outside otherwise.
+                started = time.monotonic()
                 samples = _pcm_to_float(
                     bytes(self._buf), self._rate, self._width, self._channels
                 )
@@ -212,15 +220,18 @@ class S2PEventHandler(AsyncEventHandler):
                     None, trim_silence, samples
                 )
                 result = await self._holder.transcribe(samples)
+                processing = time.monotonic() - started
                 accepted = (
                     result.score <= self._holder.max_score
                     and result.score != math.inf
                 )
                 if accepted:
                     text = result.text
-                    _LOGGER.debug("matched (score=%.3f): %r", result.score, result.text)
+                    _LOGGER.debug("matched (score=%.3f, %.2fs): %r",
+                                  result.score, processing, result.text)
                 else:
-                    _LOGGER.debug("gated (score=%.3f): %r", result.score, result.text)
+                    _LOGGER.debug("gated (score=%.3f, %.2fs): %r",
+                                  result.score, processing, result.text)
                 if self._holder.debug_mode:
                     debug_log.record(
                         language=self._holder.language,
@@ -230,6 +241,7 @@ class S2PEventHandler(AsyncEventHandler):
                         accepted=accepted,
                         max_score=self._holder.max_score,
                         duration=len(samples) / SAMPLE_RATE,
+                        processing=processing,
                     )
                     # Debug mode observes; it does not act. Handing HA a
                     # transcript here would run the command being diagnosed.

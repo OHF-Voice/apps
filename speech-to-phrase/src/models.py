@@ -19,7 +19,7 @@ import tarfile
 import tempfile
 import urllib.request
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 _LOGGER = logging.getLogger("speech-to-phrase.models")
 
@@ -75,7 +75,11 @@ def default_token_bonus(backend: str) -> float:
 MODEL_NAMES = {
     "en": {"citrinet": "stt_en_citrinet_512", "coqui": "en_US-coqui"},
     "de": {"citrinet": "stt_de_citrinet_1024", "coqui": "de_DE-coqui"},
-    "es": {"citrinet": "stt_es_citrinet_512", "coqui": "es_ES-coqui"},
+    # Spanish is Citrinet-only on purpose: es_ES-coqui does not load at all
+    # ("Expected [T, 30] probs, got (T, 36)" -- its alphabet has 36 symbols and
+    # the stt_onlyprobs decode path expects 30). Listing it only gave anyone who
+    # set backend=coqui a model that downloads and then refuses to run.
+    "es": {"citrinet": "stt_es_citrinet_512"},
     # French uses the Conformer, not stt_fr_citrinet_1024_gamma_0_25: that model
     # cannot resolve the "verrouille"/"déverrouille" prefix, decoding "unlock the
     # front door" as "lock the front door" at 0.73 -- confidently, so the score
@@ -115,15 +119,29 @@ def _find_model_dir(root: Path) -> Path:
 
 
 def model_name_for(language: str, backend: str) -> Optional[str]:
-    by_backend = MODEL_NAMES.get(language, {})
-    return by_backend.get(backend) or (next(iter(by_backend.values()), None))
+    """The model for exactly ``(language, backend)``, or None if there isn't one.
+
+    Deliberately does not substitute another backend's model. It used to fall
+    back to whatever the language had, which meant ``language: cs`` with
+    ``backend: citrinet`` downloaded the Coqui model and then died loading it
+    (``FileNotFoundError: cs_CZ-coqui/tokens.txt``) on every start. A missing
+    model is a configuration answer -- None -- not a different model.
+    ``resolve_backend`` is what picks a backend that exists.
+    """
+    return MODEL_NAMES.get(language, {}).get(backend)
+
+
+def backends_for(language: str) -> List[str]:
+    """Backends that have a model for ``language`` (may be empty)."""
+    return list(MODEL_NAMES.get(language, {}))
 
 
 def resolve_backend(language: str, requested: str) -> str:
     """Turn ``backend="auto"`` into a concrete backend that actually has a model
     for ``language``. Citrinet is preferred (no extra binary, subword scale);
-    Coqui is used for languages that ship only a Coqui model (e.g. ``sl``,
-    ``nl``, ``cs``). Non-auto values pass through unchanged."""
+    Coqui is used for languages that ship only a Coqui model (``cs``; Dutch
+    moved to Citrinet). Non-auto values pass through unchanged -- and if that
+    pairing has no model, ``resolve`` says so rather than substituting one."""
     if requested != "auto":
         return requested
     by_backend = MODEL_NAMES.get(language, {})
@@ -157,7 +175,13 @@ def ensure_model(name: str, models_dir: Path) -> Path:
         urllib.request.urlretrieve(url, tar_path)
         extract_dir = Path(td) / "x"
         with tarfile.open(tar_path) as tf:
-            tf.extractall(extract_dir)
+            # filter="data": refuse members that would escape extract_dir or
+            # carry anything a model archive has no business carrying (absolute
+            # paths, links, devices, setuid bits). This is the only place a
+            # remote source writes to disk. It is also the default from Python
+            # 3.14, so setting it keeps behaviour identical across versions
+            # rather than shifting under us on an interpreter bump.
+            tf.extractall(extract_dir, filter="data")
         src = _find_model_dir(extract_dir)
         if not _present(src):
             raise RuntimeError(f"No model files found in archive for '{name}'")
@@ -212,5 +236,14 @@ def resolve(model: Optional[str], models_dir: Path, language: str,
         return ensure_model(model, models_dir)
     name = model_name_for(language, backend)
     if not name:
+        available = backends_for(language)
+        if available:
+            _LOGGER.error(
+                "No %s model for '%s'; that language ships a model for: %s. "
+                "Set backend to one of those (or 'auto') in the add-on options.",
+                backend, language, ", ".join(available),
+            )
+        else:
+            _LOGGER.error("No acoustic model for language '%s'", language)
         return None
     return ensure_model(name, models_dir)

@@ -9,6 +9,38 @@
   through the real path (package templates → grammar → HA Cloud TTS → decode):
   de 59/59, ca 56/56, cs 59/59, es 55/55, fr 56/56, it 50/50, nl 53/53
   commands resolved to the right command, all within the score gate.
+- Fixed: changing the acoustic model for a language left the old grammar in
+  place, and the recognizer then returned an empty transcript for every
+  utterance — silently, and until something else happened to change the
+  grammar. A `grammar.fst` is compiled against one model's vocabulary (its arc
+  labels *are* that model's token ids), but the staleness fingerprint covered
+  only the templates, the entity/area/floor values and the backend. Swapping
+  French from Citrinet to Conformer (1024 tokens → 128) therefore looked like no
+  change at all. The model is part of the fingerprint now, so a model change
+  retrains once on the first start after the update.
+- Fixed: setting `language` to one of the languages with an acoustic model but
+  no sentence templates yet (`zh`, `ru`, `hr`, `hi`, `sl`) took the add-on down
+  on every start with `ValueError: No sentence templates provided`. The
+  configured language is checked up front and reported as what it is — a
+  setting to change, with the supported languages listed — and an empty grammar
+  anywhere else leaves the previous one alone instead of raising.
+- Fixed: asking for a `backend` that has no model for the language quietly
+  substituted the *other* backend's model, downloaded it, and then failed to
+  load it on every start (`language: cs` with `backend: citrinet` died on
+  `cs_CZ-coqui/tokens.txt`). A missing model now reads as missing: the add-on
+  serves the web UI, and the log says which backends that language does have.
+- Removed the `es_ES-coqui` mapping: the model cannot load at all (its alphabet
+  has 36 symbols where the decode path expects 30), so offering it only gave
+  anyone who set `backend: coqui` a download followed by a crash. Spanish runs
+  on Citrinet.
+- Hardened: the `lang` a web-UI request asks for is checked against the
+  languages the add-on actually serves before it is used to build a path.
+  `<data>/<lang>/` is a join, so a crafted value wrote `enabled.json`,
+  `settings.json` and `custom_commands.json` outside the data directory.
+- Hardened: acoustic-model archives extract with tarfile's `data` filter, so a
+  member cannot escape the extraction directory or bring along a link, a device
+  node or a setuid bit. This is also the Python 3.14 default, so behaviour no
+  longer shifts on an interpreter bump.
 - Fixed in `tools/lang_check.py`: it measured whichever `speech_to_phrase` was
   importable, and on a development machine an editable install of the upstream
   library shadows the vendored `lib/` through `sys.meta_path` — which

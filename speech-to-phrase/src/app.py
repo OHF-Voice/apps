@@ -24,6 +24,7 @@ import logging
 import os
 import threading
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -43,6 +44,48 @@ import wyoming_server
 
 _LOGGER = logging.getLogger("speech-to-phrase")
 ADDON_ROOT = Path(__file__).resolve().parent.parent
+
+
+@lru_cache(maxsize=1)
+def supported_languages() -> tuple:
+    """Languages that ship Speech-to-Phrase templates. Cached: it is the
+    allowlist every request validates against, and it cannot change without a
+    restart (it comes from the installed home-assistant-intents package)."""
+    return tuple(bi.languages(ADDON_ROOT))
+
+
+def _known_lang(lang: str) -> bool:
+    """Whether `lang` is a language we serve.
+
+    Every route that takes a ``lang`` checks this before it reaches the
+    filesystem. ``<data>/<lang>/`` is built by joining the value onto the data
+    directory, so an unchecked one ("../../x") wrote enabled.json, settings.json
+    and custom_commands.json outside <data> entirely. The set of real languages
+    is small, closed and known, so an allowlist is the whole fix."""
+    return lang in supported_languages()
+
+
+def _check_language(language: str) -> None:
+    """Refuse to start on a language the add-on cannot serve, and say why.
+
+    Without this the failure surfaced as ``ValueError: No sentence templates
+    provided`` from deep inside training, which took the container down on every
+    start. Five of the languages models.py maps a model for (zh, ru, hr, hi, sl)
+    have no templates in the package yet, so this is a configuration a user can
+    reach from the add-on options page."""
+    langs = supported_languages()
+    if language in langs:
+        return
+    if language in models.MODEL_NAMES:
+        detail = (f"'{language}' has an acoustic model but no Speech-to-Phrase "
+                  f"sentence templates yet, so there is nothing it could "
+                  f"recognize.")
+    else:
+        detail = f"'{language}' is not a Speech-to-Phrase language."
+    raise SystemExit(
+        f"{detail} Set 'language' in the add-on options to one of: "
+        f"{', '.join(langs)}."
+    )
 
 
 class IngressPrefixMiddleware:
@@ -65,7 +108,7 @@ class IngressPrefixMiddleware:
 def create_app(cfg) -> Flask:
     if cfg.backend == "auto":
         # Pick a backend that actually has a model for this language (Citrinet
-        # preferred; Coqui for coqui-only languages like sl/nl/cs).
+        # preferred; Coqui for the languages that ship only that, i.e. cs).
         cfg.backend = models.resolve_backend(cfg.language, "auto")
     # Gate default depends on the (now-resolved) backend: Citrinet and Coqui use
     # different penalty scales. Only applied when the user left it unset. Same
@@ -114,14 +157,22 @@ def create_app(cfg) -> Flask:
     def index():
         return render_template("index.html")
 
+    def bad_lang(lang: str):
+        """400 for a language we don't serve, so a bogus value stops here rather
+        than being joined onto a path."""
+        _LOGGER.warning("Rejected request for unknown language %r", lang)
+        return jsonify({"ok": False, "error": f"unknown language: {lang!r}"}), 400
+
     @app.route("/api/languages")
     def api_languages():
-        langs = bi.languages(ADDON_ROOT)
+        langs = list(supported_languages())
         return jsonify({"languages": langs, "default": cfg.language if cfg.language in langs else (langs[0] if langs else None)})
 
     @app.route("/api/state")
     def api_state():
         lang = request.args.get("lang", cfg.language)
+        if not _known_lang(lang):
+            return bad_lang(lang)
         combos = bi.available_combos(ADDON_ROOT, lang, meta)
         amap = training.enabled_domain_map(read_enabled(lang, combos))
         ov = _overrides(cfg, lang)
@@ -244,6 +295,8 @@ def create_app(cfg) -> Flask:
         """Recognitions since `since`, each tagged with the sentence source that
         produced it. Polled by the UI while debug mode is on."""
         lang = request.args.get("lang", cfg.language)
+        if not _known_lang(lang):
+            return bad_lang(lang)
         try:
             since = int(request.args.get("since", 0))
         except (TypeError, ValueError):
@@ -265,7 +318,9 @@ def create_app(cfg) -> Flask:
     @app.route("/api/save", methods=["POST"])
     def api_save():
         body = request.get_json(force=True)
-        lang = body["lang"]
+        lang = body.get("lang") or ""
+        if not _known_lang(lang):
+            return bad_lang(lang)
         enabled = [list(e) for e in body.get("enabled", [])]
         commands = body.get("commands", [])
         d = lang_dir(lang)
@@ -298,9 +353,20 @@ def create_app(cfg) -> Flask:
         resp = {"ok": True, "n_templates": len(templates), "trained": False}
         if _model_dir_for(cfg, lang) is not None:
             try:
-                _ensure_trained(cfg, lang, meta, entities, slot_lists, data_dir, force=True)
-                resp["trained"] = True
-                resp["message"] = f"Saved and retrained ({len(templates)} sentences)."
+                # force=True, so a False return means there was nothing to
+                # compile. Say that instead of reporting a retrain that did not
+                # happen: with every command switched off the grammar on disk is
+                # the previous one, and voice keeps answering to it.
+                trained = _ensure_trained(
+                    cfg, lang, meta, entities, slot_lists, data_dir, force=True
+                )
+                resp["trained"] = trained
+                resp["message"] = (
+                    f"Saved and retrained ({len(templates)} sentences)."
+                    if trained else
+                    "Saved, but there are no sentences to train — enable at "
+                    "least one command, or the previous grammar stays in use."
+                )
             except Exception as e:  # noqa: BLE001
                 _LOGGER.exception("training failed")
                 resp.update(ok=False, message=f"Saved, but training failed: {e}")
@@ -546,11 +612,30 @@ def _custom_commands(data_dir: Path, lang: str) -> list:
     return cc.load(data_dir, lang)
 
 
-def _fingerprint(templates, list_values, backend) -> str:
-    """Hash of everything that determines the grammar -- templates AND the
-    name/area/floor/list values. Changes here mean the grammar is stale."""
+def _model_id(cfg, lang: str) -> str:
+    """Which acoustic model `lang` will be trained against, by name.
+
+    Part of the grammar fingerprint, and cheap on purpose: a name lookup, never
+    a download, because it is computed on every staleness check.
+    """
+    if lang == cfg.language and cfg.model:
+        return Path(cfg.model).name
+    return models.model_name_for(lang, cfg.backend) or ""
+
+
+def _fingerprint(templates, list_values, backend, model_id: str) -> str:
+    """Hash of everything that determines the grammar -- templates, the
+    name/area/floor/list values, AND the model it is compiled for. Changes here
+    mean the grammar is stale.
+
+    ``model_id`` matters because a grammar.fst is not portable between models:
+    its arc labels are token ids from that model's vocabulary. Swapping the
+    model for a language while backend and templates stay put (as the French
+    Citrinet -> Conformer change did, 1024 tokens -> 128) left a fingerprint
+    match, so no retrain fired and the recognizer returned an empty transcript
+    for every utterance, silently and forever."""
     blob = json.dumps(
-        {"backend": backend, "templates": sorted(templates),
+        {"backend": backend, "model": model_id, "templates": sorted(templates),
          "lists": {k: sorted(v) for k, v in list_values.items()}},
         sort_keys=True,
     )
@@ -581,7 +666,21 @@ def _ensure_trained(cfg, lang, meta, entities, slot_lists, data_dir: Path,
         ov=overrides.load(data_dir, lang),
         hass_sentences=_hass_sentences(cfg, lang),
     )
-    fp = _fingerprint(templates, list_values, cfg.backend)
+    if not templates:
+        # Nothing to compile. The recognition library rejects an empty grammar,
+        # and letting that ValueError out of here took the whole add-on down on
+        # every start (a restart loop whose only clue was the traceback). A
+        # language with no templates is a configuration problem to report, not a
+        # crash: main() checks the configured language up front, and this covers
+        # the rest -- a stray <data>/<lang>/ directory, or every command switched
+        # off in the web UI.
+        _LOGGER.warning(
+            "No sentences to train for '%s': the grammar was left unchanged. "
+            "Enable some commands in the web UI, or check that this language "
+            "has Speech-to-Phrase templates.", lang,
+        )
+        return False
+    fp = _fingerprint(templates, list_values, cfg.backend, _model_id(cfg, lang))
 
     d = data_dir / lang
     grammar, meta_path = d / "grammar.fst", d / "grammar.meta.json"
@@ -628,6 +727,7 @@ def _start_watch(cfg, meta, data_dir: Path) -> None:
                 langs = {cfg.language} | {
                     p.name for p in data_dir.iterdir()
                     if p.is_dir() and (p / "grammar.fst").exists()
+                    and _known_lang(p.name)
                 }
                 # Fetch the registry once per pass, then apply each language's
                 # own overrides to it: the filtering is per-language, but the
@@ -661,8 +761,13 @@ def main():
     ap.add_argument("--slot-lists-file", default=os.environ.get("SLOT_LISTS_FILE"))
     ap.add_argument("--hass-api", default=os.environ.get("HASS_API", "http://supervisor/core/api"))
     ap.add_argument("--hass-token", default=os.environ.get("SUPERVISOR_TOKEN"))
-    # We only ship curated sentence files for intents we want supported, so by
-    # default enable all of them ("optional" is the most permissive bucket).
+    # Which importance buckets are enabled on a language's first run. This
+    # default applies to the CLI only: the add-on ships `default_importance:
+    # usable` in config.yaml and the run script always passes it, so a container
+    # enables the "usable" half (24 of 46 combos on German) and the rest are a
+    # click away in the web UI. "optional" here means a bare `python src/app.py`
+    # -- and the round-trip checks in tools/ -- exercise every combo the package
+    # ships, which is what you want when validating a language.
     ap.add_argument("--default-importance", default="optional")
     # Phrases Home Assistant is already listening for. On by default (the
     # trigger/question would otherwise never be recognized), but each one widens
@@ -701,6 +806,7 @@ def main():
     logging.basicConfig(level=logging.DEBUG if cfg.debug else logging.INFO)
     # numba (pulled in by librosa) floods DEBUG with JIT traces.
     logging.getLogger("numba").setLevel(logging.INFO)
+    _check_language(cfg.language)
     app = create_app(cfg)
 
     # Serve Wyoming STT alongside the web UI in this same process. It reads the

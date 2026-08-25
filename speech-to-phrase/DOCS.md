@@ -81,9 +81,9 @@ phrase as a custom command.
 
 | Option | Description |
 |---|---|
-| `language` | Default language for the recognizer. |
-| `backend` | `auto` (per-language), `citrinet`, or `coqui`. |
-| `default_importance` | Built-ins at/above this tier are on by default. |
+| `language` | Language for the recognizer. Must be one that home-assistant-intents ships Speech-to-Phrase templates for (`ca`, `cs`, `de`, `en`, `es`, `fr`, `it`, `nl` today) — on anything else the add-on stops at startup and logs the list, rather than coming up with an empty grammar. |
+| `backend` | `auto` (picks one that has a model for the language), `citrinet`, or `coqui`. A specific backend is taken literally: if there is no model for that language/backend pairing the add-on runs the web UI only and logs which backends *do* have one. |
+| `default_importance` | Built-ins at/above this tier are on the **first time a language is set up**; after that the web UI owns the choice and changing this option does nothing. The shipped default (`usable`) is about half the catalogue — the larger the grammar, the more ways there are to mishear — so brightness, volume, mute, fan speed, cover position and "is the door open" start off and are one click away in **Commands**. Set it to `optional` to start with everything on. |
 | `sentence_triggers` | Add your automations' `conversation:` sentence-trigger phrases to the grammar (default on). Without this, a trigger phrase that isn't otherwise recognizable is never transcribed, so the automation never fires. Turn it off to keep the grammar to what you configured here. Overridable per-language in the web UI (**Settings → From Home Assistant**). |
 | `question_answers` | Add the `answers:` sentences of every `assist_satellite.ask_question` action to the grammar (default on), so a spoken reply to a question your automation asks can be recognized. Finding them means reading each automation and script config, so on a large installation this costs a little time at every retrain. Sentences containing Jinja2 templates (`{{ … }}`) are skipped — they have no fixed spoken form. Overridable per-language in the web UI. |
 | `max_score` | Defer low-confidence results to the cloud. This is the default score gate (lower = stricter). Leave it unset to use a per-backend default (Citrinet `5.0`, Coqui `2.0` — the scales differ); set it to override for all languages. It can also be overridden per-language in the web UI (**Settings → Recognition**), which the STT server hot-reloads. |

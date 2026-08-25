@@ -23,8 +23,18 @@ options:
   question_answers: true
   debug_logging: false
 schema:
+  # Must be a language home-assistant-intents ships Speech-to-Phrase templates
+  # for; the add-on refuses to start on any other and logs the list.
   language: str
+  # "auto" picks a backend that has a model for the language. A specific one is
+  # honoured as given -- if there is no model for that pairing the add-on runs
+  # UI-only and says so, rather than substituting the other backend's model.
   backend: "list(auto|citrinet|coqui)"
+  # Which commands are on the first time a language is set up. "usable" is a
+  # deliberate middle: the whole set ("optional") is a much larger grammar, and
+  # a larger grammar has more ways to mishear. The rest are one click away in
+  # the web UI, per command and per domain. Note this only seeds a new
+  # language -- once enabled.json exists, editing this changes nothing.
   default_importance: "list(required|usable|complete|optional)"
   # Add the phrases Home Assistant is already listening for to the grammar:
   # automation sentence triggers, and assist_satellite.ask_question answers.

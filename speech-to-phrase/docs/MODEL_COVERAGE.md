@@ -1,25 +1,21 @@
 # Speech-to-Phrase — Model Coverage Report
 
 **Goal:** support (at least) every language Home Assistant ships translations/UI for.
-**Date:** 2026-08-25 (first written 2026-07-02)
+**Date:** 2026-08-25
 
-This report has three parts:
+A language needs *two* things to be usable: an **acoustic model**, and a set of
+**Speech-to-Phrase sentence templates** in `home-assistant-intents`. Either
+alone recognizes nothing, and the two are gated by completely different work —
+model training versus sentence authoring — so this report counts them
+separately.
 
-1. **Coverage gap** — which of HA's 66 languages Speech-to-Phrase can serve today.
+Three parts:
+
+1. **Coverage gap** — which of HA's 66 languages Speech-to-Phrase can serve.
 2. **Empirical round-trip test** — TTS→STT over every command each language
    ships, per model.
 3. **Datasets for the gaps** — permissively-licensed corpora to train new
    Citrinet/NeMo models for the missing languages.
-
-> **What changed since the first version.** A language needs *two* things, and
-> the July report only counted one of them. An acoustic model is half; the other
-> half is a set of Speech-to-Phrase sentence templates in
-> `home-assistant-intents`, which arrived for seven more languages in
-> 2026.8.25. Counting only models overstated coverage: five of the thirteen
-> mapped languages have no sentences to recognize. Since the pre-release fixes
-> the add-on refuses to start on those rather than coming up empty, so they are
-> now listed as a separate gap. Dutch moved to Citrinet and the broken Spanish
-> Coqui mapping was dropped, which closes issues 1 and 2 of §2.
 
 ---
 
@@ -47,11 +43,16 @@ variants share a base model):
 | hi | `stt_hi_conformer_ctc_medium` | — | ❌ | hi |
 | sl | — | `sl_SL-coqui` | ❌ | sl |
 
-Spanish is Citrinet-only on purpose: `es_ES-coqui` cannot load (§2, issue 1).
-French moved from `stt_fr_citrinet_1024_gamma_0_25` to the Conformer, which is
-the only one of the four French models that resolves
-`verrouille`/`déverrouille` — the Citrinet decoded "unlock the front door" as
-"lock the front door", confidently enough that the score gate let it through.
+Two entries in that table are constrained rather than merely chosen, and should
+not be changed without re-testing:
+
+- **Spanish is Citrinet-only.** `es_ES-coqui` does not load: its alphabet has 36
+  symbols where the `stt_onlyprobs` decode path expects 30.
+- **French uses the Conformer**, not `stt_fr_citrinet_1024_gamma_0_25`. Of the
+  four French models in the dataset it is the one that reliably separates
+  `verrouille` from `déverrouille`; the Citrinet decodes "unlock the front door"
+  as "lock the front door" confidently enough that the score gate lets it
+  through, which is the one error direction that must not happen on a lock.
 
 ### Three distinct gaps
 
@@ -59,18 +60,15 @@ The 66 HA codes split **9 served + 7 model-but-no-sentences + 50 no model**.
 
 **Gap A — a model but no sentences: `zh`, `ru`, `hr`, `hi`, `sl` (7 HA codes).**
 The cheapest coverage win by far, and *not* a modelling problem: the acoustic
-side is done and validated, what's missing is `speech_to_phrase`-tagged blocks
-in `intent-sentences/sentences/<lang>/`. Roughly 50–60 blocks per language,
-authored the way `de`/`ca`/`cs` were (PRs #4130–#4136 are the pattern). Slovenian
-is the closest to ready — `sentences/sl/` was drafted and validated
-TTS→STT at 20/20 in an earlier pass, it just never landed upstream.
+side is done and validated, and what's missing is `speech_to_phrase`-tagged
+blocks in `intent-sentences/sentences/<lang>/` — roughly 50–60 per language,
+authored the way `de`/`ca`/`cs` are (PRs #4130–#4136 are the pattern). Slovenian
+is closest to ready: a draft of `sentences/sl/` exists and round-tripped 20/20,
+but is not upstream and needs rebasing onto the current block shape.
 
 **Gap B — Coqui-only (no Citrinet): `cs`.**
 Czech works, but on the character-level Coqui backend, which needs the
-`stt_onlyprobs` binary and a separate score scale. Dutch used to be in this
-bucket and is not any more: `nl_NL-coqui` misrecognized *below* the gate
-("doe de lichten uit" → "...aan"), so it acted on the wrong command instead of
-deferring, and `stt_nl_citrinet_256` does not have that failure.
+`stt_onlyprobs` binary and runs on its own score scale.
 
 **Gap C — no model at all: 50 HA languages.** Prioritized by HA's own support signals:
 
@@ -135,36 +133,22 @@ English is the least-covered language *by this test*: only 20 of its 54 tagged
 blocks carry an `example:`, so 34 go unmeasured. Every other language annotates
 all of them.
 
-Reproduce: `python3 tools/lang_check.py --language de --model <dir>
---intents-repo <intent-sentences>` (needs `HA_TOKEN`; clips cache under
-`tests/wav/.tts_cache`).
+Reproduce: `python3 tools/lang_check.py --language <lang> --model <dir>
+--intents-repo <intent-sentences>` — models under `speech-to-phrase-lib/local/`,
+`--json-out` for per-utterance scores, `HA_TOKEN` for the TTS, and clips cache
+under `tests/wav/.tts_cache` so a re-run makes no TTS calls.
 
-### Issues found — and what became of them
+### What this test cannot tell us
 
-1. ~~**`es_ES-coqui` is broken.**~~ **Resolved (dropped).** Loading failed with
-   `RuntimeError: Expected [T, 30] probs, got (118, 36)` — 36 alphabet symbols
-   where the `stt_onlyprobs` decode path expects 30. Since the mapping only
-   offered a download followed by a crash to anyone who set `backend: coqui`,
-   `MODEL_NAMES["es"]` is Citrinet-only now.
-
-2. ~~**`nl_NL-coqui` misrecognizes below the gate.**~~ **Resolved (Citrinet).**
-   "doe de lichten **uit**" decoded as "…**aan**" at score < 2.0 — acted on as
-   the wrong command rather than deferred. Dutch defaults to
-   `stt_nl_citrinet_256`, which round-trips 53/53 above.
-
-3. **Longer sentences on `fr`/`it` — resolved by a model change and a fuller
-   grammar.** The July run had these missing longer utterances (gated, so
-   degrading gracefully rather than misfiring). French moved to the Conformer
-   for the `verrouille`/`déverrouille` problem and both now resolve every
-   command. `ru` is untestable until it has templates (Gap A).
-
-4. **Non-Latin scripts and Coqui both work.** The July run round-tripped `zh`
-   (Han), `hi` (Devanagari), `hr` and `sl` cleanly on hand-built grammars, which
-   is what makes Gap A a sentence-authoring job rather than a modelling one.
-
-The July numbers came from a hand-built 6-command grammar per language
-(`scratchpad/multilang_test.py`, since superseded by `tools/lang_check.py`);
-they are kept above only where they still say something the current test cannot.
+- **The five Gap A languages are unmeasured**, because there is nothing to
+  build a grammar from. Their acoustic models do round-trip hand-built
+  command sets — including `zh` (Han) and `hi` (Devanagari) — which is the basis
+  for calling Gap A a sentence-authoring job rather than a modelling one, but
+  that is a weaker result than the table above and does not substitute for it.
+- **Nothing here is measured on human speech.** Real-world accuracy, noise
+  robustness and false-accept rates against non-command audio are
+  `tools/audio_test.py`'s job (TTS → room impulse response + noise sweep, plus
+  out-of-grammar false-accept checks), not this one's.
 
 ---
 
@@ -191,17 +175,15 @@ Common Voice figures are validated hours from **CV 26.0 (2026-06)**.
 
 ### Priority recommendations
 
-**Note the priority shift.** The July version of this report put "train Citrinet
-for nl, cs, sl" first. Dutch is done (it runs on `stt_nl_citrinet_256`), and for
-`sl` a model is no longer the blocker — it has one, and no sentences (Gap A).
-That leaves **`cs` as the only remaining Coqui-only language**, and it round-trips
-59/59, so the upgrade is a nice-to-have rather than a fix:
+**Czech is the only Coqui-only language (Gap B), and it round-trips 59/59, so a
+Citrinet for it is a nice-to-have rather than a fix:**
 
 | Lang | Recommended training data | License | ~Permissive hrs | Verdict |
 |------|---------------------------|---------|:---------------:|---------|
 | **cs** Czech | ParlaSpeech-CZ 1,218h + LINDAT 444h + CV 82h + VoxPopuli 62h | CC-BY-SA / CC-BY / CC0 / CC0 | **~1,800** | **Ample** — would drop the `stt_onlyprobs` binary requirement and put Czech on the same score scale as everything else |
-| ~~**nl** Dutch~~ | MLS 1,554h + CML-TTS 645h + CV 126h + VoxPopuli 53h | — | ~2,400 | **Done** — `stt_nl_citrinet_256`, 53/53 |
-| ~~**sl** Slovenian~~ | ARTUR 884h (includes purpose-built smart-home utterances) + GOS 300h + CV 17h | CC-BY-SA / CC-BY-SA / CC0 | ~1,200 | Model exists (`sl_SL-coqui`); **blocked on sentences**, not data |
+
+The Gap A languages need no data at all: `sl` has `sl_SL-coqui` and the other
+four have Citrinet/Conformer models. Sentences are the blocker, not corpora.
 
 **Tier 1 gap languages (HA already ships Whisper — proven demand):**
 
@@ -245,22 +227,16 @@ Apache/MIT sets ~115h, moderate). **Data-scarce (defer / need collection):**
 
 ---
 
-## Appendix — action items surfaced by this report
+## Appendix — open action items
 
-1. ✅ **Done.** Drop `MODEL_NAMES["es"]["coqui"]` — `es_ES-coqui` fails to load
-   (`Expected [T, 30] probs, got (118, 36)`). Spanish is Citrinet-only.
-2. ✅ **Done.** `nl_NL-coqui` below-gate confusions (off→on) — Dutch defaults to
-   `stt_nl_citrinet_256`.
-3. ✅ **Done for `fr`/`it`** (both resolve every command on the full production
-   grammar, §2). Still open for `ru`, which needs templates before it can be
-   measured at all.
-4. **Open:** author `speech_to_phrase` blocks for `zh`, `ru`, `hr`, `hi`, `sl`
-   in `intent-sentences` (Gap A). `sentences/sl/` was drafted and validated
-   once; it needs rebasing onto the current block shape and upstreaming.
-5. **Open:** add `example:` fields to the 34 English tagged blocks that have
-   none, so English is measured as thoroughly as every other language.
-6. Reproduce §2: `python3 tools/lang_check.py --language <lang> --model <dir>
-   --intents-repo <intent-sentences>` (models in `speech-to-phrase-lib/local/`,
-   `--json-out` for per-utterance scores). The July hand-built harness was
-   `scratchpad/multilang_test.py`.
+1. Author `speech_to_phrase` blocks for `zh`, `ru`, `hr`, `hi`, `sl` in
+   `intent-sentences` (Gap A). The `sentences/sl/` draft needs rebasing onto the
+   current block shape and upstreaming; the other four start from scratch.
+2. Add `example:` fields to the 34 English tagged blocks that have none, so
+   English is measured as thoroughly as every other language.
+3. Re-check `fr`, `it` and `ca` with **human speech** — their gap between
+   "same command" and "exact string" is the widest, and TTS prosody is the
+   obvious confound.
+4. Consider a Citrinet for `cs` to retire the `stt_onlyprobs` dependency
+   (§3), and for the Tier-1 languages in priority order.
 

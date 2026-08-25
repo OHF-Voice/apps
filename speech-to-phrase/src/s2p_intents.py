@@ -264,7 +264,7 @@ def text_list_values(lang: str) -> Dict[str, List[str]]:
     for name, vals in texts.items():
         expanded: List[str] = []
         for value in vals:
-            expanded.extend(_value_phrasings(value, lang))
+            expanded.extend(phrasings(value, lang))
         expanded = list(dict.fromkeys(expanded))
         # De-dupe after normalization too: spacing a hyphen can collide a value
         # with one already present ("по-силно" -> "по силно").
@@ -288,9 +288,17 @@ def text_list_values(lang: str) -> Dict[str, List[str]]:
 
 
 @lru_cache(maxsize=None)
-def _value_phrasings(value: str, lang: str) -> Tuple[str, ...]:
-    """Plain spoken forms of a single list value (``(up|increase)`` -> up,
-    increase). Falls back to the flattened value if it will not parse."""
+def phrasings(value: str, lang: str) -> Tuple[str, ...]:
+    """Plain forms of a template fragment: ``(up|increase)`` -> up, increase;
+    ``movie time [please]`` -> movie time please, movie time. ``{list}`` and
+    range references are left alone. Falls back to the flattened value if it
+    will not parse.
+
+    Used for list values (which are template fragments more often than not) and
+    for anything else written in the authoring dialect that has to be reduced to
+    the flat phrasings the grammar actually holds -- custom commands, whose
+    ``[optional]``/``(a|b)`` the trainer expands inside the FST rather than into
+    separate templates."""
     if not any(c in value for c in "()[]<|"):
         return (normalize_whitespace(value).strip(),)
     try:

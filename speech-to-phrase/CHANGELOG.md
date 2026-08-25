@@ -10,6 +10,15 @@
   utterance, so tuning `max_score` against commands that *should* be rejected
   cannot fire the ones that pass. Applies immediately — the toggle changes only
   runtime reporting, not the grammar, so it needs no retrain.
+- Fixed: a custom command written with `[optional]` or `(a|b)` was reported by
+  debug mode as "not in the grammar". The trainer expands those inside the FST,
+  so the command stays a single template while the decoder can emit any of its
+  phrasings; attribution compared against the template as written and matched
+  none of them.
+- Fixed: `{0..100:slot}` — the range form the custom-command syntax documents —
+  was read as a reference to a list named `0..100`. Debug mode could not
+  attribute any numeric custom command, and the grammar-size meter priced a
+  101-value range at a single phrase.
 
 - Sentence triggers and question answers configured in Home Assistant are added
   to the grammar again, each behind its own option (`sentence_triggers`,

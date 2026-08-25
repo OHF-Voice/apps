@@ -172,6 +172,49 @@ async def main() -> int:
     check("out-of-grammar", origin("do a barrel roll"), None)
     check("empty", origin(""), None)
 
+    # A custom command keeps the authoring dialect all the way into the grammar
+    # -- the trainer expands [optional]/(a|b) inside the FST, so one template
+    # yields several utterances and attribution has to expand it too. And
+    # `{0..100:slot}` is the range form the custom-command docs use; reading it
+    # as a list named "0..100" made every numeric custom command unattributable.
+    dialect = [
+        {"sentences": ["movie time [please]"], "mode": "stt"},
+        {"sentences": ["(start|begin) movie night"], "mode": "stt"},
+        {"sentences": ["set the volume to {0..100:level}"], "mode": "stt"},
+        {"sentences": ["cinema mode for {name}"], "mode": "stt",
+         "name_domains": ["light"]},
+    ]
+    by_source, list_values = training.assemble_sources(
+        ROOT, "en", [], dialect,
+        training.DEV_ENTITY_RECORDS, training.DEV_SLOT_LISTS,
+    )
+    att2 = sources.build(by_source, list_values, "en")
+    def origin2(text):
+        got = att2.attribute(text)
+        return got and got["source"]
+
+    check("optional word present", origin2("movie time please"), "custom:0")
+    check("optional word absent", origin2("movie time"), "custom:0")
+    check("first alternative", origin2("start movie night"), "custom:1")
+    check("second alternative", origin2("begin movie night"), "custom:1")
+    check("range with a slot name", origin2("set the volume to fifty"), "custom:2")
+    check("range, upper bound", origin2("set the volume to one hundred"), "custom:2")
+    check("custom {name}", origin2("cinema mode for kitchen lamp"), "custom:3")
+    # The template as written is what gets reported, not the phrasing that hit.
+    check("reported template is the authored one",
+          att2.attribute("movie time")["template"], "movie time [please]")
+    # A phrase the template cannot produce ("in the {area}" vs "in {area}") is
+    # still correctly not-in-the-grammar.
+    check("not producible", origin2("movie time now"), None)
+
+    # phrase_count read `{0..100:brightness}` as an undefined list and priced a
+    # 101-value range at one phrase, so the UI understated numeric commands.
+    check("range cost, with slot name",
+          training.phrase_count(["to {0..100:level}"], {}), 101)
+    check("range cost, bare", training.phrase_count(["to {0..100}"], {}), 101)
+    check("range cost, stepped",
+          training.phrase_count(["to {0..100,5:level}"], {}), 21)
+
     # A grammar the assembler can't attribute must not crash the debug view.
     check("no sources at all", sources.build({}, {}, "en").attribute("anything"), None)
 

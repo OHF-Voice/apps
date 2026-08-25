@@ -84,11 +84,16 @@ def _range_words(spec: str, lang: str) -> Optional[List[str]]:
 def _ref_values(
     ref: str, list_values: Dict[str, Sequence[str]], lang: str
 ) -> Optional[List[str]]:
-    ref = ref.strip()
-    words = _range_words(ref, lang)
+    # The `:slot` suffix binds the match to a slot name and says nothing about
+    # what the reference contains, so drop it before looking anything up. It has
+    # to go before the range test too: `{0..100:brightness}` is the form the
+    # custom-command dialect documents, and testing the whole reference makes it
+    # look like a list named "0..100" that nothing defines.
+    base = ref.split(":", 1)[0].strip()
+    words = _range_words(base, lang)
     if words is not None:
         return words
-    values = list_values.get(ref.split(":", 1)[0].strip())
+    values = list_values.get(base)
     if values is None:
         return None
     return [normalize(v) for v in values if v and v.strip()]
@@ -159,25 +164,34 @@ def build(
     trigger reading "movie time" wins over a built-in whose ``{name}`` happens to
     include a device called "movie" -- the specific reading of an ambiguous
     transcript is the useful one.
+
+    A template may still carry ``[optional]`` / ``(a|b)`` -- the trainer expands
+    those inside the FST, so a custom command stays one template all the way into
+    the grammar while the decoder can emit any of its phrasings. Each is expanded
+    here to a pattern of its own, all reported against the template as written,
+    which is what the author will recognize.
     """
+    import s2p_intents
+
     plain: List[Tuple[str, str, "re.Pattern"]] = []
     slotted: List[Tuple[str, str, "re.Pattern"]] = []
     n_skipped = 0
     for source, templates in templates_by_source.items():
         for template in templates:
-            body = _pattern(template, list_values, lang)
-            if body is None:
-                n_skipped += 1
-                continue
-            try:
-                rx = re.compile(body)
-            except re.error:
-                n_skipped += 1
-                continue
-            entry = (source, template, rx)
-            (slotted if "{" in template else plain).append(entry)
+            for phrasing in s2p_intents.phrasings(template, lang):
+                body = _pattern(phrasing, list_values, lang)
+                if body is None:
+                    n_skipped += 1
+                    continue
+                try:
+                    rx = re.compile(body)
+                except re.error:
+                    n_skipped += 1
+                    continue
+                entry = (source, template, rx)
+                (slotted if "{" in phrasing else plain).append(entry)
     if n_skipped:
-        _LOGGER.debug("%d template(s) not attributable", n_skipped)
+        _LOGGER.debug("%d phrasing(s) not attributable", n_skipped)
     return Attributor(plain + slotted)
 
 

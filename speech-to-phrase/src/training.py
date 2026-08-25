@@ -600,14 +600,17 @@ def phrase_count(templates: Sequence[str], list_values: Dict[str, List[str]]) ->
     for template in templates:
         n = 1
         for ref in re.findall(r"\{([^}]+)\}", template):
-            ref = ref.strip()
+            # Strip the `:slot` binding before deciding what the reference is:
+            # `{0..100:brightness}` is a 101-value range, and testing the whole
+            # reference read it as an undefined list and priced it at 1 phrase.
+            ref = ref.split(":", 1)[0].strip()
             m = _RANGE_REF_RE.match(ref)
             if m:
                 lo, hi = int(m.group(1)), int(m.group(2))
                 step = abs(int(m.group(3) or 1)) or 1
                 n *= max(1, (abs(hi - lo) // step) + 1)
             else:
-                n *= max(1, len(list_values.get(ref.split(":", 1)[0], [])))
+                n *= max(1, len(list_values.get(ref, [])))
         total += n
     return total
 

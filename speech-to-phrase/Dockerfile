@@ -12,9 +12,12 @@ COPY requirements.txt ./
 # the image needs no network access to a git host and no external checkout.
 COPY lib/ ./lib/
 
-# cmake/g++/libfst-dev exist only to compile the vendored library's native _fst
-# module, and are purged in the same layer so they never reach the shipped image
-# (~200 MB of toolchain).
+# cmake/g++/libfst-dev/python3-dev exist only to compile the vendored library's
+# native _fst module, and are purged in the same layer so they never reach the
+# shipped image (~200 MB of toolchain). python3-dev is what CMake's
+# Development.SABIModule component looks for; without it the configure step
+# fails with "Could NOT find Python (missing: Interpreter
+# Development.SABIModule)" rather than anything about headers.
 #
 # The OpenFST *runtime* library has to survive that purge: _fst links
 # libfst.so.<N> dynamically, and only the -dev package was asked for by name, so
@@ -38,6 +41,7 @@ RUN \
         cmake \
         g++ \
         libfst-dev \
+        python3-dev \
     && pip3 install --no-cache-dir -U setuptools wheel \
     && pip3 install --no-cache-dir -r requirements.txt \
     && fst_so="$(python3 -c 'import glob, pathlib, speech_to_phrase as s; print(glob.glob(str(pathlib.Path(s.__file__).parent / "_fst*.so"))[0])')" \
@@ -55,7 +59,7 @@ RUN \
            echo "ERROR: mapped none of _fst's shared libraries to packages; refusing to purge" >&2; \
            exit 1; \
        fi \
-    && apt-get purge -y --auto-remove cmake g++ libfst-dev \
+    && apt-get purge -y --auto-remove cmake g++ libfst-dev python3-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /root/.cache \
     && python3 -c "import speech_to_phrase; print('vendored speech_to_phrase imports OK after purge')"

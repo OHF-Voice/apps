@@ -2,6 +2,23 @@
 
 ## 2.0.0
 
+- Fixed the build: the add-on would not install. The vendored recognition
+  library declared `requires-python = ">=3.12"` while the Home Assistant Debian
+  base image ships Python 3.11.2, so `pip` refused it with *"Package
+  'speech-to-phrase' requires a different Python: 3.11.2 not in '>=3.12'"*. The
+  floor was never a real requirement — nothing in the tree needs anything newer
+  than 3.9 bar the native module, whose limited-API level is set by the buffer
+  protocol, and that entered the limited API in **3.11**. The extension is built
+  `cp311-abi3` now, and two further build breaks behind that one are fixed too:
+  `python3-dev` was missing, so CMake could not find `Development.SABIModule`,
+  and a model archive was extracted with tarfile's `filter="data"`, which does
+  not exist on 3.11.2 (it arrived in 3.12 and was backported only as far as
+  3.11.4) — the same restrictions are applied by hand where it is absent, so the
+  hardening does not depend on the interpreter's patch level.
+- Added a `.dockerignore`. The build context was ~750 MB, almost all of it
+  downloaded models under `local/` plus a host-built CMake cache in `lib/build/`
+  that the in-image build had to detect and discard.
+
 - The add-on options are down to two: **the language, and verbose logging.**
   Everything else that was there — which commands are on, the score gate,
   whether to pull in the phrases Home Assistant already listens for, the

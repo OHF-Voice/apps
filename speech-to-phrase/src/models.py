@@ -152,6 +152,46 @@ def resolve_backend(language: str, requested: str) -> str:
     return "citrinet"
 
 
+def _extract_safely(tf: tarfile.TarFile, dest: Path) -> None:
+    """Extract a downloaded model archive, refusing anything a model has no
+    business containing.
+
+    This is the only place a remote source writes to disk, so a member must not
+    be able to escape ``dest`` (an absolute path, or one climbing out with
+    "..") and must be a plain file or directory -- never a link, device or
+    fifo.
+
+    tarfile's ``filter="data"`` does that and is used where available. It
+    arrived in Python 3.12 and was backported to 3.11.4, but the Home Assistant
+    base image ships 3.11.2, where passing ``filter=`` is a TypeError; making
+    the check depend on the interpreter's patch level would mean either a crash
+    or silently unhardened extraction, so where it is missing the rules are
+    applied by hand.
+
+    The hand-rolled path is not identical: it refuses an absolute-path member
+    outright where the real filter strips the leading separator and extracts it
+    under ``dest``, and it does not scrub setuid bits. Both are safe, and no
+    model archive contains either.
+    """
+    if hasattr(tarfile, "data_filter"):
+        tf.extractall(dest, filter="data")
+        return
+
+    root = dest.resolve()
+    for member in tf.getmembers():
+        if not (member.isfile() or member.isdir()):
+            raise RuntimeError(
+                f"refusing archive member {member.name!r}: not a file or "
+                f"directory (type {member.type!r})"
+            )
+        if not (root / member.name).resolve().is_relative_to(root):
+            raise RuntimeError(
+                f"refusing archive member {member.name!r}: it would extract "
+                f"outside {dest}"
+            )
+    tf.extractall(dest)
+
+
 def ensure_model(name: str, models_dir: Path) -> Path:
     """Return <models_dir>/<name>, downloading + extracting it if absent.
 
@@ -175,13 +215,7 @@ def ensure_model(name: str, models_dir: Path) -> Path:
         urllib.request.urlretrieve(url, tar_path)
         extract_dir = Path(td) / "x"
         with tarfile.open(tar_path) as tf:
-            # filter="data": refuse members that would escape extract_dir or
-            # carry anything a model archive has no business carrying (absolute
-            # paths, links, devices, setuid bits). This is the only place a
-            # remote source writes to disk. It is also the default from Python
-            # 3.14, so setting it keeps behaviour identical across versions
-            # rather than shifting under us on an interpreter bump.
-            tf.extractall(extract_dir, filter="data")
+            _extract_safely(tf, extract_dir)
         src = _find_model_dir(extract_dir)
         if not _present(src):
             raise RuntimeError(f"No model files found in archive for '{name}'")

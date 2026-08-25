@@ -1,0 +1,22 @@
+# Keep the build context to what the image actually needs. Docker does not read
+# .gitignore, so without this the context is ~750 MB: local/ alone is 600 MB of
+# downloaded acoustic models, and lib/build/ carries a host-built CMake cache
+# that the in-image build has to detect and discard ("Original src ... != ...,
+# clearing cache").
+local/
+data/
+lib/build/
+lib/*.egg-info/
+tests/
+tools/
+docs/
+.git/
+.gitignore
+.claude/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+*.fst
+*.fst.tokens
+run-demo.sh

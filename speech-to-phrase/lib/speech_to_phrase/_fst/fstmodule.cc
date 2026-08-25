@@ -28,7 +28,13 @@
 
 #define PY_SSIZE_T_CLEAN
 #ifndef Py_LIMITED_API
-#define Py_LIMITED_API 0x030C0000  // CPython 3.12+
+// CPython 3.11+, which is the floor this module actually has: the buffer
+// protocol (Py_buffer / PyObject_GetBuffer, used to read the log-prob array
+// without a copy) entered the limited API in 3.11. Everything else here --
+// PyModule_Create, PyArg_ParseTuple, PyCapsule, the list/long/float builders --
+// has been in it far longer. 3.11 matters because the Home Assistant Debian
+// base image ships Python 3.11.
+#define Py_LIMITED_API 0x030B0000
 #endif
 #include <Python.h>
 

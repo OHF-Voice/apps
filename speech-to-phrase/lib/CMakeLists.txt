@@ -7,14 +7,14 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-# Stable-ABI (abi3) Python module: build once, run on any CPython >= 3.12.
+# Stable-ABI (abi3) Python module: build once, run on any CPython >= 3.11.
 find_package(Python REQUIRED COMPONENTS Interpreter Development.SABIModule)
 
 # OpenFST (system libfst-dev for dev; auditwheel bundles it into manylinux wheels).
 find_library(FST_LIBRARY NAMES fst REQUIRED)
 find_path(FST_INCLUDE_DIR NAMES fst/fstlib.h REQUIRED)
 
-python_add_library(_fst MODULE USE_SABI 3.12 WITH_SOABI
+python_add_library(_fst MODULE USE_SABI 3.11 WITH_SOABI
   speech_to_phrase/_fst/fstmodule.cc)
 target_include_directories(_fst PRIVATE ${FST_INCLUDE_DIR})
 target_link_libraries(_fst PRIVATE ${FST_LIBRARY} ${CMAKE_DL_LIBS})

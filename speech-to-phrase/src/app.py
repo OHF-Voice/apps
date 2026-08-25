@@ -32,6 +32,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import custom_commands as cc
 import extra_sentences as ex
+import hass_sentences as hs
 import models
 import overrides
 import presets as bi
@@ -199,6 +200,11 @@ def create_app(cfg) -> Flask:
                 "max_score": settings.get_max_score(data_dir, lang, cfg.max_score),
                 "max_score_default": cfg.max_score,
                 "devices_by_domain": devices,
+                # Phrases Home Assistant is already listening for, per source,
+                # priced so the two switches show what they cost.
+                "hass_sentences": _hass_sentences_state(
+                    cfg, lang, records, slot_lists, ov
+                ),
                 "areas": {"values": raw_lists.get("area", []), "used_by": area_used},
                 "floors": {"values": raw_lists.get("floor", []), "used_by": floor_used},
                 # Voice targeting, round-tripped by the UI. The UI only edits the
@@ -228,12 +234,18 @@ def create_app(cfg) -> Flask:
         # (no retrain needed — it only affects runtime gating, not the grammar).
         if body.get("max_score") is not None:
             settings.set_max_score(data_dir, lang, body["max_score"])
+        # Home Assistant sentence sources: these change the grammar, so the
+        # retrain below is what makes them take effect.
+        for source in hs.SOURCES:
+            if body.get(source) is not None:
+                settings.set_bool(data_dir, lang, source, body[source])
 
         entities = _current_records(cfg, lang)
         slot_lists = _current_slot_lists(cfg, lang)
         templates, _ = training.assemble(
             ADDON_ROOT, lang, enabled, commands, entities, slot_lists,
             extra_sentences=ex.load(data_dir, lang), ov=_overrides(cfg, lang),
+            hass_sentences=_hass_sentences(cfg, lang),
         )
         resp = {"ok": True, "n_templates": len(templates), "trained": False}
         if _model_dir_for(cfg, lang) is not None:
@@ -291,6 +303,63 @@ def _raw_records(cfg) -> list:
     if isinstance(data, dict):  # legacy {name: domain} fixture
         return [{"name": n, "domain": d} for n, d in data.items()]
     return data
+
+
+def _hass_flags(cfg, lang: str) -> Dict[str, bool]:
+    """Whether each Home-Assistant sentence source is on for `lang`: the add-on
+    option is the default for every language, the web UI overrides one."""
+    return {
+        source: settings.get_bool(
+            cfg.data, lang, source, bool(getattr(cfg, source, False))
+        )
+        for source in hs.SOURCES
+    }
+
+
+def _hass_sentences_grouped(cfg, lang: str) -> Dict[str, List[str]]:
+    """Phrases Home Assistant is already listening for, by source, honouring the
+    two switches. A switched-off source is fetched from neither HA nor cache, so
+    turning both off costs nothing.
+
+    Called on every training pass and on every UI load. hass_sentences caches for
+    a minute, so a multi-language pass costs one HA round-trip, not one per
+    language."""
+    flags = _hass_flags(cfg, lang)
+    return hs.fetch_grouped(
+        cfg.hass_api,
+        cfg.hass_token,
+        triggers=flags[hs.TRIGGERS],
+        answers=flags[hs.ANSWERS],
+    )
+
+
+def _hass_sentences(cfg, lang: str) -> List[str]:
+    grouped = _hass_sentences_grouped(cfg, lang)
+    return [s for source in hs.SOURCES for s in grouped[source]]
+
+
+def _hass_sentences_state(cfg, lang: str, records, slot_lists, ov) -> dict:
+    """The Home-Assistant sentence sources for the UI: each switch's state, the
+    phrases it currently contributes, and what they cost.
+
+    Only a switched-*on* source has phrases to show -- the point of switching one
+    off is not to go asking Home Assistant for them."""
+    grouped = _hass_sentences_grouped(cfg, lang)
+    flags = _hass_flags(cfg, lang)
+    out = {"sources": {}, "phrases": 0}
+    for source in hs.SOURCES:
+        costs = training.hass_sentence_costs(
+            ADDON_ROOT, lang, grouped[source], records, slot_lists, ov=ov
+        )
+        out["sources"][source] = {
+            "enabled": flags[source],
+            "default": bool(getattr(cfg, source, False)),
+            "sentences": costs,
+            "phrases": sum(int(c["phrases"]) for c in costs),
+        }
+        out["phrases"] += out["sources"][source]["phrases"]
+    out["available"] = bool(cfg.hass_token)
+    return out
 
 
 def _current_slot_lists(cfg, lang: Optional[str] = None) -> Dict[str, List[str]]:
@@ -419,6 +488,7 @@ def _ensure_trained(cfg, lang, meta, entities, slot_lists, data_dir: Path,
         ADDON_ROOT, lang, enabled, commands, entities, slot_lists,
         extra_sentences=ex.load(data_dir, lang),
         ov=overrides.load(data_dir, lang),
+        hass_sentences=_hass_sentences(cfg, lang),
     )
     fp = _fingerprint(templates, list_values, cfg.backend)
 
@@ -503,6 +573,16 @@ def main():
     # We only ship curated sentence files for intents we want supported, so by
     # default enable all of them ("optional" is the most permissive bucket).
     ap.add_argument("--default-importance", default="optional")
+    # Phrases Home Assistant is already listening for. On by default (the
+    # trigger/question would otherwise never be recognized), but each one widens
+    # the grammar, and the answer crawl costs a websocket round-trip per
+    # automation/script -- so both can be switched off.
+    ap.add_argument("--no-sentence-triggers", dest="sentence_triggers",
+                    action="store_false",
+                    help="don't add automation sentence-trigger phrases to the grammar")
+    ap.add_argument("--no-question-answers", dest="question_answers",
+                    action="store_false",
+                    help="don't add assist_satellite.ask_question answers to the grammar")
     ap.add_argument("--refresh-interval", type=int,
                     default=int(os.environ.get("REFRESH_INTERVAL", "600")),
                     help="seconds between registry-change checks (0 disables)")

@@ -387,6 +387,22 @@ def _rebind(key: str, scoped: str) -> str:
     return key + scoped[len("name"):]
 
 
+def bindable_lists(lang: str, slot_lists: Dict[str, List[str]]) -> Set[str]:
+    """Every ``{list}`` name the grammar can fill in for this language: the
+    package's text lists, the registry-provided ones (area/floor), and ``name``.
+
+    Used to screen sentences that come from outside the curated templates and
+    so may reference something that does not exist (see
+    ``hass_sentences.grammar_templates``)."""
+    import s2p_intents
+
+    return (
+        set(s2p_intents.text_list_values(lang))
+        | set(slot_lists)
+        | {"name", "area", "floor"}
+    )
+
+
 def assemble(
     s2p_repo: Path,
     lang: str,
@@ -396,11 +412,16 @@ def assemble(
     slot_lists: Dict[str, List[str]],
     extra_sentences: Optional[Dict[str, List[str]]] = None,
     ov=None,
+    hass_sentences: Optional[Sequence[str]] = None,
 ) -> Tuple[List[str], Dict[str, List[str]]]:
     """Build (templates, list_values) for the enabled built-ins + custom commands.
 
     `ov` (overrides.Overrides) supplies the user's aliases and per-command target
-    exclusions; the default changes nothing."""
+    exclusions; the default changes nothing.
+
+    `hass_sentences` are phrases Home Assistant itself is waiting to hear --
+    sentence triggers and ask_question answers (see hass_sentences.py) -- added
+    to the grammar as plain sentences."""
     import custom_commands as cc
     import gating
     import overrides as ovr
@@ -458,6 +479,20 @@ def assemble(
         _expand_block(
             block["sentences"], block.get("name_domains") or None, None,
             info, templates, list_values, ov=ov, canonical_lists=slot_lists,
+        )
+
+    # Sentence triggers / question answers configured in Home Assistant. They
+    # carry no domain scope of their own, so `{name}` (if one somehow appears)
+    # binds to every entity, exactly like a custom command's.
+    if hass_sentences:
+        import hass_sentences as hs
+
+        _expand_block(
+            hs.grammar_templates(
+                hass_sentences, lang, bindable_lists(lang, slot_lists)
+            ),
+            None, None, info, templates, list_values,
+            ov=ov, canonical_lists=slot_lists,
         )
 
     templates = list(dict.fromkeys(templates))
@@ -522,6 +557,44 @@ def combo_cost(
         "sentences": len(templates),
         "phrases": phrase_count(templates, list_values),
     }
+
+
+def hass_sentence_costs(
+    s2p_repo: Path,
+    lang: str,
+    hass_sentences: Sequence[str],
+    entities,
+    slot_lists: Dict[str, List[str]],
+    ov=None,
+) -> List[Dict[str, object]]:
+    """Grammar cost of each Home-Assistant-sourced sentence, for the UI.
+
+    ``[{"text": <as written in HA>, "sentences": n, "phrases": n}, ...]``, in
+    the given order. A sentence costing 0 contributed nothing: every phrasing of
+    it was written-only, or it referenced a list Speech-to-Phrase cannot fill in
+    -- either way the UI should say so rather than imply it is recognizable.
+    """
+    import hass_sentences as hs
+
+    if not hass_sentences:
+        return []
+    # One assemble for the bound list values (a sentence may use {name}/{area},
+    # whose size is what its cost is *made of*), then price each sentence
+    # against them.
+    _templates, list_values = assemble(
+        s2p_repo, lang, [], [], entities, slot_lists,
+        hass_sentences=hass_sentences, ov=ov,
+    )
+    bindable = bindable_lists(lang, slot_lists)
+    out: List[Dict[str, object]] = []
+    for sentence in hass_sentences:
+        templates = hs.grammar_templates([sentence], lang, bindable)
+        out.append({
+            "text": sentence,
+            "sentences": len(templates),
+            "phrases": phrase_count(templates, list_values),
+        })
+    return out
 
 
 def train(

@@ -179,7 +179,7 @@
       <div class="meter">
         <span><b id="m-count">0</b> of <span id="m-total">0</span> on</span>
         <div class="bar"><div class="fill" id="m-fill" style="width:0%"></div></div>
-        <span>~<b id="m-phrases">0</b> phrases in the grammar</span>
+        <span>~<b id="m-phrases">0</b> phrases in the grammar<span id="m-extra"></span></span>
       </div>
       <div id="commands-list"></div>
       <ul class="slot-legend" style="margin-top:14px">
@@ -246,6 +246,15 @@
       </label>
       <span id="score-hint" class="muted" style="font-size:13px;margin-left:10px"></span>
     </div>
+
+    <div class="card">
+      <h2>From Home Assistant</h2>
+      <p class="sub">Phrases Home Assistant is already listening for. They have to
+        be in the grammar to be transcribed at all — a sentence trigger that
+        isn't can never fire, and an answer that isn't can't be given. Switch a
+        source off to keep the grammar to what you configured here.</p>
+      <div id="hass-sentences"></div>
+    </div>
   </section>
 </div>
 
@@ -272,7 +281,10 @@ async function loadState() {
   const lang = $("lang").value;
   S = await (await fetch("api/state?lang=" + encodeURIComponent(lang))).json();
   $("trainflag").textContent = S.trainable ? "" : "(no model — saves persist, grammar not retrained)";
+  hassKnown = Object.fromEntries(
+    HASS_SOURCES.map(([key]) => [key, !!hassSource(key).enabled]));
   renderSettings();
+  renderHassSentences();
   renderCustom();
   renderCombos();
   renderLists();
@@ -284,6 +296,76 @@ function renderSettings() {
   if (S.max_score != null) $("max-score").value = S.max_score;
   const def = S.max_score_default;
   $("score-hint").textContent = def != null ? `default ${def}` : "";
+}
+
+/* ---- sentences pulled from Home Assistant ----
+   Two switches, each with the phrases it currently puts in the grammar and what
+   they cost. A switched-off source has no phrases to show: the server doesn't go
+   asking Home Assistant for what the user said not to use. */
+const HASS_SOURCES = [
+  ["sentence_triggers", "Sentence triggers",
+   "The <code>conversation:</code> trigger phrases of your automations."],
+  ["question_answers", "Question answers",
+   "The <code>answers:</code> of your <code>assist_satellite.ask_question</code> actions."],
+];
+
+/* Which sources the server had already fetched when this state loaded. Turning
+   one on shows no phrase count until a save fetches them, and saying "0" would
+   read as "there are none". */
+let hassKnown = {};
+
+function hassSource(key) {
+  return ((S.hass_sentences || {}).sources || {})[key] || {};
+}
+
+function hassRow(key, title, sub) {
+  const src = hassSource(key);
+  const on = !!src.enabled;
+  const list = src.sentences || [];
+  const def = src.default ? "on" : "off";
+  // With no Home Assistant to ask, nothing about this source is knowable, so
+  // the switch still works but says nothing about phrases -- "0" would read as
+  // "you have none".
+  const known = hassKnown[key] && (S.hass_sentences || {}).available !== false;
+  const count = !on ? "off"
+    : (S.hass_sentences || {}).available === false ? ""
+    : !hassKnown[key] ? "counted after saving"
+    : `${list.length} sentence${list.length === 1 ? "" : "s"} · ~${fmt(src.phrases || 0)} phrases`;
+  const line = (s) => `<div class="ex-alt">${escapeHtml(s.text)} —
+    ${s.phrases
+      ? `<span class="muted">~${fmt(s.phrases)} phrase${s.phrases === 1 ? "" : "s"}</span>`
+      : `<span class="err" title="Every phrasing of this is written-only, or it uses a list Speech-to-Phrase cannot fill in">not recognizable</span>`}
+    </div>`;
+  return `<div class="list-row">
+    <div class="val-row">
+      <label class="sw">
+        <input type="checkbox" class="hs-cb" data-key="${key}" ${on ? "checked" : ""}>
+        <span class="track"></span>
+      </label>
+      <span class="v-name">${title}</span>
+      <span class="v-count">${count}</span>
+    </div>
+    <div class="usedby">${sub} <span class="muted">Add-on default: ${def}.</span></div>
+    ${on && known ? (list.length
+      ? `<details class="phrasings"><summary>What this adds to the grammar</summary>
+           ${list.map(line).join("")}</details>`
+      : `<div class="usedby empty">Home Assistant has none.</div>`) : ""}
+  </div>`;
+}
+
+function renderHassSentences() {
+  const host = $("hass-sentences");
+  host.innerHTML =
+    ((S.hass_sentences || {}).available === false
+      ? '<p class="empty">Not connected to Home Assistant — nothing to pull in.</p>'
+      : "") +
+    HASS_SOURCES.map(args => hassRow(...args)).join("");
+  host.querySelectorAll(".hs-cb").forEach(cb => cb.addEventListener("change", () => {
+    hassSource(cb.dataset.key).enabled = cb.checked;
+    renderHassSentences();
+    updateMeter(cards());
+    markDirty();
+  }));
 }
 
 /* ---- domains available for {name} filtering ---- */
@@ -497,15 +579,29 @@ function refreshGroups(all) {
 
 /* Grammar-size meter: why you'd turn anything off. Phrase counts are per card,
    so the total is an upper bound (identical phrasings shared by two commands
-   are counted twice); good enough to compare choices. */
+   are counted twice); good enough to compare choices.
+
+   The phrases Home Assistant contributes are in the grammar too, and they are
+   not cards, so they sit in the total as a constant — otherwise the headline
+   number would understate the grammar it's meant to describe. */
+function hassPhrases() {
+  return HASS_SOURCES.reduce((n, [key]) => {
+    const src = hassSource(key);
+    return n + (src.enabled ? (src.phrases || 0) : 0);
+  }, 0);
+}
+
 function updateMeter(all) {
   const usable = all.filter(c => c.available);
   const on = usable.filter(cardOn);
-  const phrases = on.reduce((n, c) => n + (c.cost.phrases || 0), 0);
+  const extra = hassPhrases();
+  const phrases = on.reduce((n, c) => n + (c.cost.phrases || 0), 0) + extra;
   $("m-count").textContent = on.length;
   $("m-total").textContent = usable.length;
   $("m-phrases").textContent = fmt(phrases);
-  const ceiling = usable.reduce((n, c) => n + (c.cost.phrases || 0), 0) || 1;
+  $("m-extra").textContent = extra
+    ? ` (incl. ~${fmt(extra)} from Home Assistant)` : "";
+  const ceiling = usable.reduce((n, c) => n + (c.cost.phrases || 0), extra) || 1;
   $("m-fill").style.width = Math.round(100 * phrases / ceiling) + "%";
 }
 
@@ -633,6 +729,9 @@ async function save() {
         enabled: S.combos.map(comboSelection).filter(Boolean),
         commands: collectCommands(),
         overrides: S.overrides || {},
+        ...Object.fromEntries(HASS_SOURCES
+          .filter(([key]) => typeof hassSource(key).enabled === "boolean")
+          .map(([key]) => [key, hassSource(key).enabled])),
       })
     })).json();
     st.className = res.ok ? "ok" : "err";

@@ -13,6 +13,11 @@
 flags=()
 bashio::config.true 'debug_logging' && flags+=('--debug')
 
+# Sentence triggers / ask_question answers are picked up from Home Assistant
+# unless switched off (app.py defaults them on).
+bashio::config.false 'sentence_triggers' && flags+=('--no-sentence-triggers')
+bashio::config.false 'question_answers' && flags+=('--no-question-answers')
+
 language="$(bashio::config 'language')"
 
 # Only pass --max-score when the user set it; otherwise app.py picks a

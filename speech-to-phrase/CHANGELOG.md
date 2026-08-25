@@ -2,6 +2,18 @@
 
 ## 0.2.0
 
+- Sentence triggers and question answers configured in Home Assistant are added
+  to the grammar again, each behind its own option (`sentence_triggers`,
+  `question_answers`, both on by default). A `conversation:` trigger phrase or an
+  `assist_satellite.ask_question` answer that isn't in the grammar can never be
+  transcribed, so the automation could never fire or branch on it. Sentences
+  carrying Jinja2 templates, and answers of disabled automations, are skipped.
+  Both appear in the web UI (**Settings → From Home Assistant**) as a switch per
+  source — overriding the add-on option for that language — listing the phrases
+  each contributes, what they cost, and any that can't be recognized. Their
+  phrases are counted in the Commands grammar meter, which previously described
+  only the built-in commands.
+
 - Ship as speech-to-text only: the Wyoming intent service is no longer started
   (`--intent` re-enables it for development). Home Assistant handles the
   transcript.

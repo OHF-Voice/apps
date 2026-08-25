@@ -42,7 +42,12 @@ RUN \
         g++ \
         libfst-dev \
         python3-dev \
-    && pip3 install --no-cache-dir -U setuptools wheel \
+    # No "pip install -U setuptools wheel" here: the vendored library is a
+    # PEP 517 build, so pip creates an isolated build environment and fetches
+    # the backend named in lib/pyproject.toml itself -- the system copies are
+    # never used to build anything. Upgrading them also breaks outright on
+    # Debian releases that ship python3-wheel from apt, since that has no RECORD
+    # file for pip to uninstall ("Cannot uninstall wheel ... no RECORD file").
     && pip3 install --no-cache-dir -r requirements.txt \
     && fst_so="$(python3 -c 'import glob, pathlib, speech_to_phrase as s; print(glob.glob(str(pathlib.Path(s.__file__).parent / "_fst*.so"))[0])')" \
     && ldd "$fst_so" \

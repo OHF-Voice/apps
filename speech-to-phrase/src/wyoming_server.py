@@ -12,12 +12,12 @@ low-confidence, so we return an EMPTY transcript — Home Assistant then treats 
 as a failed local recognition and can fall back (e.g. to cloud STT) instead of
 acting on a guessed command.
 
-Debug mode (``debug_mode`` in ``<lang>/settings.json``, toggled in the web UI and
-re-read every utterance): every recognition is logged for the UI to display —
-text, score, and whether the gate accepted it — and Home Assistant is sent an
-empty transcript regardless. Tuning the gate means speaking commands that
-*should* be rejected, and you do not want the ones that pass to be acted on
-while you do it.
+Debug mode (toggled in the web UI, checked every utterance): every recognition is
+logged for the UI to display — text, score, and whether the gate accepted it —
+and Home Assistant is sent an empty transcript regardless. Tuning the gate means
+speaking commands that *should* be rejected, and you do not want the ones that
+pass to be acted on while you do it. It is in-memory only (see ``debug_log``), so
+a restart always comes back with it off.
 
 Run locally:
     python src/wyoming_server.py --uri tcp://0.0.0.0:10300 \
@@ -66,9 +66,9 @@ def addon_version() -> str:
 
 class GrammarHolder:
     """Owns the Recognizer (acoustic model + grammar) and hot-reloads the
-    grammar file when its mtime changes. Also tracks the per-language settings
-    (``max_score``, ``debug_mode``), re-read from ``<lang>/settings.json`` so
-    edits in the web UI take effect without a restart."""
+    grammar file when its mtime changes. Also tracks the per-language score gate
+    (``max_score``), re-read from ``<lang>/settings.json`` so edits in the web UI
+    take effect without a restart."""
 
     def __init__(self, backend: str, model_dir: Path, language: str,
                  grammar_path: Path, default_max_score: float,
@@ -80,7 +80,6 @@ class GrammarHolder:
         self._settings_path = Path(grammar_path).parent / settings.FILENAME
         self._default_max_score = default_max_score
         self.max_score = default_max_score
-        self.debug_mode = False
         self._mtime: Optional[float] = None
         self._lock = asyncio.Lock()
 
@@ -88,14 +87,17 @@ class GrammarHolder:
     def ready(self) -> bool:
         return self._rec.grammar is not None
 
+    @property
+    def debug_mode(self) -> bool:
+        """Session state, not a setting: nothing is persisted, so a restart
+        always comes back with it off (see debug_log)."""
+        return debug_log.enabled()
+
     async def maybe_reload(self) -> None:
         async with self._lock:
-            # Cheap: re-read every utterance so UI changes apply at once.
+            # Cheap: re-read the gate every utterance so UI saves apply at once.
             self.max_score = settings.read_max_score_file(
                 self._settings_path, self._default_max_score
-            )
-            self.debug_mode = settings.read_bool_file(
-                self._settings_path, "debug_mode", False
             )
             if not self._grammar_path.exists():
                 return

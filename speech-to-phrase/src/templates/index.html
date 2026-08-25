@@ -290,7 +290,8 @@
         <span class="v-name">Debug mode</span>
         <span id="debug-count" class="v-count"></span>
       </div>
-      <p class="usedby">Applies immediately — no save or retrain needed.</p>
+      <p class="usedby">Applies immediately — no save or retrain needed — and
+        switches itself off if the add-on restarts.</p>
       <div id="debug-warn"></div>
       <div id="debug-feed"></div>
     </div>
@@ -467,15 +468,22 @@ function renderDebug() {
   const on = !!S.debug_mode;
   $("debug-mode").checked = on;
   $("debug-count").textContent = on ? "on — Home Assistant receives nothing" : "off";
-  // The Wyoming server serves one language. A toggle on any other is stored but
-  // has nothing listening, which is worth saying rather than looking broken.
+  // One recognizer runs, so debug mode isn't per-language: what shows up is
+  // whatever that recognizer heard, whichever language tab you're on.
   const other = S.stt_language && S.lang && S.stt_language !== S.lang;
-  $("debug-warn").innerHTML = other
-    ? `<p class="warn">Speech-to-text is running for
-       <b>${escapeHtml(S.stt_language)}</b>, so nothing will appear here while
-       <b>${escapeHtml(S.lang)}</b> is selected.</p>`
-    : (on ? '<p class="warn">Home Assistant is receiving an empty transcript for '
-          + 'every utterance. Switch debug mode off when you\'re done.</p>' : "");
+  const notes = [];
+  if (on) {
+    notes.push("Home Assistant is receiving an empty transcript for every "
+      + "utterance, so nothing you say is acted on. Switch debug mode off when "
+      + "you're done — it also switches off by itself if the add-on restarts.");
+  }
+  if (other) {
+    notes.push(`Speech-to-text is running for <b>${escapeHtml(S.stt_language)}</b>,`
+      + ` so these are ${escapeHtml(S.stt_language)} utterances, not`
+      + ` ${escapeHtml(S.lang)} ones.`);
+  }
+  $("debug-warn").innerHTML =
+    notes.map(n => `<p class="warn">${n}</p>`).join("");
   renderDebugFeed();
 }
 

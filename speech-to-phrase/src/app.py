@@ -212,9 +212,10 @@ def create_app(cfg) -> Flask:
                 # global on/off switches; anything else already in the document
                 # (aliases, per-command exclusions) rides along untouched.
                 "overrides": overrides.load_doc(data_dir, lang),
-                "debug_mode": settings.get_bool(data_dir, lang, "debug_mode", False),
-                # The Wyoming server serves one language; a debug toggle on any
-                # other is stored but has nothing listening.
+                # Session state, not a setting: off after every restart.
+                "debug_mode": debug_log.enabled(),
+                # One recognizer runs, for this language; debug mode observes it
+                # whichever language the UI happens to be showing.
                 "stt_language": cfg.language,
             }
         )
@@ -223,14 +224,19 @@ def create_app(cfg) -> Flask:
     def api_debug_mode():
         """Toggle debug mode. Applied immediately -- it changes only how the STT
         server reports and whether it answers Home Assistant, not the grammar, so
-        making the user save (and retrain) for it would be a lie about the cost."""
+        making the user save (and retrain) for it would be a lie about the cost.
+
+        Nothing is persisted: while debug mode is on the add-on answers Home
+        Assistant with an empty transcript, and a diagnostic that survived a
+        restart would leave someone with a mute assistant and no way to guess
+        why."""
         body = request.get_json(force=True)
-        lang = body.get("lang", cfg.language)
-        enabled = bool(body.get("enabled"))
-        settings.set_bool(data_dir, lang, "debug_mode", enabled)
-        if not enabled:
-            debug_log.clear()
-        _LOGGER.info("Debug mode %s for '%s'", "on" if enabled else "off", lang)
+        enabled = debug_log.set_enabled(bool(body.get("enabled")))
+        _LOGGER.info(
+            "Debug mode %s%s", "on" if enabled else "off",
+            " -- Home Assistant will receive an empty transcript for every "
+            "utterance until it is switched off" if enabled else "",
+        )
         return jsonify({"ok": True, "debug_mode": enabled})
 
     @app.route("/api/transcriptions")
@@ -253,7 +259,7 @@ def create_app(cfg) -> Flask:
         return jsonify({
             "entries": entries,
             "last_id": debug_log.last_id(),
-            "debug_mode": settings.get_bool(data_dir, lang, "debug_mode", False),
+            "debug_mode": debug_log.enabled(),
         })
 
     @app.route("/api/save", methods=["POST"])

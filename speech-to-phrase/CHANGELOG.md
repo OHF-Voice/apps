@@ -9,7 +9,10 @@
   it is on the STT server hands Home Assistant an empty transcript for every
   utterance, so tuning `max_score` against commands that *should* be rejected
   cannot fire the ones that pass. Applies immediately — the toggle changes only
-  runtime reporting, not the grammar, so it needs no retrain.
+  runtime reporting, not the grammar, so it needs no retrain — and is
+  session-only: it is never written to `settings.json`, so a restart always
+  comes back with it off rather than booting into a mute assistant with nothing
+  on disk to explain it.
 - Fixed: a custom command written with `[optional]` or `(a|b)` was reported by
   debug mode as "not in the grammar". The trainer expands those inside the FST,
   so the command stays a single template while the decoder can emit any of its

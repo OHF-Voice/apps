@@ -11,6 +11,10 @@ web-UI override for one language:
   * ``sentence_triggers`` / ``question_answers`` -- whether to pull the phrases
     Home Assistant is already listening for into the grammar (see
     ``hass_sentences.py``). These *are* the grammar, so changing one retrains.
+
+Debug mode is deliberately *not* here: it stops the add-on answering Home
+Assistant, so it must not outlive the session that turned it on (see
+``debug_log``).
 """
 import json
 import logging
@@ -63,13 +67,6 @@ def read_max_score_file(settings_path: Path, default: float) -> float:
     server, which knows its grammar dir but not data_dir/lang)."""
     v = _read(settings_path).get("max_score")
     return default if v is None else _coerce_max_score(v, default)
-
-
-def read_bool_file(settings_path: Path, key: str, default: bool = False) -> bool:
-    """Same as get_bool but from an explicit file path (see
-    read_max_score_file)."""
-    v = _read(settings_path).get(key)
-    return v if isinstance(v, bool) else default
 
 
 def get_bool(data_dir: Union[str, Path], lang: str, key: str, default: bool) -> bool:

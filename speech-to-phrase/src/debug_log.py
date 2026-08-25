@@ -1,13 +1,23 @@
-"""In-memory log of recent recognitions, for the web UI's debug mode.
+"""Debug mode: the switch, and the log of what the recognizer heard.
 
-The Wyoming STT server appends one entry per utterance (see
+The Wyoming STT server asks :func:`enabled` per utterance and, when it is on,
+appends an entry here and tells Home Assistant nothing (see
 ``wyoming_server.py``); the web UI polls ``/api/transcriptions`` and annotates
-each with the sentence source it came from (see ``sources.py``). Nothing is
-written to disk: this is a live view for someone watching the UI, not a record.
+each entry with the sentence source it came from (see ``sources.py``).
+
+Both live in memory and neither is written to disk, so **debug mode does not
+survive a restart**. That is deliberate: while it is on the add-on answers Home
+Assistant with an empty transcript, so voice does nothing. A diagnostic that
+silently outlives the session that turned it on would leave someone with a
+broken assistant and no memory of why -- and a restart is the first thing they
+would try. Off is the only safe state to come back up in.
+
+Unlike ``max_score`` there is nothing per-language here: one recognizer runs, and
+debug mode observes it.
 
 Written from the Wyoming thread and read from Flask request threads, hence the
-lock. Bounded, so leaving debug mode on cannot grow without limit -- the oldest
-entries are dropped, which is what a live view wants anyway.
+lock. The log is bounded, so leaving debug mode on cannot grow without limit --
+the oldest entries are dropped, which is what a live view wants anyway.
 """
 import threading
 import time
@@ -19,6 +29,21 @@ MAX_ENTRIES = 200
 _lock = threading.Lock()
 _entries: "deque[dict]" = deque(maxlen=MAX_ENTRIES)
 _next_id = 1
+_enabled = False
+
+
+def enabled() -> bool:
+    return _enabled
+
+
+def set_enabled(on: bool) -> bool:
+    """Turn debug mode on or off. Switching off discards the log: it described a
+    session that has ended, and keeping it would make a stale feed look live."""
+    global _enabled  # noqa: PLW0603
+    _enabled = bool(on)
+    if not _enabled:
+        clear()
+    return _enabled
 
 
 def record(

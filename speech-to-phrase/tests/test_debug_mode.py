@@ -130,17 +130,44 @@ async def main() -> int:
     json.dumps(entries)
     check("since= returns only newer", len(debug_log.entries(since=entries[1]["id"])), 1)
 
-    # --- the toggle is read from settings.json, per language -----------------
+    # --- the switch is session state, not a setting --------------------------
+    # It stops the add-on answering Home Assistant, so it must not outlive the
+    # process: coming back up mute, with nothing on disk to explain it, is the
+    # failure this guards against.
+    debug_log.set_enabled(False)
+    check("a fresh process starts off", debug_log.enabled(), False)
+    check("set_enabled reports what it stored", debug_log.set_enabled(True), True)
+    check("...and it reads back", debug_log.enabled(), True)
+
     with tempfile.TemporaryDirectory() as data_dir:
+        settings.set_max_score(data_dir, "en", 4.0)
+        settings.set_bool(data_dir, "en", "sentence_triggers", False)
+        stored = json.loads(settings.path(data_dir, "en").read_text())
+        check("nothing about debug mode is written to settings.json",
+              "debug_mode" in stored, False)
+        check("...while the real settings still persist",
+              sorted(stored), ["max_score", "sentence_triggers"])
+        # A settings file left over from an older build must not switch it on.
         p = settings.path(data_dir, "en")
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text("{}")
-        check("default off", settings.read_bool_file(p, "debug_mode", False), False)
-        settings.set_bool(data_dir, "en", "debug_mode", True)
-        check("hot-read after the UI writes it",
-              settings.read_bool_file(p, "debug_mode", False), True)
-        check("max_score survives the write",
-              json.loads(p.read_text()).get("debug_mode"), True)
+        p.write_text(json.dumps({"debug_mode": True}))
+        debug_log.set_enabled(False)
+        check("a stale persisted flag is inert", debug_log.enabled(), False)
+
+    # Switching off discards the log: it described a session that has ended.
+    debug_log.set_enabled(True)
+    await utterance(FakeHolder(good, debug_mode=True))
+    check("logged while on", len(debug_log.entries()) > 0, True)
+    debug_log.set_enabled(False)
+    check("switching off clears the log", debug_log.entries(), [])
+
+    # The real holder reads the switch rather than a file, so the STT server and
+    # the UI cannot disagree about whether debug mode is on.
+    check("holder follows the switch (off)",
+          ws.GrammarHolder.debug_mode.fget(object()), False)
+    debug_log.set_enabled(True)
+    check("holder follows the switch (on)",
+          ws.GrammarHolder.debug_mode.fget(object()), True)
+    debug_log.set_enabled(False)
 
     # --- attribution: which source produced the transcript -------------------
     by_source, list_values = training.assemble_sources(

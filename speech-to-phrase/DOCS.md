@@ -67,6 +67,12 @@ utterance, so nothing you say is acted on.** That is the point: tuning
 the ones that pass shouldn't run your lights while you do it. The UI keeps a
 warning on screen the whole time it's on; switch it off when you're done.
 
+Because of that, debug mode is **session-only**: it is held in memory, never
+written to `settings.json`, and a restarted add-on always comes back with it
+off. There is no add-on option for it, and no way to leave it on by accident —
+a mute assistant with nothing on disk to explain it is not a state to boot
+into. The recognition log is discarded at the same time.
+
 Rejected rows are the useful ones — they show what a phrase was misheard as and
 by how much it missed, which tells you whether to raise the gate or to add the
 phrase as a custom command.

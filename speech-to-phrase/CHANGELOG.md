@@ -37,6 +37,19 @@
   languages the add-on actually serves before it is used to build a path.
   `<data>/<lang>/` is a join, so a crafted value wrote `enabled.json`,
   `settings.json` and `custom_commands.json` outside the data directory.
+- Fixed: a custom command whose text contained markup was rendered as markup in
+  the **Devices & Lists** tab. Every value on that page was escaped except the
+  "Used by:" labels, and a custom command's label is its own first sentence.
+- Fixed: one utterance can no longer grow the audio buffer without limit. It
+  grew on every chunk and only an audio-stop emptied it, so a satellite that
+  stopped sending one — crashed, wedged, or streaming an open microphone —
+  grew it until the add-on was killed for using too much memory. Past 30
+  seconds (or 16 MiB, whichever comes first) the tail is dropped and the head
+  kept, since the command follows the wake word, and the log says which
+  satellite to look at.
+- Fixed: a `-inf` score in the debug feed would have serialized as invalid
+  JSON and broken the live view. The check listed `+inf` and `nan` by hand;
+  it tests for a finite number now.
 - Hardened: acoustic-model archives extract with tarfile's `data` filter, so a
   member cannot escape the extraction directory or bring along a link, a device
   node or a setuid bit. This is also the Python 3.14 default, so behaviour no

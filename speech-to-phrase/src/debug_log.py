@@ -19,6 +19,7 @@ Written from the Wyoming thread and read from Flask request threads, hence the
 lock. The log is bounded, so leaving debug mode on cannot grow without limit --
 the oldest entries are dropped, which is what a live view wants anyway.
 """
+import math
 import threading
 import time
 from collections import deque
@@ -64,9 +65,12 @@ def record(
             "at": time.time(),
             "language": language,
             "text": text,
-            # inf is not valid JSON; the UI shows "no match" for a null score.
-            "score": None if score != score or score in (float("inf"),) else round(score, 3),
-            "margin": None if margin in (float("inf"),) or margin != margin else round(margin, 3),
+            # Neither inf nor nan is valid JSON, and Flask emits them as bare
+            # Infinity/NaN that a strict parser rejects. isfinite covers every
+            # such value in one test -- the earlier check listed +inf and nan by
+            # hand and so let -inf through. The UI shows "no match" for null.
+            "score": round(score, 3) if math.isfinite(score) else None,
+            "margin": round(margin, 3) if math.isfinite(margin) else None,
             "accepted": bool(accepted),
             "max_score": max_score,
             "duration": round(duration, 2) if duration is not None else None,

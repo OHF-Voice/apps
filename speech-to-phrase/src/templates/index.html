@@ -776,7 +776,10 @@ function openDetail(card) {
    Global voice targeting: switch a device/area/floor off and it disappears from
    every command that could have named it. */
 
-function usedBy(items){ return (items&&items.length) ? `<div class="usedby"><b>Used by:</b> ${items.join(", ")}</div>` : '<div class="usedby empty">Used by no enabled command</div>'; }
+/* Labels are escaped: a built-in's is "Intent/combo", but a custom command's is
+   its own first sentence, so unescaped it put user-authored text into the page
+   as markup. */
+function usedBy(items){ return (items&&items.length) ? `<div class="usedby"><b>Used by:</b> ${items.map(s => escapeHtml(String(s))).join(", ")}</div>` : '<div class="usedby empty">Used by no enabled command</div>'; }
 
 /* Mutable override entry for one value; defaults mean "unchanged". Aliases and
    per-command exclusions can still be present in the stored document (written

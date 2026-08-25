@@ -49,6 +49,27 @@ _LOGGER = logging.getLogger("wyoming-speech-to-phrase")
 NAME = "speech-to-phrase"
 ADDON_ROOT = Path(__file__).resolve().parent.parent
 
+# Ceiling on one buffered utterance. A command is a couple of seconds long, so
+# this is not a limit anyone speaking to their house can reach; it exists
+# because the buffer grows on every AudioChunk and only AudioStop empties it.
+# A satellite that stops sending AudioStop -- crashed, wedged, or simply
+# streaming an open microphone -- would otherwise grow it until the add-on is
+# killed for using too much memory. Past the cap the tail is dropped and the
+# head kept: the command follows the wake word, so the start is the part worth
+# decoding, and an over-long capture decodes to something the score gate
+# rejects anyway.
+MAX_UTTERANCE_SECONDS = 30.0
+# ...and an absolute byte ceiling, because rate/width/channels are whatever the
+# client announced: a bogus 10 MHz sample rate would make a duration-derived
+# limit meaninglessly large. 16 MiB is ~8 minutes of 16 kHz 16-bit mono.
+MAX_UTTERANCE_BYTES = 16 * 1024 * 1024
+
+
+def _buffer_limit(rate: int, width: int, channels: int) -> int:
+    """Byte budget for the audio buffer at the announced format."""
+    frame = max(1, width * channels)
+    return min(int(MAX_UTTERANCE_SECONDS * max(rate, 1) * frame), MAX_UTTERANCE_BYTES)
+
 
 @lru_cache(maxsize=1)
 def addon_version() -> str:
@@ -138,6 +159,7 @@ class S2PEventHandler(AsyncEventHandler):
         self._rate = SAMPLE_RATE
         self._width = 2
         self._channels = 1
+        self._full = False  # hit MAX_UTTERANCE_SECONDS; warned once already
 
     async def handle_event(self, event) -> bool:
         if Describe.is_type(event.type):
@@ -150,6 +172,7 @@ class S2PEventHandler(AsyncEventHandler):
         if AudioStart.is_type(event.type):
             start = AudioStart.from_event(event)
             self._buf = bytearray()
+            self._full = False
             self._rate, self._width, self._channels = (
                 start.rate, start.width, start.channels
             )
@@ -158,10 +181,20 @@ class S2PEventHandler(AsyncEventHandler):
 
         if AudioChunk.is_type(event.type):
             chunk = AudioChunk.from_event(event)
-            self._buf += chunk.audio
             self._rate, self._width, self._channels = (
                 chunk.rate, chunk.width, chunk.channels
             )
+            limit = _buffer_limit(chunk.rate, chunk.width, chunk.channels)
+            if len(self._buf) >= limit:
+                if not self._full:
+                    self._full = True
+                    _LOGGER.warning(
+                        "Utterance exceeded %.0fs (%d bytes); ignoring the rest. "
+                        "The satellite may not be sending audio-stop.",
+                        MAX_UTTERANCE_SECONDS, limit,
+                    )
+                return True
+            self._buf += chunk.audio
             return True
 
         if AudioStop.is_type(event.type):

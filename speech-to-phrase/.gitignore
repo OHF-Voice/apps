@@ -11,3 +11,7 @@ __pycache__/
 .pytest_cache/
 lib/build/
 lib/*.egg-info/
+
+# Dev launcher: holds a long-lived Home Assistant token inline. Ignored so a
+# `git add -A` cannot sweep it into a commit.
+run-demo.sh

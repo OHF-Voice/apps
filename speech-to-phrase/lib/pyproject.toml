@@ -12,9 +12,9 @@ authors     = [
 ]
 # The native _fst extension is built against the CPython limited API for 3.11
 # (abi3), so 3.11 is the floor -- set by the buffer protocol, which entered the
-# limited API in that release. It has to reach 3.11 because that is what the
-# Home Assistant Debian base image ships; a higher floor fails the add-on build
-# with "requires a different Python".
+# limited API in that release. The add-on image runs 3.13, but there is nothing
+# to gain by raising this: a lower floor is one wheel that works in more places,
+# including a Debian 12 base and whatever a contributor's machine has.
 requires-python = ">=3.11"
 # Recognition library only. The add-on's own server dependencies (flask,
 # wyoming, hassil, ...) stay in the add-on's requirements.txt.

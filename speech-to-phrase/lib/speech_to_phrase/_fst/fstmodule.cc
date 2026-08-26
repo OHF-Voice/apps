@@ -32,8 +32,8 @@
 // protocol (Py_buffer / PyObject_GetBuffer, used to read the log-prob array
 // without a copy) entered the limited API in 3.11. Everything else here --
 // PyModule_Create, PyArg_ParseTuple, PyCapsule, the list/long/float builders --
-// has been in it far longer. 3.11 matters because the Home Assistant Debian
-// base image ships Python 3.11.
+// has been in it far longer. The add-on image runs a newer Python than this;
+// targeting the real floor just means one wheel that also works on older ones.
 #define Py_LIMITED_API 0x030B0000
 #endif
 #include <Python.h>

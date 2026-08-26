@@ -16,19 +16,22 @@
   supported languages decode to the same transcript with the same score to the
   last digit.
 
+- The image is built on **Debian 13 (trixie)**, which brings Python 3.13 and
+  OpenFST 1.8.4, and is 33 MB smaller than the Debian 12 base it replaces.
 - Fixed the build: the add-on would not install. The vendored recognition
-  library declared `requires-python = ">=3.12"` while the Home Assistant Debian
-  base image ships Python 3.11.2, so `pip` refused it with *"Package
-  'speech-to-phrase' requires a different Python: 3.11.2 not in '>=3.12'"*. The
+  library declared `requires-python = ">=3.12"` while the Debian 12 base then in
+  use shipped Python 3.11.2, so `pip` refused it with *"Package
+  'speech-to-phrase' requires a different Python: 3.11.2 not in '>=3.12'"*. That
   floor was never a real requirement — nothing in the tree needs anything newer
   than 3.9 bar the native module, whose limited-API level is set by the buffer
   protocol, and that entered the limited API in **3.11**. The extension is built
-  `cp311-abi3` now, and two further build breaks behind that one are fixed too:
-  `python3-dev` was missing, so CMake could not find `Development.SABIModule`,
-  and a model archive was extracted with tarfile's `filter="data"`, which does
-  not exist on 3.11.2 (it arrived in 3.12 and was backported only as far as
-  3.11.4) — the same restrictions are applied by hand where it is absent, so the
-  hardening does not depend on the interpreter's patch level.
+  `cp311-abi3`, which is kept even now the image runs 3.13: the true floor is
+  one wheel that works in more places. Two further build breaks behind that one
+  are fixed too: `python3-dev` was missing, so CMake could not find
+  `Development.SABIModule`, and model archives were extracted with tarfile's
+  `filter="data"`, which does not exist below Python 3.11.4 — the same
+  restrictions are applied by hand where the filter is absent, so the hardening
+  never depends on the interpreter.
 - Added a `.dockerignore`. The build context was ~750 MB, almost all of it
   downloaded models under `local/` plus a host-built CMake cache in `lib/build/`
   that the in-image build had to detect and discard.

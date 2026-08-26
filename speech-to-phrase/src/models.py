@@ -161,12 +161,12 @@ def _extract_safely(tf: tarfile.TarFile, dest: Path) -> None:
     "..") and must be a plain file or directory -- never a link, device or
     fifo.
 
-    tarfile's ``filter="data"`` does that and is used where available. It
-    arrived in Python 3.12 and was backported to 3.11.4, but the Home Assistant
-    base image ships 3.11.2, where passing ``filter=`` is a TypeError; making
-    the check depend on the interpreter's patch level would mean either a crash
-    or silently unhardened extraction, so where it is missing the rules are
-    applied by hand.
+    tarfile's ``filter="data"`` does that and is used where available. The
+    add-on image has it, but it only arrived in Python 3.12 (backported as far
+    as 3.11.4), and the library's floor is 3.11 -- where passing ``filter=`` is
+    a TypeError. Since the same code runs on a Debian 12 base and on
+    contributors' machines, the rules are applied by hand where the filter is
+    absent rather than letting the hardening depend on the interpreter.
 
     The hand-rolled path is not identical: it refuses an absolute-path member
     outright where the real filter strips the leading separator and extracts it

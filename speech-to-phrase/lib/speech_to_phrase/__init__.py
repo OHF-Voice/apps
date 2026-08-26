@@ -17,6 +17,7 @@ local result is trusted versus deferring to a cloud recognizer.
 import math
 import unicodedata
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Dict, List, Mapping, Optional, Sequence, Union
 
@@ -48,6 +49,21 @@ def _normalize_template(line: str) -> str:
     return unicodedata.normalize("NFC", line).lower().strip()
 
 
+def _text_similarity(left: str, right: str) -> float:
+    """Character similarity after language-neutral text normalization."""
+
+    def clean(text: str) -> str:
+        normalized = unicodedata.normalize("NFC", text).lower()
+        return " ".join(
+            "".join(ch if ch.isalnum() else " " for ch in normalized).split()
+        )
+
+    clean_left, clean_right = clean(left), clean(right)
+    if not clean_left or not clean_right:
+        return 0.0
+    return SequenceMatcher(None, clean_left, clean_right).ratio()
+
+
 def _normalize_list_values(
     list_values: Optional[Mapping[str, Sequence[str]]]
 ) -> Optional[Dict[str, List[str]]]:
@@ -76,6 +92,8 @@ class Recognizer:
         beam: float = 0.0,
         token_bonus: float = 0.0,
         token_bonus_max_unbiased_score: float = math.inf,
+        token_bonus_rescue_similarity: float = 1.0,
+        token_bonus_rescue_multiplier: float = 1.0,
         blank_retry_penalty: float = 0.0,
         blank_retry_min_score: float = math.inf,
         blank_retry_max_score: float = -math.inf,
@@ -93,6 +111,12 @@ class Recognizer:
         # A length reward may rerank plausible parses, but must never rescue
         # audio that the unbiased grammar decode would reject as OOV.
         self.token_bonus_max_unbiased_score = token_bonus_max_unbiased_score
+        # A rejected short decode gets one stronger length-corrected attempt only
+        # when its text matches the unconstrained CTC transcript. This recovers a
+        # distorted long phrase without letting the grammar invent an unrelated
+        # command for OOV audio.
+        self.token_bonus_rescue_similarity = token_bonus_rescue_similarity
+        self.token_bonus_rescue_multiplier = token_bonus_rescue_multiplier
         # Citrinet can put almost all probability on CTC blank while a VPE noise
         # suppressor distorts one word. In a narrow confidence band, retry with a
         # selection-only blank penalty so the full entity name can compete with a
@@ -163,14 +187,35 @@ class Recognizer:
             return result, token_ids
 
         unbiased = decode_one(0.0)
-        if (
-            not self.token_bonus
-            or unbiased[0].score > self.token_bonus_max_unbiased_score
-        ):
+        if not self.token_bonus:
             return unbiased
 
-        corrected = decode_one(self.token_bonus)
-        return min((unbiased, corrected), key=lambda candidate: candidate[0].score)
+        if unbiased[0].score <= self.token_bonus_max_unbiased_score:
+            corrected = decode_one(self.token_bonus)
+            return min((unbiased, corrected), key=lambda candidate: candidate[0].score)
+
+        rescue_bonus = self.token_bonus * self.token_bonus_rescue_multiplier
+        corrected = decode_one(rescue_bonus)
+
+        greedy_ids: List[int] = []
+        previous_id: Optional[int] = None
+        for token_id in log_probs.argmax(axis=-1):
+            current_id = int(token_id)
+            if (
+                current_id != previous_id
+                and current_id != self.model.tokenizer.blank_id
+            ):
+                greedy_ids.append(current_id)
+            previous_id = current_id
+        greedy_text = self.model.tokenizer.ids_to_text(greedy_ids)
+        if (
+            corrected[0].score <= self.token_bonus_max_unbiased_score
+            and corrected[0].text != unbiased[0].text
+            and _text_similarity(greedy_text, corrected[0].text)
+            >= self.token_bonus_rescue_similarity
+        ):
+            return corrected
+        return unbiased
 
     def transcribe(self, audio: Union[str, Path, np.ndarray]) -> Result:
         if self.grammar is None:
@@ -200,6 +245,8 @@ def load_recognizer(
     beam: Optional[float] = None,
     token_bonus: float = 0.0,
     token_bonus_max_unbiased_score: Optional[float] = None,
+    token_bonus_rescue_similarity: Optional[float] = None,
+    token_bonus_rescue_multiplier: Optional[float] = None,
     blank_retry_penalty: Optional[float] = None,
     blank_retry_min_score: Optional[float] = None,
     blank_retry_max_score: Optional[float] = None,
@@ -210,10 +257,11 @@ def load_recognizer(
     Extra keyword arguments are forwarded to the backend (e.g. ``spm_model=...``
     for Citrinet; ``stt_binary=...`` for Coqui). ``beam`` sets the decode
     pruning beam; if unset it defaults per backend (Coqui benefits from pruning
-    its many-frame character grammar). ``token_bonus_max_unbiased_score`` keeps
-    the length reward from rescuing an OOV utterance. The blank-retry options
-    control Citrinet's bounded recovery pass for low-confidence short decodes;
-    leaving them unset uses the calibrated backend defaults.
+    its many-frame character grammar). The token-bonus rescue options control a
+    bounded recovery pass for a rejected short decode whose corrected text
+    resembles the unconstrained CTC transcript. The blank-retry options control
+    Citrinet's recovery pass for low-confidence short decodes. Leaving these
+    options unset uses the calibrated backend defaults.
     """
     backend = backend.lower()
     if backend == "citrinet":
@@ -224,6 +272,7 @@ def load_recognizer(
         # not sever low-probability required subwords (e.g. rare names).
         default_beam = 15.0
         default_token_bonus_max_score = 5.0
+        default_token_bonus_rescue = (0.45, 2.0)
         default_blank_retry = (1.0, 3.0, 5.0)
     elif backend == "coqui":
         from .backends.coqui import CoquiModel
@@ -231,6 +280,7 @@ def load_recognizer(
         model = CoquiModel(Path(model_dir), **kwargs)
         default_beam = 10.0
         default_token_bonus_max_score = math.inf
+        default_token_bonus_rescue = (1.0, 1.0)
         default_blank_retry = (0.0, math.inf, -math.inf)
     else:
         raise ValueError(f"Unknown backend: {backend!r} (expected citrinet|coqui)")
@@ -244,6 +294,16 @@ def load_recognizer(
             default_token_bonus_max_score
             if token_bonus_max_unbiased_score is None
             else token_bonus_max_unbiased_score
+        ),
+        token_bonus_rescue_similarity=(
+            default_token_bonus_rescue[0]
+            if token_bonus_rescue_similarity is None
+            else token_bonus_rescue_similarity
+        ),
+        token_bonus_rescue_multiplier=(
+            default_token_bonus_rescue[1]
+            if token_bonus_rescue_multiplier is None
+            else token_bonus_rescue_multiplier
         ),
         blank_retry_penalty=(
             default_blank_retry[0]

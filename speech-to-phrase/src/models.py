@@ -56,9 +56,10 @@ def default_max_score(backend: str) -> float:
 # Word-insertion reward per emitted token. The recognizer compares the candidate
 # it generates with the unbiased decode using the per-token acoustic score, so
 # the bonus can recover a long command without winning merely by adding optional
-# words. The unbiased candidate must itself be within Citrinet's production gate:
-# a length reward may disambiguate accepted speech, never rescue rejected OOV
-# audio. Citrinet 2.0 was fit with tools/audio_test.py on English.
+# words. A rejected short candidate gets a stronger rescue attempt only when the
+# corrected phrase closely matches the unconstrained CTC transcript. Citrinet
+# 2.0 and the rescue thresholds were fit against human English commands and the
+# OOV corpus in tests/wav.
 # Coqui is 0 because it has not been measured -- its cost scale differs from
 # Citrinet's, so borrowing the number would be a guess.
 DEFAULT_TOKEN_BONUS = {"citrinet": 2.0, "coqui": 0.0}

@@ -36,6 +36,7 @@ ENTITIES = {
     "overhead light": "light",
     "standing light": "light",
 }
+CUSTOM_COMMANDS = [{"sentences": ["start oliver workout"], "mode": "stt"}]
 
 CONTRACTIONS = {"whats": "what's"}
 
@@ -96,7 +97,7 @@ def main() -> int:
         ROOT,
         "en",
         enabled,
-        [],
+        CUSTOM_COMMANDS,
         ENTITIES,
         training.DEV_SLOT_LISTS,
     )

@@ -75,6 +75,7 @@ class Recognizer:
         language: str,
         beam: float = 0.0,
         token_bonus: float = 0.0,
+        token_bonus_max_unbiased_score: float = math.inf,
         blank_retry_penalty: float = 0.0,
         blank_retry_min_score: float = math.inf,
         blank_retry_max_score: float = -math.inf,
@@ -89,6 +90,9 @@ class Recognizer:
         # longer, better-fitting one (e.g. "brighten the office") purely on
         # token count. See Grammar.decode.
         self.token_bonus = token_bonus
+        # A length reward may rerank plausible parses, but must never rescue
+        # audio that the unbiased grammar decode would reject as OOV.
+        self.token_bonus_max_unbiased_score = token_bonus_max_unbiased_score
         # Citrinet can put almost all probability on CTC blank while a VPE noise
         # suppressor distorts one word. In a narrow confidence band, retry with a
         # selection-only blank penalty so the full entity name can compete with a
@@ -137,11 +141,7 @@ class Recognizer:
         """
         assert self.grammar is not None
         greedy_cost = float(-log_probs.max(axis=-1).sum())
-        candidates: List[tuple[Result, List[int]]] = []
-        bonuses = [0.0]
-        if self.token_bonus:
-            bonuses.append(self.token_bonus)
-        for bonus in bonuses:
+        def decode_one(bonus: float) -> tuple[Result, List[int]]:
             decoded = self.grammar.decode(
                 log_probs,
                 self.model.tokenizer.blank_id,
@@ -160,9 +160,17 @@ class Recognizer:
                 else:
                     margin = (second_cost - best_cost) / n_tokens
                 result = Result(text=text, score=score, margin=margin)
-            candidates.append((result, token_ids))
+            return result, token_ids
 
-        return min(candidates, key=lambda candidate: candidate[0].score)
+        unbiased = decode_one(0.0)
+        if (
+            not self.token_bonus
+            or unbiased[0].score > self.token_bonus_max_unbiased_score
+        ):
+            return unbiased
+
+        corrected = decode_one(self.token_bonus)
+        return min((unbiased, corrected), key=lambda candidate: candidate[0].score)
 
     def transcribe(self, audio: Union[str, Path, np.ndarray]) -> Result:
         if self.grammar is None:
@@ -191,6 +199,7 @@ def load_recognizer(
     language: str,
     beam: Optional[float] = None,
     token_bonus: float = 0.0,
+    token_bonus_max_unbiased_score: Optional[float] = None,
     blank_retry_penalty: Optional[float] = None,
     blank_retry_min_score: Optional[float] = None,
     blank_retry_max_score: Optional[float] = None,
@@ -201,9 +210,10 @@ def load_recognizer(
     Extra keyword arguments are forwarded to the backend (e.g. ``spm_model=...``
     for Citrinet; ``stt_binary=...`` for Coqui). ``beam`` sets the decode
     pruning beam; if unset it defaults per backend (Coqui benefits from pruning
-    its many-frame character grammar). The blank-retry options control
-    Citrinet's bounded recovery pass for low-confidence short decodes; leaving
-    them unset uses the calibrated backend defaults.
+    its many-frame character grammar). ``token_bonus_max_unbiased_score`` keeps
+    the length reward from rescuing an OOV utterance. The blank-retry options
+    control Citrinet's bounded recovery pass for low-confidence short decodes;
+    leaving them unset uses the calibrated backend defaults.
     """
     backend = backend.lower()
     if backend == "citrinet":
@@ -213,12 +223,14 @@ def load_recognizer(
         # Beam relative to the best grammar candidate per frame; validated to
         # not sever low-probability required subwords (e.g. rare names).
         default_beam = 15.0
+        default_token_bonus_max_score = 5.0
         default_blank_retry = (1.0, 3.0, 5.0)
     elif backend == "coqui":
         from .backends.coqui import CoquiModel
 
         model = CoquiModel(Path(model_dir), **kwargs)
         default_beam = 10.0
+        default_token_bonus_max_score = math.inf
         default_blank_retry = (0.0, math.inf, -math.inf)
     else:
         raise ValueError(f"Unknown backend: {backend!r} (expected citrinet|coqui)")
@@ -228,6 +240,11 @@ def load_recognizer(
         language,
         beam=default_beam if beam is None else beam,
         token_bonus=token_bonus,
+        token_bonus_max_unbiased_score=(
+            default_token_bonus_max_score
+            if token_bonus_max_unbiased_score is None
+            else token_bonus_max_unbiased_score
+        ),
         blank_retry_penalty=(
             default_blank_retry[0]
             if blank_retry_penalty is None

@@ -271,6 +271,8 @@ def build_info(language: str, model_name: str) -> Info:
                         languages=[language],
                     )
                 ],
+                # prefers_auto_gain_enabled=False,
+                # prefers_noise_reduction_enabled=False,
             )
         ]
     )

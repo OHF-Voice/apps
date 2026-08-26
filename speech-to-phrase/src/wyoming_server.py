@@ -44,7 +44,7 @@ from speech_to_phrase.audio import SAMPLE_RATE, resample as resample_audio
 import debug_log
 import models
 import settings
-from vad import normalize_level, trim_silence
+from audio_frontend import prepare_audio
 
 _LOGGER = logging.getLogger("wyoming-speech-to-phrase")
 NAME = "speech-to-phrase"
@@ -200,7 +200,7 @@ class S2PEventHandler(AsyncEventHandler):
             if self._holder.ready and self._buf:
                 # Everything from here to the transcript is what Home Assistant
                 # waits on: the audio has stopped, so this is dead air in the
-                # conversation. Timed as one number (conversion, level, VAD and
+                # conversation. Timed as one number (conversion, front-end and
                 # decode) because that is the latency a user perceives, and
                 # surfaced in debug mode -- a slow decode and a mis-decode look
                 # the same from the outside otherwise.
@@ -208,14 +208,7 @@ class S2PEventHandler(AsyncEventHandler):
                 samples = _pcm_to_float(
                     bytes(self._buf), self._rate, self._width, self._channels
                 )
-                # Boost very quiet mic audio to a nominal level before VAD + STT
-                # (both under-perform on ~-46 dBFS input); no-op for normal
-                # levels. Then drop the leading wake-word chime + silence and
-                # trailing silence so the recognizer only decodes the command.
-                samples = normalize_level(samples)
-                samples = await asyncio.get_event_loop().run_in_executor(
-                    None, trim_silence, samples
-                )
+                samples = prepare_audio(samples)
                 result = await self._holder.transcribe(samples)
                 processing = time.monotonic() - started
                 accepted = (
@@ -271,8 +264,8 @@ def build_info(language: str, model_name: str) -> Info:
                         languages=[language],
                     )
                 ],
-                # prefers_auto_gain_enabled=False,
-                # prefers_noise_reduction_enabled=False,
+                prefers_auto_gain_enabled=False,
+                prefers_noise_reduction_enabled=False,
             )
         ]
     )

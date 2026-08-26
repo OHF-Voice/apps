@@ -9,7 +9,6 @@ aiohttp
 pyyaml
 numpy
 soundfile
-pysilero-vad
 hassil
 home-assistant-intents>=2026.8.25
 wyoming[zeroconf]

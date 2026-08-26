@@ -121,7 +121,9 @@ def build_matcher(
                     rewritten = rewritten.replace(
                         "{" + list_key + "}", "{" + scoped + "}")
                     list_key = scoped
-                scoped_lists.setdefault(list_key, ov.pairs("entities", kept))
+                scoped_lists.setdefault(
+                    list_key, ov.pairs("entities", kept, language=lang)
+                )
             if dropped:
                 continue
             for slot, kind in (("area", "areas"), ("floor", "floors")):
@@ -135,7 +137,9 @@ def build_matcher(
                     dropped = True
                     break
                 rewritten = rewritten.replace(token, "{" + narrowed_key + "}")
-                scoped_lists.setdefault(narrowed_key, ov.pairs(kind, kept))
+                scoped_lists.setdefault(
+                    narrowed_key, ov.pairs(kind, kept, language=lang)
+                )
             if dropped:
                 continue
             out.append(rewritten)
@@ -220,7 +224,7 @@ def build_matcher(
         values = (slot_lists or {}).get(key)
         if values and key not in hassil_slot_lists:
             hassil_slot_lists[key] = TextSlotList.from_tuples(
-                sorted(set(ov.pairs(kind, values))), name=key
+                sorted(set(ov.pairs(kind, values, language=lang))), name=key
             )
 
     intents = Intents.from_dict(

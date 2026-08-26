@@ -44,7 +44,7 @@ import yaml
 from scipy.signal import fftconvolve
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from vad import normalize_level, trim_silence  # noqa: E402  (src on path above)
+from audio_frontend import prepare_audio  # noqa: E402  (src on path above)
 
 from speech_to_phrase import load_recognizer
 from speech_to_phrase.audio import resample as resample_audio
@@ -66,7 +66,7 @@ TTS_LANGUAGE = "en-US"
 SAMPLE_RATE = 16000
 # citrinet gate re-fit 8.0 -> 5.0 (2026-07-01): the expanded ~26-intent grammar
 # has short commands ("next"/"stop"/"go back") that noise/OOV audio false-matches
-# at 6-8, so 8.0 gave ~18/112 OOV false-accepts. Youden-optimal for the VAD-on
+# at 6-8, so 8.0 gave ~18/112 OOV false-accepts. Youden-optimal for the production
 # pipeline is 5.5, but we ship a more conservative 5.0 default (OOV FA -> 2/112,
 # legit acceptance 93% clean/97% all). Users can override per-language in the web
 # UI. Re-fit with this tool (see the "gate fitting" sweep it prints).
@@ -78,19 +78,9 @@ SAMPLE_RATE = 16000
 # usable on short/command-like utterances at ~4% OOV false-accept.
 GATE_THRESHOLD = {"citrinet": 5.0, "coqui": 2.0}
 
-# Whether to VAD-trim each clip before decoding, mirroring the production STT
-# path (wyoming_server trims via vad.trim_silence before transcribe). Toggled by
-# --no-vad so the gate can be re-fit against the same pipeline HA actually runs.
-USE_VAD = True
-
-
 def transcribe(rec, audio: np.ndarray):
-    """Recognize a clip through the same front-end as production (level
-    normalization, optional VAD trim, then decode)."""
-    audio = normalize_level(audio)
-    if USE_VAD:
-        audio = trim_silence(audio)
-    return rec.transcribe(audio)
+    """Recognize a clip through the same lossless front-end as production."""
+    return rec.transcribe(prepare_audio(audio))
 
 # Test entity registry (name -> domain). Mirrors what the add-on's trainer reads
 # from the live HA registry. {name} is bound PER sentence-set to only the
@@ -381,14 +371,9 @@ def main() -> int:
                          "sweep this when long commands decode as short ones")
     ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--no-vad", action="store_true",
-                    help="disable VAD trimming (default: trim, matching production STT)")
     ap.add_argument("--dump-scores", type=Path, default=None,
                     help="write raw legit/confusion/OOV scores to this JSON path")
     args = ap.parse_args()
-
-    global USE_VAD
-    USE_VAD = not args.no_vad
 
     wav = args.s2p_repo / "tests" / "wav"
     rir_dir = args.rir_dir or (wav / "rir")
@@ -482,7 +467,7 @@ def main() -> int:
     # ---- Gate fitting: where should --max-score sit? -----------------------
     # A good gate accepts legitimate in-grammar decodes (esp. clean) and rejects
     # in-grammar decodes of OOV audio. Report the score distributions and the
-    # gap between them so the threshold can be re-fit (e.g. after enabling VAD).
+    # gap between them so the threshold can be re-fit after front-end changes.
     def _summ(label: str, scores: Sequence[float]) -> None:
         if not scores:
             print(f"  {label:<26} (none)")
@@ -495,7 +480,7 @@ def main() -> int:
     clean_legit = [s for c, s in legit_scores if c == "clean"]
     all_legit = [s for _, s in legit_scores]
     all_conf = [s for _, s in confusion_scores]
-    print(f"\n=== gate fitting (VAD={'on' if USE_VAD else 'off'}) — score "
+    print("\n=== gate fitting (production front-end) — score "
           f"distributions (lower = more confident) ===")
     _summ("legit correct (clean)", clean_legit)
     _summ("legit correct (all cond)", all_legit)
@@ -529,7 +514,7 @@ def main() -> int:
     # Optionally dump raw scores so the gate can be re-fit offline (no re-run).
     if args.dump_scores:
         args.dump_scores.write_text(json.dumps({
-            "vad": USE_VAD,
+            "audio_frontend": "lossless",
             "legit_clean": clean_legit,
             "legit_all": [s for _, s in legit_scores],
             "confusion": [s for _, s in confusion_scores],

@@ -319,6 +319,7 @@ def as_entity_info(entities):
 
 
 def _expand_block(
+    lang: str,
     sentences: Sequence[str],
     name_domains: Optional[Sequence[str]],
     capability: Optional[str],
@@ -365,7 +366,9 @@ def _expand_block(
                 scoped = _rebind(key, narrowed_key)
                 rewritten = rewritten.replace("{" + key + "}", "{" + scoped + "}")
                 key = scoped
-            list_values[key] = _norm_values(ov.spoken_values("entities", kept))
+            list_values[key] = _norm_values(
+                ov.spoken_values("entities", kept, language=lang)
+            )
         if dropped:
             continue
         for slot, kind in (("area", "areas"), ("floor", "floors")):
@@ -379,7 +382,9 @@ def _expand_block(
                 dropped = True
                 break
             rewritten = rewritten.replace(token, "{" + scoped_key + "}")
-            list_values[scoped_key] = _norm_values(ov.spoken_values(kind, kept))
+            list_values[scoped_key] = _norm_values(
+                ov.spoken_values(kind, kept, language=lang)
+            )
         if dropped:
             continue
         templates.append(rewritten)
@@ -494,7 +499,9 @@ def _assemble(
     list_values: Dict[str, List[str]] = {k: _norm_values(v) for k, v in slot_lists.items()}
     for slot, kind in (("area", "areas"), ("floor", "floors")):
         if slot in slot_lists:
-            list_values[slot] = _norm_values(ov.spoken_values(kind, slot_lists[slot]))
+            list_values[slot] = _norm_values(
+                ov.spoken_values(kind, slot_lists[slot], language=lang)
+            )
     # Text lists (color, on/off states, ...) come from the package; name/area/
     # floor stay from the registry-provided slot_lists above.
     for name, values in s2p_intents.text_list_values(lang).items():
@@ -526,6 +533,7 @@ def _assemble(
             except Exception:  # noqa: BLE001
                 flat_templates = list(ss.get("sentences", []))
             _expand_block(
+                lang,
                 flat_templates, eff_nd, capability,
                 info, templates, list_values,
                 ov=ov, combo_key=ovr.combo_key(intent, combo),
@@ -536,6 +544,7 @@ def _assemble(
     # Custom commands (all modes contribute their sentences to the grammar).
     for idx, block in enumerate(cc.grammar_sentences(list(custom_commands or []))):
         _expand_block(
+            lang,
             block["sentences"], block.get("name_domains") or None, None,
             info, templates, list_values, ov=ov, canonical_lists=slot_lists,
             labels=labels, label=f"custom:{idx}",
@@ -548,6 +557,7 @@ def _assemble(
         import hass_sentences as hs
 
         _expand_block(
+            lang,
             hs.grammar_templates(
                 sentences, lang, bindable_lists(lang, slot_lists)
             ),

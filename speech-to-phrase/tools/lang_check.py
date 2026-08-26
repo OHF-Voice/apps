@@ -303,7 +303,7 @@ def main() -> int:
         return 1
 
     from speech_to_phrase import load_recognizer  # noqa: PLC0415
-    from vad import normalize_level, trim_silence  # noqa: PLC0415
+    from audio_frontend import prepare_audio  # noqa: PLC0415
 
     token_bonus = args.token_bonus
     if token_bonus is None:
@@ -335,8 +335,7 @@ def main() -> int:
             skipped.append((combo, example, unreachable))
             continue
         audio = tts_wav(example, args.engine_id, tts_language, args.cache_dir)
-        audio = trim_silence(normalize_level(audio))
-        result = rec.transcribe(audio)
+        result = rec.transcribe(prepare_audio(audio))
         heard = norm(result.text if result else "")
         score = float(result.score) if result else float("inf")
         gated = score > gate

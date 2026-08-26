@@ -93,18 +93,50 @@ class Overrides:
             return list(dict.fromkeys(aliases))
         return list(dict.fromkeys([value] + aliases))
 
-    def pairs(self, kind: str, values: Iterable[str]) -> List[Tuple[str, str]]:
+    def pairs(
+        self, kind: str, values: Iterable[str], language: str = ""
+    ) -> List[Tuple[str, str]]:
         """``[(spoken, canonical)]`` for `values` -- what the matcher binds, so a
-        match on an alias still yields the name Home Assistant knows."""
+        match on an alias still yields the name Home Assistant knows.
+
+        English light names get a final ``light``/``lights`` variant. People
+        naturally use either number for a fixture or group named by Home
+        Assistant, and the acoustic distinction is often only a weak final
+        consonant. A generated form is skipped when it is another canonical
+        entity name, avoiding ambiguous mappings.
+        """
+        values = list(values)
+        canonical = {" ".join(value.lower().split()) for value in values}
         out: List[Tuple[str, str]] = []
         for value in values:
             for form in self.spoken(kind, value):
                 out.append((form, value))
+                language_root = re.split(r"[-_]", language, maxsplit=1)[0].lower()
+                if kind != "entities" or language_root != "en":
+                    continue
+                words = form.split()
+                if not words:
+                    continue
+                last = words[-1].lower()
+                if last == "light":
+                    words[-1] = "lights"
+                elif last == "lights":
+                    words[-1] = "light"
+                else:
+                    continue
+                variant = " ".join(words)
+                normalized = " ".join(variant.lower().split())
+                if normalized not in canonical:
+                    out.append((variant, value))
         return out
 
-    def spoken_values(self, kind: str, values: Iterable[str]) -> List[str]:
+    def spoken_values(
+        self, kind: str, values: Iterable[str], language: str = ""
+    ) -> List[str]:
         """Just the spoken forms -- what the grammar is trained on."""
-        return [form for form, _canonical in self.pairs(kind, values)]
+        return [
+            form for form, _canonical in self.pairs(kind, values, language=language)
+        ]
 
     # ---- per-command exclusions --------------------------------------------
 

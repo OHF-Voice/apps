@@ -64,6 +64,17 @@ def _text_similarity(left: str, right: str) -> float:
     return SequenceMatcher(None, clean_left, clean_right).ratio()
 
 
+def _shares_content_word(left: str, right: str) -> bool:
+    """Whether hypotheses share a word substantial enough to anchor a rescue."""
+
+    def words(text: str) -> set[str]:
+        normalized = unicodedata.normalize("NFC", text).lower()
+        cleaned = "".join(ch if ch.isalnum() else " " for ch in normalized)
+        return {word for word in cleaned.split() if len(word) >= 4}
+
+    return bool(words(left) & words(right))
+
+
 def _normalize_list_values(
     list_values: Optional[Mapping[str, Sequence[str]]]
 ) -> Optional[Dict[str, List[str]]]:
@@ -211,6 +222,7 @@ class Recognizer:
         if (
             corrected[0].score <= self.token_bonus_max_unbiased_score
             and corrected[0].text != unbiased[0].text
+            and _shares_content_word(greedy_text, corrected[0].text)
             and _text_similarity(greedy_text, corrected[0].text)
             >= self.token_bonus_rescue_similarity
         ):

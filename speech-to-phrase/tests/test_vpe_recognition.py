@@ -3,7 +3,9 @@
 
 The local Citrinet model is intentionally not committed. When it is available,
 this builds the same selected English production grammar and decodes every WAV
-under ``tests/wav/mike`` through the production audio front-end.
+under ``tests/wav/mike`` through the production audio front-end. Alternate
+phrasings pass only when Home Assistant resolves them to the same intent and
+slots as the filename.
 """
 
 import json
@@ -17,6 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from audio_frontend import prepare_audio  # noqa: E402
+from intent_matcher import build_matcher  # noqa: E402
 from models import default_max_score  # noqa: E402
 from overrides import Overrides  # noqa: E402
 import training  # noqa: E402
@@ -47,6 +50,19 @@ def expected_transcript(path: Path) -> str:
     words = slug.split("-")
     words = [CONTRACTIONS.get(word, word) for word in words]
     return " ".join(words)
+
+
+def command_key(matcher, text: str):
+    """Return the Home Assistant intent and slots resolved from a transcript."""
+    matched = matcher.match(text)
+    if matched is None:
+        return None
+    return (
+        matched.intent.name,
+        matched.intent_metadata.get("domain"),
+        bool(matched.intent_metadata.get("context_area")),
+        tuple(sorted((entity.name, entity.value) for entity in matched.entities_list)),
+    )
 
 
 def main() -> int:
@@ -105,6 +121,15 @@ def main() -> int:
         "citrinet", MODEL, language="en", token_bonus=2.0
     )
     recognizer.train(templates, list_values)
+    matcher = build_matcher(
+        ROOT,
+        "en",
+        enabled,
+        ENTITIES,
+        training.DEV_SLOT_LISTS,
+        custom_commands=CUSTOM_COMMANDS,
+    )
+    assert matcher is not None
     gate = default_max_score("citrinet")
 
     recognized = 0
@@ -113,7 +138,15 @@ def main() -> int:
         check(f"{wav.relative_to(WAV_ROOT)} sample rate", sample_rate == 16000)
         result = recognizer.transcribe(prepare_audio(samples))
         expected = expected_transcript(wav)
-        passed = result.text == expected and result.score <= gate
+        expected_command = command_key(matcher, expected)
+        same_command = (
+            result.text == expected
+            or (
+                expected_command is not None
+                and command_key(matcher, result.text) == expected_command
+            )
+        )
+        passed = same_command and result.score <= gate
         recognized += int(passed)
         check(
             str(wav.relative_to(WAV_ROOT)),
@@ -134,7 +167,7 @@ def main() -> int:
         )
 
     print(
-        f"\nVPE exact+accepted: {recognized}/{len(wavs)}; "
+        f"\nVPE command-correct+accepted: {recognized}/{len(wavs)}; "
         f"OOV rejected: {rejected}/{len(oov_wavs)}"
     )
     return 0 if ok else 1

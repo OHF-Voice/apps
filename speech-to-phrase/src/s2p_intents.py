@@ -19,10 +19,25 @@ package's ``lists`` and ``expansion_rules``.
 import logging
 import re
 import unicodedata
+from copy import deepcopy
 from functools import lru_cache
+from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
+import yaml
 from hassil import Intents, normalize_whitespace
+from hassil.expression import (
+    Alternative,
+    Expression,
+    Group,
+    ListReference,
+    Permutation,
+    RuleReference,
+    Sentence,
+    Sequence as HassilSequence,
+    TextChunk,
+)
+from hassil.parse_expression import parse_sentence
 from hassil.sample import sample_sentence
 from home_assistant_intents import (
     get_speech_to_phrase_intents,
@@ -33,6 +48,185 @@ _LOGGER = logging.getLogger("speech-to-phrase.s2p_intents")
 
 _REF_RE = re.compile(r"\{([^{}]+)\}")
 _INLINE_RANGE_RE = re.compile(r"^-?\d+\s*\.\.")
+_SENTENCE_OVERRIDES_DIR = Path(__file__).resolve().parent.parent / "sentences"
+_HASSIL_LITERAL_SPECIAL = frozenset(r"\()[]{}<>|;")
+
+
+def _inline_rule_references(
+    expression: Expression,
+    rules: Dict[str, Sentence],
+    source: object,
+    stack: Tuple[str, ...] = (),
+) -> Expression:
+    """Replace known rule references in a Hassil AST; preserve unknown ones."""
+    if isinstance(expression, RuleReference):
+        name = expression.rule_name
+        if name not in rules:
+            return deepcopy(expression)
+        if name in stack:
+            chain = " -> ".join((*stack, name))
+            raise ValueError(f"Circular expansion rules in {source}: {chain}")
+        return _inline_rule_references(
+            deepcopy(rules[name].expression), rules, source, (*stack, name)
+        )
+
+    cloned = deepcopy(expression)
+    if isinstance(cloned, Group):
+        cloned.items = [
+            _inline_rule_references(item, rules, source, stack)
+            for item in cloned.items
+        ]
+    return cloned
+
+
+def _escape_hassil_text(text: str) -> str:
+    return "".join(
+        f"\\{char}" if char in _HASSIL_LITERAL_SPECIAL else char
+        for char in text
+    )
+
+
+def _expression_text(expression: Expression) -> str:
+    """Serialize a Hassil AST to canonical syntax accepted by Hassil."""
+    if isinstance(expression, TextChunk):
+        return _escape_hassil_text(expression.original_text)
+    if isinstance(expression, RuleReference):
+        return f"<{expression.rule_name}>"
+    if isinstance(expression, ListReference):
+        slot_name = expression.slot_name
+        if expression.is_capture:
+            body = (
+                f"@{slot_name}"
+                if expression.list_name == slot_name
+                else f"{expression.list_name}:@{slot_name}"
+            )
+        elif slot_name != expression.list_name:
+            body = f"{expression.list_name}:{slot_name}"
+        else:
+            body = expression.list_name
+        return f"{{{body}}}"
+    if isinstance(expression, HassilSequence):
+        return "".join(_expression_text(item) for item in expression.items)
+    if isinstance(expression, Alternative):
+        items = [_expression_text(item) for item in expression.items]
+        if expression.is_optional:
+            return f"[{'|'.join(item for item in items if item)}]"
+        return f"({'|'.join(items)})"
+    if isinstance(expression, Permutation):
+        return f"({';'.join(_expression_text(item) for item in expression.items)})"
+    raise TypeError(f"Unsupported Hassil expression: {type(expression).__name__}")
+
+
+def _parse_rules(rules: Dict[str, str], source: object) -> Dict[str, Sentence]:
+    try:
+        return {name: parse_sentence(value) for name, value in rules.items()}
+    except Exception as err:
+        raise ValueError(f"Could not parse expansion rules in {source}") from err
+
+
+def _substitute_rules(
+    sentence: str, rules: Dict[str, Sentence], source: object
+) -> str:
+    """Parse with Hassil, inline known rules, and return canonical Hassil text."""
+    try:
+        parsed = parse_sentence(sentence)
+    except Exception as err:
+        raise ValueError(
+            f"Could not parse sentence {sentence!r} in {source}"
+        ) from err
+    return _expression_text(
+        _inline_rule_references(parsed.expression, rules, source)
+    )
+
+
+def _override_rules(value, path: Path, location: str) -> Dict[str, str]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict) or not all(
+        isinstance(name, str) and isinstance(rule, str)
+        for name, rule in value.items()
+    ):
+        raise ValueError(
+            f"Sentence override {path} has invalid {location} expansion_rules"
+        )
+    return dict(value)
+
+
+def _load_sentence_overrides(
+    root: Path,
+) -> Dict[str, Dict[Tuple[str, str], Tuple[Tuple[str, ...], ...]]]:
+    """Load bundled ``<lang>/<intent>/<combo>.yaml`` sentence replacements.
+
+    Files use the source home-assistant-intents YAML format. If a file contains
+    ``speech_to_phrase``-tagged blocks, only those lean blocks are used, matching
+    the package build. Metadata still comes from the installed package so these
+    patches cannot accidentally change slot or context behavior.
+    """
+    overrides: Dict[
+        str, Dict[Tuple[str, str], Tuple[Tuple[str, ...], ...]]
+    ] = {}
+    if not root.is_dir():
+        return overrides
+
+    for path in sorted(root.glob("*/*/*.yaml")):
+        lang, intent, combo = path.relative_to(root).parts
+        combo = Path(combo).stem
+        try:
+            doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception as err:
+            raise ValueError(f"Could not load sentence override {path}") from err
+
+        if not doc:
+            _LOGGER.warning("Ignoring empty sentence override %s", path)
+            continue
+        if not isinstance(doc, dict) or doc.get("language") != lang:
+            raise ValueError(
+                f"Sentence override {path} must declare language: {lang}"
+            )
+        data = doc.get("data")
+        if not isinstance(data, list) or not data:
+            raise ValueError(f"Sentence override {path} must contain non-empty data")
+        file_rules = _override_rules(doc.get("expansion_rules"), path, "top-level")
+
+        tagged = [
+            block for block in data
+            if isinstance(block, dict) and block.get("speech_to_phrase") is True
+        ]
+        selected = tagged or data
+        sentence_blocks: List[Tuple[str, ...]] = []
+        for block in selected:
+            sentences = block.get("sentences") if isinstance(block, dict) else None
+            if (
+                not isinstance(sentences, list)
+                or not sentences
+                or not all(isinstance(sentence, str) for sentence in sentences)
+            ):
+                raise ValueError(
+                    f"Sentence override {path} has a block without string sentences"
+                )
+            block_rules = _override_rules(
+                block.get("expansion_rules"), path, "data block"
+            )
+            rules = _parse_rules({**file_rules, **block_rules}, path)
+            sentence_blocks.append(
+                tuple(
+                    _substitute_rules(sentence, rules, path)
+                    for sentence in sentences
+                )
+            )
+
+        key = (intent, combo)
+        lang_overrides = overrides.setdefault(lang, {})
+        if key in lang_overrides:
+            raise ValueError(f"Duplicate sentence override for {lang}/{intent}.{combo}")
+        lang_overrides[key] = tuple(sentence_blocks)
+
+    return overrides
+
+
+# Loaded exactly once per process. A package or bundled YAML change takes effect
+# on the next app start, never midway through a running recognizer.
+_SENTENCE_OVERRIDES = _load_sentence_overrides(_SENTENCE_OVERRIDES_DIR)
 
 
 @lru_cache(maxsize=None)
@@ -100,6 +294,25 @@ def _combo_map(lang: str) -> Dict[Tuple[str, str], Tuple[dict, ...]]:
             if not combo:
                 continue
             out.setdefault((intent, combo), []).append(_authored_block(block))
+
+    for key, sentence_blocks in _SENTENCE_OVERRIDES.get(lang, {}).items():
+        package_blocks = out.get(key)
+        if package_blocks is None:
+            raise ValueError(
+                f"Sentence override {lang}/{key[0]}.{key[1]} does not match an "
+                "installed home-assistant-intents slot combination"
+            )
+        if len(package_blocks) != len(sentence_blocks):
+            raise ValueError(
+                f"Sentence override {lang}/{key[0]}.{key[1]} has "
+                f"{len(sentence_blocks)} Speech-to-Phrase block(s), but the "
+                f"installed package has {len(package_blocks)}"
+            )
+        out[key] = [
+            {**block, "sentences": list(sentences)}
+            for block, sentences in zip(package_blocks, sentence_blocks)
+        ]
+
     return {key: tuple(blocks) for key, blocks in out.items()}
 
 
@@ -325,18 +538,19 @@ def phrasings(value: str, lang: str) -> Tuple[str, ...]:
             return forms
     except Exception:  # noqa: BLE001  (a malformed value must not break training)
         _LOGGER.warning("Could not expand list value %r for %s", value, lang)
-    return (_flatten_value(value),)
+    return (_flatten_value(value, lang),)
 
 
-def _flatten_value(value: str) -> str:
-    """Reduce a list value that is itself a template fragment to plain words
-    (first alternative of each group/optional), e.g. ``(up|increase)`` -> ``up``,
-    ``[securely] locked`` -> ``securely locked``."""
-    while re.search(r"\([^()]*\)", value):
-        value = re.sub(r"\(([^()]*)\)", lambda m: m.group(1).split("|")[0], value)
-    while re.search(r"\[[^\[\]]*\]", value):
-        value = re.sub(r"\[([^\[\]]*)\]", lambda m: m.group(1).split("|")[0], value)
-    return " ".join(value.split())
+def _flatten_value(value: str, lang: str) -> str:
+    """Use Hassil's first realization of a list value for a UI example."""
+    return next(
+        sample_sentence(
+            parse_sentence(value),
+            expansion_rules=_parsed_expansion_rules(lang),
+            expand_lists=False,
+            expand_ranges=False,
+        )
+    ).strip()
 
 
 def example_text_values(lang: str) -> Dict[str, List[str]]:
@@ -349,7 +563,7 @@ def example_text_values(lang: str) -> Dict[str, List[str]]:
     """
     _ranges, texts = _list_defs(lang)
     return {
-        name: [_flatten_value(vals[0])] for name, vals in texts.items() if vals
+        name: [_flatten_value(vals[0], lang)] for name, vals in texts.items() if vals
     }
 
 
@@ -363,27 +577,16 @@ def expansion_rules(lang: str) -> Dict[str, str]:
     return dict((_load(lang) or {}).get("expansion_rules") or {})
 
 
-_RULE_REF_RE = re.compile(r"<([a-z0-9_]+)>")
+@lru_cache(maxsize=None)
+def _parsed_expansion_rules(lang: str) -> Dict[str, Sentence]:
+    return _parse_rules(expansion_rules(lang), f"{lang} package")
 
 
 def resolve_rules(text: str, lang: str) -> str:
     """Substitute ``<rule>`` -> ``(body)`` recursively so a template contains no
     expansion-rule references (used to render example sentences for the UI, which
     must not show raw ``<rules>``). Optionals/alternatives are left intact."""
-    rules = expansion_rules(lang)
-
-    def _sub(current: str, depth: int = 0) -> str:
-        if depth > 25:
-            return current
-        expanded = _RULE_REF_RE.sub(
-            lambda m: f"({rules[m.group(1)]})" if m.group(1) in rules else m.group(0),
-            current,
-        )
-        if expanded != current and _RULE_REF_RE.search(expanded):
-            return _sub(expanded, depth + 1)
-        return expanded
-
-    return _sub(text)
+    return _substitute_rules(text, _parsed_expansion_rules(lang), f"{lang} package")
 
 
 # --- grammar-dialect templates (for the FST trainer) -------------------------

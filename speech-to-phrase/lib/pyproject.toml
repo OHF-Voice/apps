@@ -10,36 +10,23 @@ description = "Constrained CTC speech-to-text over sentence templates (Citrinet/
 authors     = [
     {name = "The Home Assistant Authors", email = "hello@home-assistant.io"}
 ]
-# The native _fst extension is built against the CPython limited API for 3.11
-# (abi3), so 3.11 is the floor -- set by the buffer protocol, which entered the
-# limited API in that release. The add-on image runs 3.13, but there is nothing
-# to gain by raising this: a lower floor is one wheel that works in more places,
-# including a Debian 12 base and whatever a contributor's machine has.
 requires-python = ">=3.11"
-# Recognition library only. The add-on's own server dependencies (flask,
-# wyoming, hassil, ...) stay in the add-on's requirements.txt.
 dependencies = [
     "numpy",
     "onnxruntime",
     "sentencepiece",
     "soundfile",
-    # scipy for scipy.fft, which is the transform the log-mel front end is
-    # verified bit-identical against (see _dsp.py); soxr for resampling, which
-    # is what librosa used underneath. Neither drags in numba/llvmlite.
     "scipy",
     "soxr",
     "icu-rbnf",
 ]
 
 [tool.scikit-build]
-# Tag the wheel cp311-abi3: one wheel runs on every CPython >= 3.11. The native
-# module is built against the limited API (USE_SABI in CMakeLists.txt).
 wheel.py-api = "cp311"
 minimum-version = "build-system.requires"
 build-dir = "build/{wheel_tag}"
 
 wheel.packages = ["speech_to_phrase"]
-# Don't ship C++ sources in the wheel.
 wheel.exclude = ["**/*.cc"]
 
 [tool.scikit-build.cmake]

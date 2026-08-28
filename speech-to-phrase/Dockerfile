@@ -82,10 +82,12 @@ RUN \
         && du -sh "/usr/src/models/${BUNDLE_MODEL}"; \
     fi
 
-# Add-on application + intents metadata (sentences/responses now come from the
-# home-assistant-intents package's speech_to_phrase tagged subset). config.yaml
-# is read at runtime for the version advertised over Wyoming.
+# Add-on application + intent sentence patches. The complete sentence/response
+# data comes from home-assistant-intents; sentences/ only overrides individual
+# slot combinations until those fixes reach a package release. config.yaml is
+# read at runtime for the version advertised over Wyoming.
 COPY src/ ./src/
+COPY sentences/ ./sentences/
 COPY example_values.yaml config.yaml ./
 
 WORKDIR /

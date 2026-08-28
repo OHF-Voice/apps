@@ -3,30 +3,13 @@
 # ==============================================================================
 # Start Speech-to-Phrase: the Wyoming STT server (tcp://0.0.0.0:10300) and the
 # configuration web UI (Home Assistant ingress, :8099) run in a single process.
-#
-# On first boot (or when entities/areas/floors/config change) the default
-# grammar is trained; the embedded Wyoming server hot-reloads it.
-#
-# Speech-to-text only: the transcript goes to Home Assistant, which decides what
-# it means. The add-on's own intent service is not started.
-# ==============================================================================
-#
-# There are two add-on options: the language, and verbose logging. Everything
-# app.py can otherwise be told is left at its default, because the defaults ARE
-# the shipped configuration -- the backend that has a model for the language,
-# the per-backend score gate and word-insertion reward, and both Home Assistant
-# sentence sources on. Anything a user should be able to change per language is
-# changed in the web UI, which writes it to /data and outlives this script.
 # ==============================================================================
 flags=()
 bashio::config.true 'debug_logging' && flags+=('--debug')
 
-# || exit: without it a failed cd would exec python3 from the wrong directory,
-# where "app.py" does not exist, and the error would name the file rather than
-# the cd (shellcheck SC2164).
-cd /usr/src/src || exit 1
+cd /usr/src || exit 1
 
-exec python3 app.py \
+exec python3 src/app.py \
     --data /data \
     --models-dir '/data/models' \
     --language "$(bashio::config 'language')" \

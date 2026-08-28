@@ -5,7 +5,8 @@ ARG BUILD_ARCH
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 WORKDIR /usr/src
-ENV PIP_BREAK_SYSTEM_PACKAGES=1
+ENV VIRTUAL_ENV="/usr/src/.venv"
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
 
 COPY requirements.txt ./
 # The recognition library is vendored (lib/) and built from these sources, so
@@ -37,6 +38,7 @@ RUN \
         netcat-traditional \
         python3 \
         python3-pip \
+        python3-venv \
     && apt-get install -y --no-install-recommends \
         cmake \
         g++ \
@@ -48,8 +50,11 @@ RUN \
     # never used to build anything. Upgrading them also breaks outright on
     # Debian releases that ship python3-wheel from apt, since that has no RECORD
     # file for pip to uninstall ("Cannot uninstall wheel ... no RECORD file").
-    && pip3 install --no-cache-dir -r requirements.txt \
-    && fst_so="$(python3 -c 'import glob, pathlib, speech_to_phrase as s; print(glob.glob(str(pathlib.Path(s.__file__).parent / "_fst*.so"))[0])')" \
+    && python3 -m venv "${VIRTUAL_ENV}" \
+    # Bash has already resolved python3 to the system interpreter in this RUN,
+    # so address the newly-created venv explicitly until the next layer.
+    && "${VIRTUAL_ENV}/bin/python3" -m pip install --no-cache-dir -r requirements.txt \
+    && fst_so="$("${VIRTUAL_ENV}/bin/python3" -c 'import glob, pathlib, speech_to_phrase as s; print(glob.glob(str(pathlib.Path(s.__file__).parent / "_fst*.so"))[0])')" \
     && ldd "$fst_so" \
     && kept=0 \
     && for lib in $(ldd "$fst_so" | awk '/=> \// {print $3}'); do \
@@ -67,7 +72,7 @@ RUN \
     && apt-get purge -y --auto-remove cmake g++ libfst-dev python3-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /root/.cache \
-    && python3 -c "import speech_to_phrase; print('vendored speech_to_phrase imports OK after purge')"
+    && "${VIRTUAL_ENV}/bin/python3" -c "import speech_to_phrase; print('vendored speech_to_phrase imports OK after purge')"
 
 # Bundle the default acoustic model so a fresh install works offline and doesn't
 # spend its first boot downloading ~140 MB. Only src/models.py is copied first,

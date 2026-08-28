@@ -22,8 +22,20 @@ when the basement has no lights -- it must remain speakable so Home Assistant
 can respond with a "no entities" error rather than the utterance being silently
 unrecognisable.
 """
+
 from dataclasses import dataclass
-from typing import Dict, FrozenSet, List, Optional, Sequence, Set
+from typing import (
+    Any,
+    Dict,
+    FrozenSet,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+)
 
 
 # Feature a combo needs, by intent (refined by combo name for HassLightSet).
@@ -74,12 +86,21 @@ _FEATURE_BITS = {
     "media_player": {"volume_set": 4, "volume_mute": 8},
 }
 _COLOR_MODES_BRIGHTNESS = {
-    "brightness", "color_temp", "hs", "rgb", "rgbw", "rgbww", "xy", "white"
+    "brightness",
+    "color_temp",
+    "hs",
+    "rgb",
+    "rgbw",
+    "rgbww",
+    "xy",
+    "white",
 }
 _COLOR_MODES_COLOR = {"hs", "rgb", "rgbw", "rgbww", "xy"}
 
 
-def capabilities_from_attributes(domain: str, attributes: dict) -> Set[str]:
+def capabilities_from_attributes(
+    domain: str, attributes: Mapping[str, Any]
+) -> Set[str]:
     """Capability tokens an entity supports, from its state attributes."""
     caps: Set[str] = set()
     sf = attributes.get("supported_features") or 0
@@ -115,14 +136,16 @@ class EntityRecord:
 class EntityInfo:
     """Aggregates over the enriched entity records for the gating decisions."""
 
-    def __init__(self, records: Sequence[EntityRecord]):
+    def __init__(self, records: Sequence[EntityRecord]) -> None:
         self._records = list(records)
 
     @property
     def records(self) -> List[EntityRecord]:
         return self._records
 
-    def _match(self, domains: Sequence[str], capability: Optional[str]):
+    def _match(
+        self, domains: Sequence[str], capability: Optional[str]
+    ) -> Iterator[EntityRecord]:
         dom = set(domains)
         for r in self._records:
             if r.domain not in dom:
@@ -159,7 +182,7 @@ def scope_sentence(
     name_domains: Optional[Sequence[str]],
     capability: Optional[str],
     info: "EntityInfo",
-):
+) -> Tuple[Optional[str], Dict[str, List[str]]]:
     """Rewrite ``{name}`` to a domain-scoped list ref and apply the capability
     gate. Returns ``(rewritten, lists)`` or ``(None, {})`` if the sentence must be
     dropped (no capable entity of the name's domain).

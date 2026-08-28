@@ -16,13 +16,14 @@ blocks in hassil's *converted* format (domain info under ``slots`` /
 The hassil matcher needs no transpile: it is handed the raw templates plus the
 package's ``lists`` and ``expansion_rules``.
 """
+
 import logging
 import re
 import unicodedata
 from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 import yaml
 from hassil import Intents, normalize_whitespace
@@ -34,9 +35,9 @@ from hassil.expression import (
     Permutation,
     RuleReference,
     Sentence,
-    Sequence as HassilSequence,
-    TextChunk,
 )
+from hassil.expression import Sequence as HassilSequence
+from hassil.expression import TextChunk
 from hassil.parse_expression import parse_sentence
 from hassil.sample import sample_sentence
 from home_assistant_intents import (
@@ -73,16 +74,14 @@ def _inline_rule_references(
     cloned = deepcopy(expression)
     if isinstance(cloned, Group):
         cloned.items = [
-            _inline_rule_references(item, rules, source, stack)
-            for item in cloned.items
+            _inline_rule_references(item, rules, source, stack) for item in cloned.items
         ]
     return cloned
 
 
 def _escape_hassil_text(text: str) -> str:
     return "".join(
-        f"\\{char}" if char in _HASSIL_LITERAL_SPECIAL else char
-        for char in text
+        f"\\{char}" if char in _HASSIL_LITERAL_SPECIAL else char for char in text
     )
 
 
@@ -124,27 +123,20 @@ def _parse_rules(rules: Dict[str, str], source: object) -> Dict[str, Sentence]:
         raise ValueError(f"Could not parse expansion rules in {source}") from err
 
 
-def _substitute_rules(
-    sentence: str, rules: Dict[str, Sentence], source: object
-) -> str:
+def _substitute_rules(sentence: str, rules: Dict[str, Sentence], source: object) -> str:
     """Parse with Hassil, inline known rules, and return canonical Hassil text."""
     try:
         parsed = parse_sentence(sentence)
     except Exception as err:
-        raise ValueError(
-            f"Could not parse sentence {sentence!r} in {source}"
-        ) from err
-    return _expression_text(
-        _inline_rule_references(parsed.expression, rules, source)
-    )
+        raise ValueError(f"Could not parse sentence {sentence!r} in {source}") from err
+    return _expression_text(_inline_rule_references(parsed.expression, rules, source))
 
 
-def _override_rules(value, path: Path, location: str) -> Dict[str, str]:
+def _override_rules(value: Any, path: Path, location: str) -> Dict[str, str]:
     if value is None:
         return {}
     if not isinstance(value, dict) or not all(
-        isinstance(name, str) and isinstance(rule, str)
-        for name, rule in value.items()
+        isinstance(name, str) and isinstance(rule, str) for name, rule in value.items()
     ):
         raise ValueError(
             f"Sentence override {path} has invalid {location} expansion_rules"
@@ -162,9 +154,7 @@ def _load_sentence_overrides(
     the package build. Metadata still comes from the installed package so these
     patches cannot accidentally change slot or context behavior.
     """
-    overrides: Dict[
-        str, Dict[Tuple[str, str], Tuple[Tuple[str, ...], ...]]
-    ] = {}
+    overrides: Dict[str, Dict[Tuple[str, str], Tuple[Tuple[str, ...], ...]]] = {}
     if not root.is_dir():
         return overrides
 
@@ -180,16 +170,15 @@ def _load_sentence_overrides(
             _LOGGER.warning("Ignoring empty sentence override %s", path)
             continue
         if not isinstance(doc, dict) or doc.get("language") != lang:
-            raise ValueError(
-                f"Sentence override {path} must declare language: {lang}"
-            )
+            raise ValueError(f"Sentence override {path} must declare language: {lang}")
         data = doc.get("data")
         if not isinstance(data, list) or not data:
             raise ValueError(f"Sentence override {path} must contain non-empty data")
         file_rules = _override_rules(doc.get("expansion_rules"), path, "top-level")
 
         tagged = [
-            block for block in data
+            block
+            for block in data
             if isinstance(block, dict) and block.get("speech_to_phrase") is True
         ]
         selected = tagged or data
@@ -210,8 +199,7 @@ def _load_sentence_overrides(
             rules = _parse_rules({**file_rules, **block_rules}, path)
             sentence_blocks.append(
                 tuple(
-                    _substitute_rules(sentence, rules, path)
-                    for sentence in sentences
+                    _substitute_rules(sentence, rules, path) for sentence in sentences
                 )
             )
 
@@ -336,9 +324,7 @@ def responses(lang: str) -> Dict[str, Dict[str, str]]:
         return {}
     intents = (data.get("responses") or {}).get("intents") or {}
     return {
-        intent: dict(keys)
-        for intent, keys in intents.items()
-        if isinstance(keys, dict)
+        intent: dict(keys) for intent, keys in intents.items() if isinstance(keys, dict)
     }
 
 
@@ -346,7 +332,9 @@ def responses(lang: str) -> Dict[str, Dict[str, str]]:
 
 
 @lru_cache(maxsize=None)
-def _list_defs(lang: str) -> Tuple[Dict[str, Tuple[int, int, int]], Dict[str, Tuple[str, ...]]]:
+def _list_defs(
+    lang: str,
+) -> Tuple[Dict[str, Tuple[int, int, int]], Dict[str, Tuple[str, ...]]]:
     """(range_lists, text_lists) from the package's ``lists``.
 
     range_lists: name -> (from, to, step); text_lists: name -> (spoken value, ...).
@@ -494,7 +482,8 @@ def text_list_values(lang: str) -> Dict[str, List[str]]:
             # forms for this list, so the fallback keeps dead paths -- say so.
             _LOGGER.warning(
                 "No speakable values for list '%s' (%s); keeping written forms",
-                name, lang,
+                name,
+                lang,
             )
         out[name] = spoken or expanded
     return out
@@ -544,11 +533,13 @@ def phrasings(value: str, lang: str) -> Tuple[str, ...]:
 def _flatten_value(value: str, lang: str) -> str:
     """Use Hassil's first realization of a list value for a UI example."""
     return next(
-        sample_sentence(
-            parse_sentence(value),
-            expansion_rules=_parsed_expansion_rules(lang),
-            expand_lists=False,
-            expand_ranges=False,
+        iter(
+            sample_sentence(
+                parse_sentence(value),
+                expansion_rules=_parsed_expansion_rules(lang),
+                expand_lists=False,
+                expand_ranges=False,
+            )
         )
     ).strip()
 
@@ -605,7 +596,7 @@ def resolve_rules(text: str, lang: str) -> str:
 def _rewrite_ref(
     content: str,
     range_lists: Dict[str, Tuple[int, int, int]],
-    text_lists: Dict[str, Sequence[str]],
+    text_lists: Mapping[str, Sequence[str]],
     referenced: Set[str],
 ) -> str:
     content = content.strip()
@@ -622,7 +613,9 @@ def _rewrite_ref(
     return "{" + content + "}"
 
 
-def grammar_templates(sentences: Sequence[str], lang: str) -> Tuple[List[str], Set[str]]:
+def grammar_templates(
+    sentences: Sequence[str], lang: str
+) -> Tuple[List[str], Set[str]]:
     """Flat, lib-dialect templates for a block's hassil sentences.
 
     Returns ``(templates, referenced_lists)``: every phrasing the sentences
@@ -659,7 +652,9 @@ def grammar_templates(sentences: Sequence[str], lang: str) -> Tuple[List[str], S
             ):
                 flat = normalize_whitespace(text).strip()
                 rewritten = _REF_RE.sub(
-                    lambda m: _rewrite_ref(m.group(1), range_lists, text_lists, referenced),
+                    lambda m: _rewrite_ref(
+                        m.group(1), range_lists, text_lists, referenced
+                    ),
                     flat,
                 )
                 spoken = _speakable_template(normalize_whitespace(rewritten).strip())
@@ -676,6 +671,9 @@ def grammar_templates(sentences: Sequence[str], lang: str) -> Tuple[List[str], S
             if n_dropped and not n_kept:
                 _LOGGER.warning(
                     "No speakable phrasing for a %s template; dropped %d written-only "
-                    "form(s): %s", lang, n_dropped, sentence.text,
+                    "form(s): %s",
+                    lang,
+                    n_dropped,
+                    sentence.text,
                 )
     return list(dict.fromkeys(out)), referenced

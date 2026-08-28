@@ -23,23 +23,28 @@ Run locally:
     python src/wyoming_server.py --uri tcp://0.0.0.0:10300 \
         --backend citrinet --model <model_dir> --grammar ./data/en/grammar.fst
 """
+
 import argparse
 import asyncio
 import logging
 import math
+import threading
 import time
+from asyncio import StreamReader, StreamWriter
 from functools import lru_cache, partial
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
+from numpy.typing import NDArray
+from speech_to_phrase import Result, load_recognizer
+from speech_to_phrase.audio import SAMPLE_RATE
+from speech_to_phrase.audio import resample as resample_audio
 from wyoming.asr import Transcribe, Transcript
 from wyoming.audio import AudioChunk, AudioStart, AudioStop
+from wyoming.event import Event
 from wyoming.info import AsrModel, AsrProgram, Attribution, Describe, Info
 from wyoming.server import AsyncEventHandler, AsyncServer
-
-from speech_to_phrase import load_recognizer
-from speech_to_phrase.audio import SAMPLE_RATE, resample as resample_audio
 
 import debug_log
 import models
@@ -92,11 +97,19 @@ class GrammarHolder:
     (``max_score``), re-read from ``<lang>/settings.json`` so edits in the web UI
     take effect without a restart."""
 
-    def __init__(self, backend: str, model_dir: Path, language: str,
-                 grammar_path: Path, default_max_score: float,
-                 beam: Optional[float] = None, token_bonus: float = 0.0):
-        self._rec = load_recognizer(backend, model_dir, language=language,
-                                    beam=beam, token_bonus=token_bonus)
+    def __init__(
+        self,
+        backend: str,
+        model_dir: Path,
+        language: str,
+        grammar_path: Path,
+        default_max_score: float,
+        beam: Optional[float] = None,
+        token_bonus: float = 0.0,
+    ) -> None:
+        self._rec = load_recognizer(
+            backend, model_dir, language=language, beam=beam, token_bonus=token_bonus
+        )
         self.language = language
         self._grammar_path = grammar_path
         self._settings_path = Path(grammar_path).parent / settings.FILENAME
@@ -131,14 +144,16 @@ class GrammarHolder:
                 self._mtime = mtime
                 _LOGGER.info("Loaded grammar %s", self._grammar_path)
 
-    async def transcribe(self, samples: np.ndarray):
+    async def transcribe(self, samples: NDArray[np.float32]) -> Result:
         return await asyncio.get_event_loop().run_in_executor(
             None, self._rec.transcribe, samples
         )
 
 
-def _pcm_to_float(audio: bytes, rate: int, width: int, channels: int) -> np.ndarray:
-    dtype = {1: np.int8, 2: np.int16, 4: np.int32}.get(width, np.int16)
+def _pcm_to_float(
+    audio: bytes, rate: int, width: int, channels: int
+) -> NDArray[np.float32]:
+    dtype = np.dtype({1: "int8", 4: "int32"}.get(width, "int16"))
     data = np.frombuffer(audio, dtype=dtype).astype(np.float32)
     if np.issubdtype(dtype, np.integer):
         data /= float(np.iinfo(dtype).max + 1)
@@ -149,7 +164,14 @@ def _pcm_to_float(audio: bytes, rate: int, width: int, channels: int) -> np.ndar
 
 
 class S2PEventHandler(AsyncEventHandler):
-    def __init__(self, reader, writer, *, holder: GrammarHolder, info: Info):
+    def __init__(
+        self,
+        reader: StreamReader,
+        writer: StreamWriter,
+        *,
+        holder: GrammarHolder,
+        info: Info,
+    ) -> None:
         super().__init__(reader, writer)
         self._holder = holder
         self._info = info
@@ -159,7 +181,7 @@ class S2PEventHandler(AsyncEventHandler):
         self._channels = 1
         self._full = False  # hit MAX_UTTERANCE_SECONDS; warned once already
 
-    async def handle_event(self, event) -> bool:
+    async def handle_event(self, event: Event) -> bool:
         if Describe.is_type(event.type):
             await self.write_event(self._info.event())
             return True
@@ -172,7 +194,9 @@ class S2PEventHandler(AsyncEventHandler):
             self._buf = bytearray()
             self._full = False
             self._rate, self._width, self._channels = (
-                start.rate, start.width, start.channels
+                start.rate,
+                start.width,
+                start.channels,
             )
             await self._holder.maybe_reload()
             return True
@@ -180,7 +204,9 @@ class S2PEventHandler(AsyncEventHandler):
         if AudioChunk.is_type(event.type):
             chunk = AudioChunk.from_event(event)
             self._rate, self._width, self._channels = (
-                chunk.rate, chunk.width, chunk.channels
+                chunk.rate,
+                chunk.width,
+                chunk.channels,
             )
             limit = _buffer_limit(chunk.rate, chunk.width, chunk.channels)
             if len(self._buf) >= limit:
@@ -189,7 +215,8 @@ class S2PEventHandler(AsyncEventHandler):
                     _LOGGER.warning(
                         "Utterance exceeded %.0fs (%d bytes); ignoring the rest. "
                         "The satellite may not be sending audio-stop.",
-                        MAX_UTTERANCE_SECONDS, limit,
+                        MAX_UTTERANCE_SECONDS,
+                        limit,
                     )
                 return True
             self._buf += chunk.audio
@@ -212,16 +239,23 @@ class S2PEventHandler(AsyncEventHandler):
                 result = await self._holder.transcribe(samples)
                 processing = time.monotonic() - started
                 accepted = (
-                    result.score <= self._holder.max_score
-                    and result.score != math.inf
+                    result.score <= self._holder.max_score and result.score != math.inf
                 )
                 if accepted:
                     text = result.text
-                    _LOGGER.debug("matched (score=%.3f, %.2fs): %r",
-                                  result.score, processing, result.text)
+                    _LOGGER.debug(
+                        "matched (score=%.3f, %.2fs): %r",
+                        result.score,
+                        processing,
+                        result.text,
+                    )
                 else:
-                    _LOGGER.debug("gated (score=%.3f, %.2fs): %r",
-                                  result.score, processing, result.text)
+                    _LOGGER.debug(
+                        "gated (score=%.3f, %.2fs): %r",
+                        result.score,
+                        processing,
+                        result.text,
+                    )
                 if self._holder.debug_mode:
                     debug_log.record(
                         language=self._holder.language,
@@ -253,7 +287,9 @@ def build_info(language: str, model_name: str) -> Info:
                 description="Constrained speech-to-text",
                 installed=True,
                 version=version,
-                attribution=Attribution(name="OHF Voice", url="https://openhomefoundation.org"),
+                attribution=Attribution(
+                    name="OHF Voice", url="https://openhomefoundation.org"
+                ),
                 models=[
                     AsrModel(
                         name=model_name,
@@ -271,66 +307,111 @@ def build_info(language: str, model_name: str) -> Info:
     )
 
 
-async def serve(uri: str, backend: str, model_dir, language: str,
-                grammar_path, max_score: float, token_bonus: float = 0.0) -> None:
+async def serve(
+    uri: str,
+    backend: str,
+    model_dir: Union[str, Path],
+    language: str,
+    grammar_path: Union[str, Path],
+    max_score: float,
+    token_bonus: float = 0.0,
+) -> None:
     """Run the Wyoming server against an already-resolved model directory."""
     model_dir = Path(model_dir)
-    holder = GrammarHolder(backend, model_dir, language, Path(grammar_path),
-                           default_max_score=max_score, token_bonus=token_bonus)
+    holder = GrammarHolder(
+        backend,
+        model_dir,
+        language,
+        Path(grammar_path),
+        default_max_score=max_score,
+        token_bonus=token_bonus,
+    )
     await holder.maybe_reload()
     info = build_info(language, model_dir.name)
     server = AsyncServer.from_uri(uri)
-    _LOGGER.info("Wyoming server ready on %s (grammar=%s, ready=%s, max_score=%s, "
-                 "token_bonus=%s)",
-                 uri, grammar_path, holder.ready, holder.max_score, token_bonus)
-    await server.run(
-        partial(S2PEventHandler, holder=holder, info=info)
+    _LOGGER.info(
+        "Wyoming server ready on %s (grammar=%s, ready=%s, max_score=%s, "
+        "token_bonus=%s)",
+        uri,
+        grammar_path,
+        holder.ready,
+        holder.max_score,
+        token_bonus,
     )
+    await server.run(partial(S2PEventHandler, holder=holder, info=info))
 
 
-def start_background(uri: str, backend: str, model_dir, language: str,
-                     grammar_path, max_score: float,
-                     token_bonus: float = 0.0) -> "threading.Thread":
+def start_background(
+    uri: str,
+    backend: str,
+    model_dir: Union[str, Path],
+    language: str,
+    grammar_path: Union[str, Path],
+    max_score: float,
+    token_bonus: float = 0.0,
+) -> "threading.Thread":
     """Run serve() in a daemon thread with its own asyncio loop, so it can sit
     alongside a blocking server (e.g. Flask) in the same process."""
-    import threading
 
-    def _runner():
-        asyncio.run(serve(uri, backend, model_dir, language, grammar_path,
-                          max_score, token_bonus))
+    def _runner() -> None:
+        asyncio.run(
+            serve(
+                uri, backend, model_dir, language, grammar_path, max_score, token_bonus
+            )
+        )
 
     t = threading.Thread(target=_runner, name="wyoming", daemon=True)
     t.start()
     return t
 
 
-async def run(cfg) -> None:
-    model_dir = models.resolve(cfg.model, Path(cfg.models_dir), cfg.language, cfg.backend)
+async def run(cfg: argparse.Namespace) -> None:
+    model_dir = models.resolve(
+        cfg.model, Path(cfg.models_dir), cfg.language, cfg.backend
+    )
     if model_dir is None:
         raise SystemExit("No acoustic model: pass --model or add a MODEL_NAMES entry")
-    await serve(cfg.uri, cfg.backend, model_dir, cfg.language, cfg.grammar,
-                cfg.max_score, cfg.token_bonus)
+    await serve(
+        cfg.uri,
+        cfg.backend,
+        model_dir,
+        cfg.language,
+        cfg.grammar,
+        cfg.max_score,
+        cfg.token_bonus,
+    )
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--uri", default="tcp://0.0.0.0:10300")
     ap.add_argument("--backend", default="citrinet")
-    ap.add_argument("--model", default=None,
-                    help="model dir (dev) or HuggingFace model name; "
-                         "if unset, derived from language+backend")
+    ap.add_argument(
+        "--model",
+        default=None,
+        help="model dir (dev) or HuggingFace model name; "
+        "if unset, derived from language+backend",
+    )
     ap.add_argument("--models-dir", default="/data/models")
     ap.add_argument("--language", default="en")
     ap.add_argument("--grammar", required=True, help="path to grammar.fst")
-    ap.add_argument("--max-score", type=float, default=None,
-                    help="score gate; if unset, a per-backend default is used "
-                         "(citrinet 5.0, coqui 2.0)")
-    ap.add_argument("--token-bonus", type=float, default=None,
-                    help="word-insertion reward per emitted token (0 = off); "
-                         "if unset, a per-backend default is used "
-                         "(citrinet 2.0, coqui 0.0). Counters the CTC length "
-                         "bias that lets a short parse win over a longer, "
-                         "better-fitting one")
+    ap.add_argument(
+        "--max-score",
+        type=float,
+        default=None,
+        help="score gate; if unset, a per-backend default is used "
+        "(citrinet 5.0, coqui 2.0)",
+    )
+    ap.add_argument(
+        "--token-bonus",
+        type=float,
+        default=None,
+        help="word-insertion reward per emitted token (0 = off); "
+        "if unset, a per-backend default is used "
+        "(citrinet 2.0, coqui 0.0). Counters the CTC length "
+        "bias that lets a short parse win over a longer, "
+        "better-fitting one",
+    )
     ap.add_argument("--debug", action="store_true")
     cfg = ap.parse_args()
     if cfg.backend == "auto":

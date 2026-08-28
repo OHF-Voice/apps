@@ -24,6 +24,7 @@ and none of this changes minute to minute. They are kept grouped by source
 (:func:`fetch_grouped`) so the UI can say which switch a phrase came from
 without a second round-trip.
 """
+
 import itertools
 import logging
 import re
@@ -46,7 +47,7 @@ ANSWERS = "question_answers"
 SOURCES = (TRIGGERS, ANSWERS)
 
 
-def _clean(sentences) -> Generator[str, None, None]:
+def _clean(sentences: Any) -> Generator[str, None, None]:
     """Yield usable sentences from an ``answers``/``trigger_sentences`` value,
     which may be a single string or a list of them."""
     if isinstance(sentences, str):
@@ -90,7 +91,7 @@ async def _fetch_async(
 
             ids = itertools.count(1)
 
-            async def call(type_: str, **kw):
+            async def call(type_: str, **kw: Any) -> Any:
                 await ws.send_json({"id": next(ids), "type": type_, **kw})
                 msg = await ws.receive_json()
                 if msg.get("success"):
@@ -127,7 +128,11 @@ async def _fetch_async(
     # an answer is one path in the grammar, and is attributed to the trigger.
     seen: Set[str] = set()
     for source in SOURCES:
-        kept = [s for s in found[source] if not (s in seen or seen.add(s))]
+        kept = []
+        for sentence in found[source]:
+            if sentence not in seen:
+                seen.add(sentence)
+                kept.append(sentence)
         found[source] = kept
     return found
 
@@ -206,22 +211,24 @@ def grammar_templates(
     for sentence in sentences:
         try:
             expanded, _refs = s2p_intents.grammar_templates([sentence], lang)
-        except Exception:  # noqa: BLE001 -- a malformed sentence must not break training
+        except (
+            Exception
+        ):  # noqa: BLE001 -- a malformed sentence must not break training
             _LOGGER.warning("Could not parse Home Assistant sentence %r", sentence)
             continue
         kept = [
             template
             for template in expanded
             if all(
-                _RANGE_RE.match(ref.strip())
-                or ref.split(":", 1)[0].strip() in bindable
+                _RANGE_RE.match(ref.strip()) or ref.split(":", 1)[0].strip() in bindable
                 for ref in _REF_RE.findall(template)
             )
         ]
         if expanded and not kept:
             _LOGGER.warning(
                 "Skipping Home Assistant sentence %r: it references a list that "
-                "Speech-to-Phrase cannot fill in", sentence,
+                "Speech-to-Phrase cannot fill in",
+                sentence,
             )
         out.extend(kept)
     return list(dict.fromkeys(out))

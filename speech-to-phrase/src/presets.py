@@ -7,13 +7,19 @@ and ``home_assistant_intents.get_intent_info()`` supplies each combo's
 description / example / importance / domains for display and default-enable
 decisions.
 """
+
+from __future__ import annotations
+
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import yaml
 
 IMPORTANCE_ORDER = ["required", "usable", "complete", "optional"]
+
+if TYPE_CHECKING:
+    import training
 
 # Display order for the web UI (sort of slot combinations by importance). This
 # intentionally differs from IMPORTANCE_ORDER, which governs default-enable
@@ -27,6 +33,7 @@ def _importance_sort_key(importance: str) -> int:
     except ValueError:
         return len(IMPORTANCE_SORT)
 
+
 # Functional grouping for the web UI (ordered). Intents not listed fall in "Other".
 INTENT_GROUPS = [
     ("Device on", ["HassTurnOn"]),
@@ -35,18 +42,42 @@ INTENT_GROUPS = [
     ("Covers", ["HassSetPosition"]),
     ("Fans", ["HassFanSetSpeed"]),
     ("Climate", ["HassClimateGetTemperature", "HassClimateSetTemperature"]),
-    ("Media & volume", [
-        "HassMediaPause", "HassMediaUnpause", "HassMediaNext", "HassMediaPrevious",
-        "HassMediaPlayerMute", "HassMediaPlayerUnmute", "HassSetVolume",
-        "HassSetVolumeRelative", "HassMediaSearchAndPlay",
-    ]),
-    ("Timers", [
-        "HassStartTimer", "HassCancelTimer", "HassCancelAllTimers", "HassPauseTimer",
-        "HassUnpauseTimer", "HassIncreaseTimer", "HassDecreaseTimer", "HassTimerStatus",
-    ]),
-    ("Information", [
-        "HassGetState", "HassGetCurrentTime", "HassGetCurrentDate", "HassGetWeather",
-    ]),
+    (
+        "Media & volume",
+        [
+            "HassMediaPause",
+            "HassMediaUnpause",
+            "HassMediaNext",
+            "HassMediaPrevious",
+            "HassMediaPlayerMute",
+            "HassMediaPlayerUnmute",
+            "HassSetVolume",
+            "HassSetVolumeRelative",
+            "HassMediaSearchAndPlay",
+        ],
+    ),
+    (
+        "Timers",
+        [
+            "HassStartTimer",
+            "HassCancelTimer",
+            "HassCancelAllTimers",
+            "HassPauseTimer",
+            "HassUnpauseTimer",
+            "HassIncreaseTimer",
+            "HassDecreaseTimer",
+            "HassTimerStatus",
+        ],
+    ),
+    (
+        "Information",
+        [
+            "HassGetState",
+            "HassGetCurrentTime",
+            "HassGetCurrentDate",
+            "HassGetWeather",
+        ],
+    ),
     ("Other", ["HassNevermind", "HassRespond", "HassBroadcast"]),
 ]
 _INTENT_TO_GROUP = {i: label for label, intents in INTENT_GROUPS for i in intents}
@@ -68,9 +99,14 @@ def group_order() -> List[str]:
 # the plural "[s]" in templates reads correctly (e.g. "2 hours", not "50 hours").
 # Users can override/extend these via example_values.yaml (see below).
 _NUM_SAMPLE = {
-    "minutes": "5", "seconds": "30", "hours": "2",
-    "brightness": "50", "volume_level": "50", "position": "50",
-    "percentage": "50", "temperature": "70",
+    "minutes": "5",
+    "seconds": "30",
+    "hours": "2",
+    "brightness": "50",
+    "volume_level": "50",
+    "position": "50",
+    "percentage": "50",
+    "temperature": "70",
 }
 
 
@@ -102,14 +138,18 @@ def load_example_values(s2p_repo: Optional[Path]) -> Dict[str, str]:
 
 # Friendlier nouns when no real entity exists for a {name} domain.
 _DOMAIN_NOUN = {
-    "climate": "thermostat", "media_player": "media player",
-    "binary_sensor": "sensor", "input_boolean": "switch",
+    "climate": "thermostat",
+    "media_player": "media player",
+    "binary_sensor": "sensor",
+    "input_boolean": "switch",
 }
 
 # Friendlier nouns when no real entity exists for a {name} domain.
 _DOMAIN_NOUN = {
-    "climate": "thermostat", "media_player": "media player",
-    "binary_sensor": "sensor", "input_boolean": "switch",
+    "climate": "thermostat",
+    "media_player": "media player",
+    "binary_sensor": "sensor",
+    "input_boolean": "switch",
 }
 
 
@@ -130,14 +170,19 @@ def _slot_class(slot: str) -> str:
 
 def _span(value: str, slot: str) -> str:
     import html
-    return (f'<span class="slot slot-{_slot_class(slot)}" title="{html.escape(slot)}">'
-            f"{html.escape(value)}</span>")
+
+    return (
+        f'<span class="slot slot-{_slot_class(slot)}" title="{html.escape(slot)}">'
+        f"{html.escape(value)}</span>"
+    )
 
 
 def _resolve_slot(
-    content: str, domains: Optional[Sequence[str]],
-    entities: Dict[str, str], slot_lists: Dict[str, List[str]],
-):
+    content: str,
+    domains: Optional[Sequence[str]],
+    entities: Dict[str, str],
+    slot_lists: Dict[str, List[str]],
+) -> Tuple[str, str]:
     """(value, slot_name) for one ``{...}`` token."""
     m = re.fullmatch(
         r"-?\d+\s*\.\.\s*-?\d+(?:\s*[,/]\s*-?\d+)?(?::([a-z_]+))?", content
@@ -161,7 +206,9 @@ def _resolve_slot(
     vals = slot_lists.get(slot_name) or slot_lists.get(list_name)
     if vals:
         return str(vals[0]), slot_name
-    return {"area": "kitchen", "floor": "first floor"}.get(list_name, list_name), slot_name
+    return {"area": "kitchen", "floor": "first floor"}.get(
+        list_name, list_name
+    ), slot_name
 
 
 def _canonical(sentence: str) -> str:
@@ -176,15 +223,16 @@ def _canonical(sentence: str) -> str:
     return " ".join(s.split())  # safe: slot tokens have no spaces
 
 
-def _render(sentence: str, slot_fn) -> str:
+def _render(sentence: str, slot_fn: Callable[[str], str]) -> str:
     """Render a (structure-resolved) sentence to HTML, mapping each ``{...}``
     token through ``slot_fn(content) -> html``."""
     import html
+
     s = _canonical(sentence)
     out: List[str] = []
     pos = 0
     for m in re.finditer(r"\{([^}]*)\}", s):
-        out.append(html.escape(s[pos:m.start()]))
+        out.append(html.escape(s[pos : m.start()]))
         out.append(slot_fn(m.group(1).strip()))
         pos = m.end()
     out.append(html.escape(s[pos:]))
@@ -222,7 +270,8 @@ def _placeholder(content: str, domain: Optional[str] = None) -> str:
     if slot == "name":
         text = (
             _PLACEHOLDER_NOUN.get(domain, domain.replace("_", " "))
-            if domain else "entity"
+            if domain
+            else "entity"
         )
     else:
         text = slot.replace("_", " ")
@@ -235,11 +284,14 @@ def _example_shape(sentence: str, domain: Optional[str] = None) -> str:
 
 
 def _example_html(
-    sentence: str, domains: Optional[Sequence[str]],
-    entities: Dict[str, str], slot_lists: Dict[str, List[str]],
+    sentence: str,
+    domains: Optional[Sequence[str]],
+    entities: Dict[str, str],
+    slot_lists: Dict[str, List[str]],
 ) -> str:
     """Render one example as HTML, each slot value wrapped in a highlight span
     (one representative value per slot)."""
+
     def span_fn(content: str) -> str:
         value, slot = _resolve_slot(content, domains, entities, slot_lists)
         return _span(value, slot)
@@ -253,9 +305,11 @@ _SELECT_CAP = 40
 
 
 def _slot_options(
-    content: str, domains: Optional[Sequence[str]],
-    entities: Dict[str, str], slot_lists: Dict[str, List[str]],
-):
+    content: str,
+    domains: Optional[Sequence[str]],
+    entities: Dict[str, str],
+    slot_lists: Dict[str, List[str]],
+) -> Tuple[Optional[List[str]], str]:
     """(values, slot_name) for an enumerable slot, or (None, slot_name) when the
     slot isn't a discrete list (numeric range) -- rendered as a span instead."""
     if re.fullmatch(
@@ -275,13 +329,16 @@ def _slot_options(
 
 
 def _slot_field(
-    content: str, domains: Optional[Sequence[str]],
-    entities: Dict[str, str], slot_lists: Dict[str, List[str]],
+    content: str,
+    domains: Optional[Sequence[str]],
+    entities: Dict[str, str],
+    slot_lists: Dict[str, List[str]],
 ) -> str:
     """A <select> of the (filtered) values for an enumerable slot, so the user
     sees the actual vocabulary in context. Falls back to a highlight span for
     numeric ranges and single-option slots."""
     import html
+
     values, slot = _slot_options(content, domains, entities, slot_lists)
     if not values or len(values) <= 1:
         value, slot = _resolve_slot(content, domains, entities, slot_lists)
@@ -291,26 +348,26 @@ def _slot_field(
     opts = "".join(f"<option>{html.escape(v)}</option>" for v in shown)
     extra = len(values) - len(shown)
     if extra > 0:
-        opts += f'<option disabled>… and {extra} more</option>'
+        opts += f"<option disabled>… and {extra} more</option>"
     return (
         f'<select class="slot slot-{cls} slot-select" title="{html.escape(slot)}" '
         f'aria-label="{html.escape(slot)}" onclick="event.stopPropagation()">'
-        f'{opts}</select>'
+        f"{opts}</select>"
     )
 
 
 def _example_interactive(
-    sentence: str, domains: Optional[Sequence[str]],
-    entities: Dict[str, str], slot_lists: Dict[str, List[str]],
+    sentence: str,
+    domains: Optional[Sequence[str]],
+    entities: Dict[str, str],
+    slot_lists: Dict[str, List[str]],
 ) -> str:
     """Like _example_html, but enumerable slots render as a <select> of their
     filtered values."""
-    return _render(
-        sentence, lambda c: _slot_field(c, domains, entities, slot_lists)
-    )
+    return _render(sentence, lambda c: _slot_field(c, domains, entities, slot_lists))
 
 
-def _find_group(s: str):
+def _find_group(s: str) -> Optional[Tuple[int, int, str]]:
     """(open_idx, close_idx, open_char) of the first top-level ``(``/``[`` group,
     or None. Nesting of the same bracket type is respected."""
     for i, ch in enumerate(s):
@@ -366,7 +423,7 @@ def _phrasings(sentence: str, cap: int) -> List[str]:
                 out.append(w)
             return
         i, j, ch = g
-        prefix, inner, suffix = s[:i], s[i + 1:j], s[j + 1:]
+        prefix, inner, suffix = s[:i], s[i + 1 : j], s[j + 1 :]
         opts = [_split_alts(inner)[0]] if ch == "[" else _split_alts(inner)
         for opt in opts:
             if len(out) >= cap:
@@ -378,18 +435,24 @@ def _phrasings(sentence: str, cap: int) -> List[str]:
 
 
 def sample_sentence(
-    sentence: str, domains: Optional[Sequence[str]],
-    entities: Dict[str, str], slot_lists: Dict[str, List[str]],
+    sentence: str,
+    domains: Optional[Sequence[str]],
+    entities: Dict[str, str],
+    slot_lists: Dict[str, List[str]],
 ) -> str:
     """Plain-text concrete utterance from a template (for live validation)."""
     import html
-    return html.unescape(re.sub(r"<[^>]+>", "", _example_html(
-        sentence, domains, entities, slot_lists)))
+
+    return html.unescape(
+        re.sub(r"<[^>]+>", "", _example_html(sentence, domains, entities, slot_lists))
+    )
 
 
 def _example_card(
-    sentences: Sequence[str], domains: Optional[Sequence[str]],
-    entities: Dict[str, str], slot_lists: Dict[str, List[str]],
+    sentences: Sequence[str],
+    domains: Optional[Sequence[str]],
+    entities: Dict[str, str],
+    slot_lists: Dict[str, List[str]],
 ) -> str:
     """A combo example: the first template's canonical wording with <select>s for
     its enumerable slots, plus a collapsed "N more ways to say this" list of the
@@ -399,6 +462,7 @@ def _example_card(
     block ("turn off {name}" / "switch off {name}" / "{name} off") and the ``()``
     alternatives inside each template."""
     import html
+
     if not sentences:
         return ""
     main = _example_interactive(sentences[0], domains, entities, slot_lists)
@@ -421,15 +485,19 @@ def _example_card(
         plural = "s" if len(variants) != 1 else ""
         parts.append(
             f'<details class="phrasings"><summary>{len(variants)} more way{plural} '
-            f'to say this</summary>{items}</details>'
+            f"to say this</summary>{items}</details>"
         )
     return "".join(parts)
 
 
 def combo_examples(
-    s2p_repo: Path, lang: str, intent: str, combo: str,
-    entities: Dict[str, str], slot_lists: Dict[str, List[str]],
-) -> dict:
+    s2p_repo: Path,
+    lang: str,
+    intent: str,
+    combo: str,
+    entities: training.EntityInput,
+    slot_lists: Dict[str, List[str]],
+) -> Dict[str, Any]:
     """Highlighted examples for a combo, in two flavours.
 
     The list row shows the command's *shape* -- slots as placeholders, so it
@@ -454,8 +522,14 @@ def combo_examples(
     info = training.as_entity_info(entities)
     blocks = s2p_intents.combo_blocks(lang, intent, combo)
     if not blocks:
-        return {"domains": [], "by_domain": {}, "by_domain_full": {},
-                "examples": [], "shapes": [], "uses": []}
+        return {
+            "domains": [],
+            "by_domain": {},
+            "by_domain_full": {},
+            "examples": [],
+            "shapes": [],
+            "uses": [],
+        }
     # Example slot values: numeric samples by slot name (user-overridable via
     # example_values.yaml) + text-list samples by list name; caller-supplied
     # lists (area/floor) win.
@@ -467,7 +541,7 @@ def combo_examples(
     name_domain = {r.name: r.domain for r in info.records}
     capability = gating.required_capability(intent, combo)
 
-    def _entity_map(domains):
+    def _entity_map(domains: Sequence[str]) -> Dict[str, str]:
         """{name: domain} restricted to entities of `domains` that support the
         combo's capability -- so an example never names an incapable device."""
         allowed = set(info.names(domains, capability))
@@ -623,18 +697,20 @@ def intent_catalog(meta: dict) -> List[dict]:
         if not isinstance(d, dict) or "slot_combinations" not in d:
             continue  # only entries that look like intents
         slots = d.get("slots") or {}
-        out.append({
-            "name": name,
-            "description": d.get("description", ""),
-            "slots": [
-                {
-                    "name": s,
-                    "description": (sd or {}).get("description", ""),
-                    "required": bool((sd or {}).get("required")),
-                }
-                for s, sd in slots.items()
-            ],
-        })
+        out.append(
+            {
+                "name": name,
+                "description": d.get("description", ""),
+                "slots": [
+                    {
+                        "name": s,
+                        "description": (sd or {}).get("description", ""),
+                        "required": bool((sd or {}).get("required")),
+                    }
+                    for s, sd in slots.items()
+                ],
+            }
+        )
     return sorted(out, key=lambda x: x["name"])
 
 

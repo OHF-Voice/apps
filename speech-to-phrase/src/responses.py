@@ -6,11 +6,10 @@ that we hand to Home Assistant as ``Intent.text``; HA renders them *after*
 handling, with live state. A matched built-in combo selects one by its response
 *key* (the ``response:`` field in the sentence file, default ``"default"``).
 """
+
 import logging
 from pathlib import Path
 from typing import Dict, Optional
-
-import yaml
 
 _LOGGER = logging.getLogger("speech-to-phrase.intent")
 

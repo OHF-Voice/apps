@@ -19,6 +19,7 @@ Written from the Wyoming thread and read from Flask request threads, hence the
 lock. The log is bounded, so leaving debug mode on cannot grow without limit --
 the oldest entries are dropped, which is what a live view wants anyway.
 """
+
 import math
 import threading
 import time
@@ -104,4 +105,7 @@ def clear() -> None:
 
 def stats() -> Dict[str, int]:
     with _lock:
-        return {"count": len(_entries), "last_id": _entries[-1]["id"] if _entries else 0}
+        return {
+            "count": len(_entries),
+            "last_id": _entries[-1]["id"] if _entries else 0,
+        }

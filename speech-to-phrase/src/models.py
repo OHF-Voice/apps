@@ -11,6 +11,7 @@ Dockerfile's ``BUNDLE_MODEL``). That copy is used in preference to downloading,
 so a fresh install starts without network access; it is read-only and never
 written to, and ``--models-dir`` still wins if the same model is present there.
 """
+
 import logging
 import os
 import platform
@@ -67,6 +68,7 @@ DEFAULT_TOKEN_BONUS = {"citrinet": 2.0, "coqui": 0.0}
 
 def default_token_bonus(backend: str) -> float:
     return DEFAULT_TOKEN_BONUS.get(backend, 0.0)
+
 
 # language -> {backend: HuggingFace model name}. The repo ships NeMo CTC models
 # (citrinet/conformer, ONNX -> "citrinet" backend, runs on onnxruntime with no
@@ -250,8 +252,13 @@ def ensure_stt_binary(tools_dir: Path) -> Path:
     return target
 
 
-def resolve(model: Optional[str], models_dir: Path, language: str,
-            backend: str, tools_dir: Optional[Path] = None) -> Optional[Path]:
+def resolve(
+    model: Optional[str],
+    models_dir: Path,
+    language: str,
+    backend: str,
+    tools_dir: Optional[Path] = None,
+) -> Optional[Path]:
     """Resolve a usable model directory.
 
     * ``model`` is an existing model dir -> use as-is (dev: point at a checkout).
@@ -275,7 +282,9 @@ def resolve(model: Optional[str], models_dir: Path, language: str,
             _LOGGER.error(
                 "No %s model for '%s'; that language ships a model for: %s. "
                 "Set backend to one of those (or 'auto') in the add-on options.",
-                backend, language, ", ".join(available),
+                backend,
+                language,
+                ", ".join(available),
             )
         else:
             _LOGGER.error("No acoustic model for language '%s'", language)

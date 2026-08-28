@@ -19,21 +19,22 @@ matcher uses, surfaced after a match via ``RecognizeResult.intent_metadata``:
   * ``context_area: true`` -> inject the voice satellite's area as the ``area`` slot
   * ``response``         -> response-template key (selection TODO; see intent_server)
 """
+
+from __future__ import annotations
+
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
-import yaml
-from hassil import Intents, RecognizeResult, TextSlotList, recognize_best
+from hassil import Intents, RecognizeResult, SlotList, TextSlotList, recognize_best
 
-from training import (
-    _effective_name_domains,
-    _name_list_key,
-    combo_blocks,
-    enabled_domain_map,
-)
+from training import _effective_name_domains, _rebind, combo_blocks, enabled_domain_map
 
 _LOGGER = logging.getLogger("speech-to-phrase.intent")
+
+if TYPE_CHECKING:
+    import overrides
+    import training
 
 # Synthetic intent name for custom action-mode commands (no HA intent of their
 # own). The intent server routes this to the action executor, not to HA.
@@ -48,7 +49,11 @@ def canonical_slot(key: str) -> str:
     gating; map them back. Every other slot (including per-domain ``state``
     lists, which bind via ``{...states:state}``) already carries its HA name.
     """
-    for prefix, canonical in (("name__", "name"), ("area__", "area"), ("floor__", "floor")):
+    for prefix, canonical in (
+        ("name__", "name"),
+        ("area__", "area"),
+        ("floor__", "floor"),
+    ):
         if key.startswith(prefix):
             return canonical
     return key
@@ -57,8 +62,9 @@ def canonical_slot(key: str) -> str:
 class IntentMatcher:
     """Holds a compiled hassil ``Intents`` + slot lists and matches text."""
 
-    def __init__(self, intents: Intents, slot_lists: Dict[str, TextSlotList],
-                 language: str):
+    def __init__(
+        self, intents: Intents, slot_lists: Dict[str, SlotList], language: str
+    ) -> None:
         self._intents = intents
         self._slot_lists = slot_lists
         self.language = language
@@ -75,12 +81,12 @@ class IntentMatcher:
 def build_matcher(
     s2p_repo: Path,
     lang: str,
-    enabled: Sequence[Tuple[str, str]],
-    entities: Dict[str, str],
+    enabled: Sequence[Sequence[Any]],
+    entities: training.EntityInput,
     slot_lists: Dict[str, List[str]],
-    custom_commands: Optional[Sequence[dict]] = None,
+    custom_commands: Optional[Sequence[Dict[str, Any]]] = None,
     extra_sentences: Optional[Dict[str, List[str]]] = None,
-    ov=None,
+    ov: Optional[overrides.Overrides] = None,
 ) -> Optional[IntentMatcher]:
     """Build an :class:`IntentMatcher` for the enabled combos + custom commands,
     or ``None`` if nothing is matchable."""
@@ -98,7 +104,12 @@ def build_matcher(
     # comes back from a match has to be the name Home Assistant knows.
     scoped_lists: Dict[str, List[Tuple[str, str]]] = {}
 
-    def scope(sentences, name_domains, capability, key: str = "") -> List[str]:
+    def scope(
+        sentences: Sequence[str],
+        name_domains: Optional[Sequence[str]],
+        capability: Optional[str],
+        key: str = "",
+    ) -> List[str]:
         """Rewrite {name} to a domain-scoped list and apply the same capability
         gate as the grammar (gating.scope_sentence), then the user's per-command
         exclusions and aliases -- exactly as training._expand_block does, so the
@@ -117,9 +128,10 @@ def build_matcher(
                     dropped = True
                     break
                 if narrowed_key != "name":
-                    scoped = training._rebind(list_key, narrowed_key)
+                    scoped = _rebind(list_key, narrowed_key)
                     rewritten = rewritten.replace(
-                        "{" + list_key + "}", "{" + scoped + "}")
+                        "{" + list_key + "}", "{" + scoped + "}"
+                    )
                     list_key = scoped
                 scoped_lists.setdefault(
                     list_key, ov.pairs("entities", kept, language=lang)
@@ -130,7 +142,9 @@ def build_matcher(
                 token = "{" + slot + "}"
                 if token not in rewritten:
                     continue
-                narrowed_key, kept = ov.narrow(key, slot, (slot_lists or {}).get(slot, []))
+                narrowed_key, kept = ov.narrow(
+                    key, slot, (slot_lists or {}).get(slot, [])
+                )
                 if narrowed_key == slot:
                     continue
                 if not kept:
@@ -160,8 +174,12 @@ def build_matcher(
                 eff_nd, inferred, capability, gating.capability_domains(intent), info
             ):
                 continue
-            sentences = scope(ss.get("sentences", []), eff_nd, capability,
-                              ovr.combo_key(intent, combo))
+            sentences = scope(
+                ss.get("sentences", []),
+                eff_nd,
+                capability,
+                ovr.combo_key(intent, combo),
+            )
             if not sentences:
                 continue
             metadata: Dict[str, object] = {
@@ -208,13 +226,11 @@ def build_matcher(
     if not intents_dict:
         return None
 
-    hassil_slot_lists: Dict[str, TextSlotList] = {}
+    hassil_slot_lists: Dict[str, SlotList] = {}
     for key, pairs in scoped_lists.items():
         # from_tuples binds (spoken, canonical): saying an alias yields the
         # Home Assistant name, which is the only thing HA can act on.
-        hassil_slot_lists[key] = TextSlotList.from_tuples(
-            sorted(set(pairs)), name=key
-        )
+        hassil_slot_lists[key] = TextSlotList.from_tuples(sorted(set(pairs)), name=key)
     # Domain-scoped lists (above) plus the un-narrowed area/floor (for name-based
     # combos) are supplied at runtime; the other text lists (color, state, ...)
     # and numeric ranges come from the package's `lists`, and `<rules>` from its
@@ -240,6 +256,8 @@ def build_matcher(
     )
     _LOGGER.info(
         "Built intent matcher for '%s': %d intents, %d sentence templates",
-        lang, len(intents_dict), n_sentences,
+        lang,
+        len(intents_dict),
+        n_sentences,
     )
     return IntentMatcher(intents, hassil_slot_lists, lang)

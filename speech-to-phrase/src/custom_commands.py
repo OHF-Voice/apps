@@ -27,6 +27,7 @@ web UI writes and the only one with any effect: ``intent`` and ``action`` are
 handled by ``intent_server.py``, which is not started unless app.py is given
 ``--intent``. Loading still accepts all three so an older file keeps working.
 """
+
 import json
 import logging
 from pathlib import Path
@@ -53,7 +54,8 @@ def load(data_dir: Path, lang: str) -> List[dict]:
     legacy = data_dir / lang / _LEGACY
     if legacy.exists():
         lines = [
-            ln.strip() for ln in legacy.read_text().splitlines()
+            ln.strip()
+            for ln in legacy.read_text().splitlines()
             if ln.strip() and not ln.strip().startswith("#")
         ]
         return [{"sentences": [ln], "mode": "stt"} for ln in lines]
@@ -74,10 +76,10 @@ def name_domains_of(cmd: dict) -> List[str]:
     return list(cmd.get("name_domains") or [])
 
 
-def grammar_sentences(commands: List[dict]) -> List[Dict[str, object]]:
+def grammar_sentences(commands: List[dict]) -> List[Dict[str, List[str]]]:
     """Sentence blocks (all modes) for the STT grammar, in the shape
     training.assemble consumes: ``[{"sentences": [...], "name_domains": [...]}]``."""
-    blocks: List[Dict[str, object]] = []
+    blocks: List[Dict[str, List[str]]] = []
     for cmd in commands:
         ss = sentences_of(cmd)
         if not ss:

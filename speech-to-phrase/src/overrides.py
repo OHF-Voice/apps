@@ -24,10 +24,11 @@ value pairs so a match still emits the canonical name. The consequence to know:
 these aliases only work through Speech-to-Phrase, not through Home Assistant's
 own conversation agent or a cloud fallback.
 """
+
 import json
 import re
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 # Slot name -> the section of the document that governs it.
 SLOT_KINDS = {"name": "entities", "area": "areas", "floor": "floors"}
@@ -51,10 +52,12 @@ class Overrides:
     so an empty document changes nothing.
     """
 
-    def __init__(self, doc: Optional[dict] = None):
+    def __init__(self, doc: Optional[Dict[str, Any]] = None) -> None:
         doc = doc or {}
         self._by_kind: Dict[str, Dict[str, dict]] = {
-            kind: {k: v for k, v in (doc.get(kind) or {}).items() if isinstance(v, dict)}
+            kind: {
+                k: v for k, v in (doc.get(kind) or {}).items() if isinstance(v, dict)
+            }
             for kind in KINDS
         }
         self._exclude: Dict[str, Dict[str, Set[str]]] = {}
@@ -73,7 +76,9 @@ class Overrides:
         """Drop entities switched off for voice (records are plain dicts here)."""
         return [r for r in records if self.voice_on("entities", r.get("name", ""))]
 
-    def filter_slot_lists(self, slot_lists: Dict[str, List[str]]) -> Dict[str, List[str]]:
+    def filter_slot_lists(
+        self, slot_lists: Dict[str, List[str]]
+    ) -> Dict[str, List[str]]:
         """Drop areas/floors switched off for voice."""
         out = {k: list(v) for k, v in slot_lists.items()}
         for slot, kind in (("area", "areas"), ("floor", "floors")):
@@ -143,7 +148,9 @@ class Overrides:
     def excluded(self, key: str, slot: str) -> Set[str]:
         return self._exclude.get(key, {}).get(slot, set())
 
-    def narrow(self, key: str, slot: str, values: Sequence[str]) -> Tuple[str, List[str]]:
+    def narrow(
+        self, key: str, slot: str, values: Sequence[str]
+    ) -> Tuple[str, List[str]]:
         """``(list_key, values)`` for `slot` under command `key`.
 
         With nothing excluded the shared list is reused as-is. With exclusions the
@@ -193,7 +200,9 @@ def save(data_dir: Path, lang: str, doc: dict) -> None:
         for value, spec in (doc.get(kind) or {}).items():
             if not isinstance(spec, dict):
                 continue
-            aliases = [a.strip() for a in (spec.get("aliases") or []) if a and a.strip()]
+            aliases = [
+                a.strip() for a in (spec.get("aliases") or []) if a and a.strip()
+            ]
             voice = bool(spec.get("voice", True))
             replace = bool(spec.get("replace")) and bool(aliases)
             if voice and not aliases:

@@ -17,11 +17,12 @@ guessed a different spelling of 50.
 Attribution is only ever needed while someone is watching the debug view, one
 utterance at a time, so this is built lazily and matched by a plain loop.
 """
+
 import logging
 import re
 import unicodedata
 from functools import lru_cache
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 _LOGGER = logging.getLogger("speech-to-phrase.sources")
 
@@ -40,7 +41,7 @@ def normalize(text: str) -> str:
 
 
 @lru_cache(maxsize=1)
-def _spellout_fn():
+def _spellout_fn() -> Optional[Callable[[int, str], List[str]]]:
     """The FST builder's own number spellout, so a language whose low numerals
     inflect (cs "dva"/"dvě") is matched in whichever form was actually said.
 
@@ -82,7 +83,7 @@ def _range_words(spec: str, lang: str) -> Optional[List[str]]:
 
 
 def _ref_values(
-    ref: str, list_values: Dict[str, Sequence[str]], lang: str
+    ref: str, list_values: Mapping[str, Sequence[str]], lang: str
 ) -> Optional[List[str]]:
     # The `:slot` suffix binds the match to a slot name and says nothing about
     # what the reference contains, so drop it before looking anything up. It has
@@ -109,7 +110,7 @@ def _literal(text: str) -> str:
 
 
 def _pattern(
-    template: str, list_values: Dict[str, Sequence[str]], lang: str
+    template: str, list_values: Mapping[str, Sequence[str]], lang: str
 ) -> Optional[str]:
     """Regex body for one template, or None if a reference can't be resolved (in
     which case the template is simply not attributable -- better than a pattern
@@ -134,7 +135,7 @@ def _pattern(
 class Attributor:
     """Compiled patterns for every template, tagged with its source."""
 
-    def __init__(self, patterns: Sequence[Tuple[str, str, "re.Pattern"]]):
+    def __init__(self, patterns: Sequence[Tuple[str, str, "re.Pattern[str]"]]) -> None:
         self._patterns = list(patterns)
 
     def __len__(self) -> int:
@@ -155,7 +156,7 @@ class Attributor:
 
 def build(
     templates_by_source: Dict[str, List[str]],
-    list_values: Dict[str, Sequence[str]],
+    list_values: Mapping[str, Sequence[str]],
     lang: str,
 ) -> Attributor:
     """An :class:`Attributor` over the assembled grammar.
@@ -173,8 +174,8 @@ def build(
     """
     import s2p_intents
 
-    plain: List[Tuple[str, str, "re.Pattern"]] = []
-    slotted: List[Tuple[str, str, "re.Pattern"]] = []
+    plain: List[Tuple[str, str, "re.Pattern[str]"]] = []
+    slotted: List[Tuple[str, str, "re.Pattern[str]"]] = []
     n_skipped = 0
     for source, templates in templates_by_source.items():
         for template in templates:

@@ -16,10 +16,11 @@ Debug mode is deliberately *not* here: it stops the add-on answering Home
 Assistant, so it must not outlive the session that turned it on (see
 ``debug_log``).
 """
+
 import json
 import logging
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Dict, Optional, Union
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ def path(data_dir: Union[str, Path], lang: str) -> Path:
     return Path(data_dir) / lang / FILENAME
 
 
-def _read(p: Path) -> dict:
+def _read(p: Path) -> Dict[str, Any]:
     if p.exists():
         try:
             return json.loads(p.read_text())
@@ -44,11 +45,11 @@ def _read(p: Path) -> dict:
     return {}
 
 
-def load(data_dir: Union[str, Path], lang: str) -> dict:
+def load(data_dir: Union[str, Path], lang: str) -> Dict[str, Any]:
     return _read(path(data_dir, lang))
 
 
-def _coerce_max_score(value, default: float) -> float:
+def _coerce_max_score(value: Any, default: float) -> float:
     try:
         v = float(value)
     except (TypeError, ValueError):
@@ -77,7 +78,9 @@ def get_bool(data_dir: Union[str, Path], lang: str, key: str, default: bool) -> 
     return v if isinstance(v, bool) else default
 
 
-def set_bool(data_dir: Union[str, Path], lang: str, key: str, value) -> Optional[bool]:
+def set_bool(
+    data_dir: Union[str, Path], lang: str, key: str, value: Any
+) -> Optional[bool]:
     """Persist a flag for `lang`. Returns the stored value, or None if `value`
     was not a bool, in which case nothing is written and the previous setting
     (or the add-on option's default) stands."""
@@ -92,7 +95,7 @@ def set_bool(data_dir: Union[str, Path], lang: str, key: str, value) -> Optional
     return value
 
 
-def set_max_score(data_dir: Union[str, Path], lang: str, value) -> Optional[float]:
+def set_max_score(data_dir: Union[str, Path], lang: str, value: Any) -> Optional[float]:
     """Persist the gate for `lang` (clamped to the valid range). Returns the
     stored value, or None if `value` could not be parsed, in which case nothing
     is written and the previous setting (or the per-backend default) stands.

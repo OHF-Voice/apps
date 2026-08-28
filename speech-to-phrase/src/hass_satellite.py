@@ -11,8 +11,9 @@ what we need: satellite entity area -> its device's area -> device area, then th
 area registry for the name. Best-effort: returns ``None`` on any failure, in
 which case the caller simply omits the area slot.
 """
+
 import logging
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from training import _ws_url
 
@@ -20,8 +21,11 @@ _LOGGER = logging.getLogger("speech-to-phrase.intent")
 
 
 async def resolve_area_async(
-    api_url: str, token: str, *,
-    device_id: Optional[str] = None, satellite_id: Optional[str] = None,
+    api_url: str,
+    token: str,
+    *,
+    device_id: Optional[str] = None,
+    satellite_id: Optional[str] = None,
 ) -> Optional[str]:
     """Async area-name resolution, for callers already in an event loop."""
     if not token or (not device_id and not satellite_id):
@@ -36,8 +40,11 @@ async def resolve_area_async(
 
 
 async def _resolve_area(
-    api_url: str, token: str, *,
-    device_id: Optional[str], satellite_id: Optional[str],
+    api_url: str,
+    token: str,
+    *,
+    device_id: Optional[str],
+    satellite_id: Optional[str],
 ) -> Optional[str]:
     import aiohttp
 
@@ -47,7 +54,7 @@ async def _resolve_area(
             await ws.send_json({"type": "auth", "access_token": token})
             assert (await ws.receive_json())["type"] == "auth_ok"
 
-            async def cmd(msg_id: int, payload: dict):
+            async def cmd(msg_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:
                 await ws.send_json({"id": msg_id, **payload})
                 return await ws.receive_json()
 
@@ -59,10 +66,13 @@ async def _resolve_area(
 
             area_id: Optional[str] = None
             if satellite_id:
-                em = await cmd(2, {
-                    "type": "config/entity_registry/get_entries",
-                    "entity_ids": [satellite_id],
-                })
+                em = await cmd(
+                    2,
+                    {
+                        "type": "config/entity_registry/get_entries",
+                        "entity_ids": [satellite_id],
+                    },
+                )
                 entries = em["result"] if em.get("success") else {}
                 info = entries.get(satellite_id) or {}
                 area_id = info.get("area_id")
@@ -82,8 +92,11 @@ async def _resolve_area(
 
 
 def resolve_area(
-    api_url: str, token: str, *,
-    device_id: Optional[str] = None, satellite_id: Optional[str] = None,
+    api_url: str,
+    token: str,
+    *,
+    device_id: Optional[str] = None,
+    satellite_id: Optional[str] = None,
 ) -> Optional[str]:
     """Synchronous wrapper. Returns the area NAME or ``None``."""
     if not token or (not device_id and not satellite_id):
@@ -92,7 +105,9 @@ def resolve_area(
 
     try:
         return asyncio.run(
-            _resolve_area(api_url, token, device_id=device_id, satellite_id=satellite_id)
+            _resolve_area(
+                api_url, token, device_id=device_id, satellite_id=satellite_id
+            )
         )
     except Exception:  # noqa: BLE001
         _LOGGER.debug("area resolution failed", exc_info=True)

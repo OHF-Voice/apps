@@ -18,15 +18,31 @@ The matcher is rebuilt from disk when ``enabled.json`` / ``custom_commands.json`
 change (and on a TTL so entity/area renames are picked up), keeping it in
 lock-step with the STT grammar.
 """
+
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
+import threading
 import time
 from functools import partial
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
+from hassil import RecognizeResult
 from wyoming.asr import Transcript
+from wyoming.event import Event
 from wyoming.handle import Handled, NotHandled
 from wyoming.info import Attribution, Info, IntentModel, IntentProgram
 from wyoming.intent import Entity, Intent, NotRecognized, Recognize
@@ -35,16 +51,19 @@ from wyoming.server import AsyncEventHandler, AsyncServer
 import custom_commands as cc
 import extra_sentences as ex
 import hass_actions
+import overrides
 from hass_satellite import resolve_area_async
 from intent_matcher import IntentMatcher, build_matcher, canonical_slot
-import overrides
 from responses import load_responses, response_for
 
 _LOGGER = logging.getLogger("speech-to-phrase.intent")
 NAME = "speech-to-phrase-intents"
 
+if TYPE_CHECKING:
+    import training
 
-def _render_local(template: Optional[str], slots: dict) -> str:
+
+def _render_local(template: Optional[str], slots: Mapping[str, Any]) -> str:
     """Local jinja2 render -- dev fallback only (no HA token). Production renders
     action responses in HA so `states()` etc. are available."""
     if not template:
@@ -58,7 +77,7 @@ def _render_local(template: Optional[str], slots: dict) -> str:
         return template
 
 
-def _read_enabled(data_dir: Path, lang: str, s2p_repo: Path) -> List[Tuple[str, str]]:
+def _read_enabled(data_dir: Path, lang: str, s2p_repo: Path) -> List[Sequence[Any]]:
     """Enabled (intent, combo) pairs: the saved set if present, else every combo
     that has a curated sentence file (so the matcher works before first save)."""
     f = data_dir / lang / "enabled.json"
@@ -76,10 +95,15 @@ class MatcherHolder:
     """Owns the current :class:`IntentMatcher`, rebuilding it (off the event
     loop) when ``enabled.json`` changes or a TTL elapses."""
 
-    def __init__(self, s2p_repo: Path, lang: str, data_dir: Path,
-                 get_entities: Callable[[], Dict[str, str]],
-                 get_slot_lists: Callable[[], Dict[str, List[str]]],
-                 ttl: float = 600.0):
+    def __init__(
+        self,
+        s2p_repo: Path,
+        lang: str,
+        data_dir: Path,
+        get_entities: Callable[[], training.EntityRecordsInput],
+        get_slot_lists: Callable[[], Dict[str, List[str]]],
+        ttl: float = 600.0,
+    ) -> None:
         self._s2p_repo = s2p_repo
         self._lang = lang
         self._data_dir = data_dir
@@ -95,12 +119,14 @@ class MatcherHolder:
     def s2p_repo(self) -> Path:
         return self._s2p_repo
 
-    def _disk_sig(self) -> tuple:
+    def _disk_sig(self) -> Tuple[Optional[float], Optional[float], Optional[float]]:
         """mtimes of the files that determine the matcher."""
         d = self._data_dir / self._lang
-        def mt(name):
+
+        def mt(name: str) -> Optional[float]:
             f = d / name
             return f.stat().st_mtime if f.exists() else None
+
         return (mt("enabled.json"), mt(cc.FILENAME), mt(ex.FILENAME))
 
     async def get(self) -> Optional[IntentMatcher]:
@@ -110,9 +136,11 @@ class MatcherHolder:
             if self._matcher is not None and sig == self._sig and not stale:
                 _LOGGER.debug("reusing cached matcher")
                 return self._matcher
-            reason = ("first build" if self._matcher is None
-                      else "config changed" if sig != self._sig
-                      else "TTL elapsed")
+            reason = (
+                "first build"
+                if self._matcher is None
+                else "config changed" if sig != self._sig else "TTL elapsed"
+            )
             _LOGGER.info("Rebuilding intent matcher (%s)", reason)
             loop = asyncio.get_event_loop()
             t0 = time.monotonic()
@@ -131,21 +159,34 @@ class MatcherHolder:
         # fetchers in training.* are safe to call here.
         try:
             enabled = _read_enabled(self._data_dir, self._lang, self._s2p_repo)
-            _LOGGER.info("matcher inputs: %d enabled combo(s) for '%s'",
-                         len(enabled), self._lang)
+            _LOGGER.info(
+                "matcher inputs: %d enabled combo(s) for '%s'", len(enabled), self._lang
+            )
             _LOGGER.debug("enabled combos: %s", enabled)
             entities = self._get_entities()
-            _LOGGER.info("matcher inputs: %d entit(y/ies) from HA/fixture", len(entities))
+            _LOGGER.info(
+                "matcher inputs: %d entit(y/ies) from HA/fixture", len(entities)
+            )
             _LOGGER.debug("entities: %s", entities)
             slot_lists = self._get_slot_lists()
-            _LOGGER.info("matcher inputs: %d area(s)", len(slot_lists.get("area") or []))
+            _LOGGER.info(
+                "matcher inputs: %d area(s)", len(slot_lists.get("area") or [])
+            )
             commands = cc.load(self._data_dir, self._lang)
             extras = ex.load(self._data_dir, self._lang)
-            _LOGGER.info("matcher inputs: %d custom command(s), %d combo(s) with extras",
-                         len(commands), len(extras))
+            _LOGGER.info(
+                "matcher inputs: %d custom command(s), %d combo(s) with extras",
+                len(commands),
+                len(extras),
+            )
             matcher = build_matcher(
-                self._s2p_repo, self._lang, enabled, entities, slot_lists,
-                custom_commands=commands, extra_sentences=extras,
+                self._s2p_repo,
+                self._lang,
+                enabled,
+                entities,
+                slot_lists,
+                custom_commands=commands,
+                extra_sentences=extras,
                 ov=overrides.load(self._data_dir, self._lang),
             )
             if matcher is None:
@@ -161,9 +202,17 @@ class MatcherHolder:
 
 
 class IntentEventHandler(AsyncEventHandler):
-    def __init__(self, reader, writer, *, holder: MatcherHolder, info: Info,
-                 api_url: str, token: Optional[str],
-                 responses: Dict[str, Dict[str, str]]):
+    def __init__(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        *,
+        holder: MatcherHolder,
+        info: Info,
+        api_url: str,
+        token: Optional[str],
+        responses: Dict[str, Dict[str, str]],
+    ) -> None:
         super().__init__(reader, writer)
         self._holder = holder
         self._info = info
@@ -171,7 +220,7 @@ class IntentEventHandler(AsyncEventHandler):
         self._token = token
         self._responses = responses
 
-    async def handle_event(self, event) -> bool:
+    async def handle_event(self, event: Event) -> bool:
         from wyoming.info import Describe
 
         _LOGGER.debug("received event: %s", event.type)
@@ -197,7 +246,7 @@ class IntentEventHandler(AsyncEventHandler):
         _LOGGER.debug("ignoring event type: %s", event.type)
         return True
 
-    async def _recognize(self, text, context) -> None:
+    async def _recognize(self, text: str, context: Optional[Mapping[str, Any]]) -> None:
         """Match text -> Intent/NotRecognized. ALWAYS replies and never lets an
         exception escape unlogged -- a silent failure looks like a hang to HA."""
         text = (text or "").strip()
@@ -221,8 +270,10 @@ class IntentEventHandler(AsyncEventHandler):
             sentence = getattr(result.intent_sentence, "text", result.intent_sentence)
             _LOGGER.debug(
                 "match detail: intent=%s sentence=%r raw_entities=%s metadata=%s",
-                result.intent.name, sentence,
-                {k: v.value for k, v in result.entities.items()}, metadata,
+                result.intent.name,
+                sentence,
+                {k: v.value for k, v in result.entities.items()},
+                metadata,
             )
             entities = await self._entities(result, metadata, context)
             slots = {e.name: e.value for e in entities}
@@ -239,16 +290,27 @@ class IntentEventHandler(AsyncEventHandler):
                 response = response_for(
                     self._responses, result.intent.name, metadata.get("response_key")
                 )
-            _LOGGER.info("matched intent %s slots=%s response=%r",
-                         result.intent.name, slots, response)
+            _LOGGER.info(
+                "matched intent %s slots=%s response=%r",
+                result.intent.name,
+                slots,
+                response,
+            )
             await self.write_event(
-                Intent(name=result.intent.name, entities=entities, text=response).event()
+                Intent(
+                    name=result.intent.name, entities=entities, text=response
+                ).event()
             )
         except Exception:  # noqa: BLE001
             _LOGGER.exception("error handling %r -> NotRecognized", text)
             await self.write_event(NotRecognized().event())
 
-    async def _entities(self, result, metadata, context) -> List[Entity]:
+    async def _entities(
+        self,
+        result: RecognizeResult,
+        metadata: Mapping[str, Any],
+        context: Optional[Mapping[str, Any]],
+    ) -> List[Entity]:
         entities: List[Entity] = []
         for key, ent in result.entities.items():
             entities.append(Entity(name=canonical_slot(key), value=ent.value))
@@ -263,46 +325,60 @@ class IntentEventHandler(AsyncEventHandler):
             else:
                 _LOGGER.warning(
                     "context_area command but no satellite area resolved "
-                    "(context=%s) -> emitting without area slot", context,
+                    "(context=%s) -> emitting without area slot",
+                    context,
                 )
         return entities
 
     # ---- custom action path -------------------------------------------------
 
-    async def _handle_action(self, metadata, slots) -> None:
+    async def _handle_action(
+        self, metadata: Mapping[str, Any], slots: Dict[str, Any]
+    ) -> None:
         action = metadata.get("action") or {}
         response_tmpl = metadata.get("response")
+        token = self._token
         _LOGGER.info("action: %s slots=%s", action, slots)
         try:
-            if not self._token:
+            if not token:
                 # Dev mode: can't reach HA. Render locally, skip execution.
                 text = _render_local(response_tmpl, slots)
-                _LOGGER.warning("no HA token: skipping execution (dev) -> Handled %r", text)
+                _LOGGER.warning(
+                    "no HA token: skipping execution (dev) -> Handled %r", text
+                )
                 await self.write_event(Handled(text=text).event())
                 return
-            if not await self._run_action(action, slots):
+            if not await self._run_action(action, slots, token):
                 await self.write_event(
                     NotHandled(text="Sorry, that action failed.").event()
                 )
                 return
-            text = await hass_actions.render_template_async(
-                self._api_url, self._token, response_tmpl or "",
-                variables={"slots": slots},
-            ) if response_tmpl else ""
-            _LOGGER.info("action handled -> %r", text)
-            await self.write_event(Handled(text=text or "").event())
+            rendered = (
+                await hass_actions.render_template_async(
+                    self._api_url,
+                    token,
+                    response_tmpl or "",
+                    variables={"slots": slots},
+                )
+                if response_tmpl
+                else ""
+            )
+            _LOGGER.info("action handled -> %r", rendered)
+            await self.write_event(Handled(text=rendered or "").event())
         except Exception:  # noqa: BLE001
             _LOGGER.exception("action failed -> NotHandled")
             await self.write_event(
                 NotHandled(text="Sorry, that action failed.").event()
             )
 
-    async def _run_action(self, action, slots) -> bool:
-        return await hass_actions.run_action_async(
-            self._api_url, self._token, action, slots
-        )
+    async def _run_action(
+        self, action: Dict[str, Any], slots: Dict[str, Any], token: str
+    ) -> bool:
+        return await hass_actions.run_action_async(self._api_url, token, action, slots)
 
-    async def _resolve_area(self, context) -> Optional[str]:
+    async def _resolve_area(
+        self, context: Optional[Mapping[str, Any]]
+    ) -> Optional[str]:
         context = context or {}
         # Explicit area in context (e.g. from a test client) wins.
         explicit = context.get("area")
@@ -314,13 +390,16 @@ class IntentEventHandler(AsyncEventHandler):
             _LOGGER.debug("no HA token; cannot resolve satellite area")
             return None
         area = await resolve_area_async(
-            self._api_url, self._token,
+            self._api_url,
+            self._token,
             device_id=context.get("device_id"),
             satellite_id=context.get("satellite_id"),
         )
         _LOGGER.debug(
             "resolved area=%r from device_id=%s satellite_id=%s",
-            area, context.get("device_id"), context.get("satellite_id"),
+            area,
+            context.get("device_id"),
+            context.get("satellite_id"),
         )
         return area
 
@@ -351,8 +430,9 @@ def build_info(language: str) -> Info:
     )
 
 
-async def serve(uri: str, language: str, holder: MatcherHolder,
-                api_url: str, token: Optional[str]) -> None:
+async def serve(
+    uri: str, language: str, holder: MatcherHolder, api_url: str, token: Optional[str]
+) -> None:
     info = build_info(language)
     responses = load_responses(holder.s2p_repo, language)
     # Warm the matcher in the background so a slow/hanging HA fetch can't keep
@@ -361,24 +441,34 @@ async def serve(uri: str, language: str, holder: MatcherHolder,
     server = AsyncServer.from_uri(uri)
     _LOGGER.info("Wyoming intent server listening on %s (language=%s)", uri, language)
     await server.run(
-        partial(IntentEventHandler, holder=holder, info=info,
-                api_url=api_url, token=token, responses=responses)
+        partial(
+            IntentEventHandler,
+            holder=holder,
+            info=info,
+            api_url=api_url,
+            token=token,
+            responses=responses,
+        )
     )
 
 
-def start_background(uri: str, language: str, data_dir: Path, s2p_repo: Path,
-                     get_entities: Callable[[], Dict[str, str]],
-                     get_slot_lists: Callable[[], Dict[str, List[str]]],
-                     api_url: str, token: Optional[str],
-                     ttl: float = 600.0) -> "threading.Thread":
+def start_background(
+    uri: str,
+    language: str,
+    data_dir: Path,
+    s2p_repo: Path,
+    get_entities: Callable[[], training.EntityRecordsInput],
+    get_slot_lists: Callable[[], Dict[str, List[str]]],
+    api_url: str,
+    token: Optional[str],
+    ttl: float = 600.0,
+) -> "threading.Thread":
     """Run the intent server in a daemon thread with its own asyncio loop."""
-    import threading
-
     holder = MatcherHolder(
         s2p_repo, language, data_dir, get_entities, get_slot_lists, ttl=ttl
     )
 
-    def _runner():
+    def _runner() -> None:
         try:
             asyncio.run(serve(uri, language, holder, api_url, token))
         except Exception:  # noqa: BLE001

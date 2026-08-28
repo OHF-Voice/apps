@@ -17,6 +17,9 @@ Scope note: this is the speech-to-text half of the add-on. The intent
 recognizer (``intent_server.py``) is present but not started unless
 ``--intent`` is passed -- Home Assistant handles the transcript.
 """
+
+from __future__ import annotations
+
 import argparse
 import hashlib
 import json
@@ -26,9 +29,22 @@ import threading
 import time
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+)
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 import custom_commands as cc
@@ -45,9 +61,18 @@ import wyoming_server
 _LOGGER = logging.getLogger("speech-to-phrase")
 ADDON_ROOT = Path(__file__).resolve().parent.parent
 
+if TYPE_CHECKING:
+    import sources
+
+JsonDict = Dict[str, Any]
+EntityRecords = List[JsonDict]
+RouteResult = Union[Response, Tuple[Response, int]]
+StartResponse = Callable[..., Any]
+WSGIApp = Callable[[Dict[str, Any], StartResponse], Iterable[bytes]]
+
 
 @lru_cache(maxsize=1)
-def supported_languages() -> tuple:
+def supported_languages() -> Tuple[str, ...]:
     """Languages that ship Speech-to-Phrase templates. Cached: it is the
     allowlist every request validates against, and it cannot change without a
     restart (it comes from the installed home-assistant-intents package)."""
@@ -77,9 +102,11 @@ def _check_language(language: str) -> None:
     if language in langs:
         return
     if language in models.MODEL_NAMES:
-        detail = (f"'{language}' has an acoustic model but no Speech-to-Phrase "
-                  f"sentence templates yet, so there is nothing it could "
-                  f"recognize.")
+        detail = (
+            f"'{language}' has an acoustic model but no Speech-to-Phrase "
+            f"sentence templates yet, so there is nothing it could "
+            f"recognize."
+        )
     else:
         detail = f"'{language}' is not a Speech-to-Phrase language."
     raise SystemExit(
@@ -92,20 +119,22 @@ class IngressPrefixMiddleware:
     """Strip Home Assistant's X-Ingress-Path prefix so url_for/fetch work both
     behind ingress and standalone."""
 
-    def __init__(self, app):
+    def __init__(self, app: WSGIApp) -> None:
         self.app = app
 
-    def __call__(self, environ, start_response):
+    def __call__(
+        self, environ: Dict[str, Any], start_response: StartResponse
+    ) -> Iterable[bytes]:
         prefix = environ.get("HTTP_X_INGRESS_PATH", "")
         if prefix:
             environ["SCRIPT_NAME"] = prefix
             path = environ.get("PATH_INFO", "")
             if path.startswith(prefix):
-                environ["PATH_INFO"] = path[len(prefix):] or "/"
+                environ["PATH_INFO"] = path[len(prefix) :] or "/"
         return self.app(environ, start_response)
 
 
-def create_app(cfg) -> Flask:
+def create_app(cfg: argparse.Namespace) -> Flask:
     if cfg.backend == "auto":
         # Pick a backend that actually has a model for this language (Citrinet
         # preferred; Coqui for the languages that ship only that, i.e. cs).
@@ -118,8 +147,10 @@ def create_app(cfg) -> Flask:
     if getattr(cfg, "token_bonus", None) is None:
         cfg.token_bonus = models.default_token_bonus(cfg.backend)
     app = Flask(__name__, template_folder=str(Path(__file__).parent / "templates"))
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
-    app.wsgi_app = IngressPrefixMiddleware(app.wsgi_app)
+    app.wsgi_app = ProxyFix(  # type: ignore[method-assign]
+        app.wsgi_app, x_proto=1, x_host=1
+    )
+    app.wsgi_app = IngressPrefixMiddleware(app.wsgi_app)  # type: ignore[method-assign]
 
     meta = bi.load_intents_meta()
     data_dir = Path(cfg.data)
@@ -127,7 +158,9 @@ def create_app(cfg) -> Flask:
     # Resolve / download the acoustic model. None => UI-only (saves persist but
     # don't retrain).
     try:
-        resolved = models.resolve(cfg.model, Path(cfg.models_dir), cfg.language, cfg.backend)
+        resolved = models.resolve(
+            cfg.model, Path(cfg.models_dir), cfg.language, cfg.backend
+        )
         cfg.model = str(resolved) if resolved else None
     except Exception:  # noqa: BLE001
         _LOGGER.exception("model provisioning failed; UI will run without retraining")
@@ -136,8 +169,14 @@ def create_app(cfg) -> Flask:
     # Train the configured language now if its inputs changed (first boot,
     # entity/area/floor renames, config edits), then watch for further changes.
     if cfg.model:
-        _ensure_trained(cfg, cfg.language, meta, _current_records(cfg),
-                        _current_slot_lists(cfg), data_dir)
+        _ensure_trained(
+            cfg,
+            cfg.language,
+            meta,
+            _current_records(cfg),
+            _current_slot_lists(cfg),
+            data_dir,
+        )
         _start_watch(cfg, meta, data_dir)
 
     # ---- per-language persistence -------------------------------------------
@@ -146,7 +185,7 @@ def create_app(cfg) -> Flask:
         d.mkdir(parents=True, exist_ok=True)
         return d
 
-    def read_enabled(lang: str, combos: List[dict]) -> List[List[str]]:
+    def read_enabled(lang: str, combos: List[JsonDict]) -> List[List[Any]]:
         f = lang_dir(lang) / "enabled.json"
         if f.exists():
             return json.loads(f.read_text())
@@ -154,10 +193,10 @@ def create_app(cfg) -> Flask:
 
     # ---- routes --------------------------------------------------------------
     @app.route("/")
-    def index():
+    def index() -> str:
         return render_template("index.html")
 
-    def wrong_lang(lang: str):
+    def wrong_lang(lang: str) -> Tuple[Response, int]:
         """409 for a request about some language other than the configured one.
 
         Only reachable from a page loaded before the `language` option changed:
@@ -166,16 +205,22 @@ def create_app(cfg) -> Flask:
         they were made against a different set of devices and commands."""
         _LOGGER.warning(
             "Rejected request for '%s'; this add-on is configured for '%s'",
-            lang, cfg.language,
+            lang,
+            cfg.language,
         )
-        return jsonify({
-            "ok": False,
-            "error": f"this add-on is set to '{cfg.language}', not {lang!r}. "
-                     f"Reload the page.",
-        }), 409
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": f"this add-on is set to '{cfg.language}', not {lang!r}. "
+                    f"Reload the page.",
+                }
+            ),
+            409,
+        )
 
     @app.route("/api/state")
-    def api_state():
+    def api_state() -> RouteResult:
         # The one language the recognizer runs. A `lang` parameter is honoured
         # only to reject a stale page (see wrong_lang); there is nothing to
         # choose between.
@@ -202,13 +247,25 @@ def create_app(cfg) -> Flask:
             # splits a combo into one card per domain), or a single number for
             # combos that target none ("what time is it").
             c["cost"] = training.combo_cost(
-                ADDON_ROOT, lang, c["intent"], c["combo"], None, records,
-                slot_lists, ov=ov
+                ADDON_ROOT,
+                lang,
+                c["intent"],
+                c["combo"],
+                None,
+                records,
+                slot_lists,
+                ov=ov,
             )
             c["cost_by_domain"] = {
                 d: training.combo_cost(
-                    ADDON_ROOT, lang, c["intent"], c["combo"], d, records,
-                    slot_lists, ov=ov
+                    ADDON_ROOT,
+                    lang,
+                    c["intent"],
+                    c["combo"],
+                    d,
+                    records,
+                    slot_lists,
+                    ov=ov,
                 )
                 for d in c["domains"]
             }
@@ -216,7 +273,8 @@ def create_app(cfg) -> Flask:
                 c["enabled"] = True
                 allowed = amap[key]
                 c["enabled_domains"] = (
-                    ce["domains"] if allowed is None
+                    ce["domains"]
+                    if allowed is None
                     else [d for d in ce["domains"] if d in allowed]
                 )
             else:
@@ -233,10 +291,14 @@ def create_app(cfg) -> Flask:
         # not unique: two devices can share one, and every alias is a name of its
         # own. The grammar and the voice switch are keyed by name, so the entity
         # ids go underneath the row rather than becoming rows of their own.
-        by_domain: Dict[str, Dict[str, List[dict]]] = {}
-        for rec in sorted(_raw_records(cfg),
-                          key=lambda r: (r["name"].lower(), r.get("entity_id") or "")):
-            sources = by_domain.setdefault(rec["domain"], {}).setdefault(rec["name"], [])
+        by_domain: Dict[str, Dict[str, List[JsonDict]]] = {}
+        for rec in sorted(
+            _raw_records(cfg),
+            key=lambda r: (r["name"].lower(), r.get("entity_id") or ""),
+        ):
+            sources = by_domain.setdefault(rec["domain"], {}).setdefault(
+                rec["name"], []
+            )
             src = {"entity_id": rec.get("entity_id"), "alias_of": rec.get("alias_of")}
             if src not in sources:
                 sources.append(src)
@@ -245,8 +307,9 @@ def create_app(cfg) -> Flask:
         area_used, floor_used, name_used = _usage(lang, set(amap), commands)
         devices = {
             d: {
-                "values": [{"name": n, "sources": s}
-                           for n, s in by_domain.get(d, {}).items()],
+                "values": [
+                    {"name": n, "sources": s} for n, s in by_domain.get(d, {}).items()
+                ],
                 "used_by": name_used.get(d, []),
             }
             for d in sorted(set(by_domain) | set(name_used))
@@ -278,7 +341,7 @@ def create_app(cfg) -> Flask:
         )
 
     @app.route("/api/debug_mode", methods=["POST"])
-    def api_debug_mode():
+    def api_debug_mode() -> Response:
         """Toggle debug mode. Applied immediately -- it changes only how the STT
         server reports and whether it answers Home Assistant, not the grammar, so
         making the user save (and retrain) for it would be a lie about the cost.
@@ -290,14 +353,19 @@ def create_app(cfg) -> Flask:
         body = request.get_json(force=True)
         enabled = debug_log.set_enabled(bool(body.get("enabled")))
         _LOGGER.info(
-            "Debug mode %s%s", "on" if enabled else "off",
-            " -- Home Assistant will receive an empty transcript for every "
-            "utterance until it is switched off" if enabled else "",
+            "Debug mode %s%s",
+            "on" if enabled else "off",
+            (
+                " -- Home Assistant will receive an empty transcript for every "
+                "utterance until it is switched off"
+                if enabled
+                else ""
+            ),
         )
         return jsonify({"ok": True, "debug_mode": enabled})
 
     @app.route("/api/transcriptions")
-    def api_transcriptions():
+    def api_transcriptions() -> RouteResult:
         """Recognitions since `since`, each tagged with the sentence source that
         produced it. Polled by the UI while debug mode is on."""
         lang = request.args.get("lang") or cfg.language
@@ -313,16 +381,19 @@ def create_app(cfg) -> Flask:
             for entry in entries:
                 entry["origin"] = (
                     attributor.attribute(entry["text"])
-                    if (attributor and entry["text"]) else None
+                    if (attributor and entry["text"])
+                    else None
                 )
-        return jsonify({
-            "entries": entries,
-            "last_id": debug_log.last_id(),
-            "debug_mode": debug_log.enabled(),
-        })
+        return jsonify(
+            {
+                "entries": entries,
+                "last_id": debug_log.last_id(),
+                "debug_mode": debug_log.enabled(),
+            }
+        )
 
     @app.route("/api/save", methods=["POST"])
-    def api_save():
+    def api_save() -> RouteResult:
         body = request.get_json(force=True)
         lang = body.get("lang") or cfg.language
         if lang != cfg.language:
@@ -352,11 +423,21 @@ def create_app(cfg) -> Flask:
         entities = _current_records(cfg, lang)
         slot_lists = _current_slot_lists(cfg, lang)
         templates, _ = training.assemble(
-            ADDON_ROOT, lang, enabled, commands, entities, slot_lists,
-            extra_sentences=ex.load(data_dir, lang), ov=_overrides(cfg, lang),
+            ADDON_ROOT,
+            lang,
+            enabled,
+            commands,
+            entities,
+            slot_lists,
+            extra_sentences=ex.load(data_dir, lang),
+            ov=_overrides(cfg, lang),
             hass_sentences=_hass_sentences(cfg, lang),
         )
-        resp = {"ok": True, "n_templates": len(templates), "trained": False}
+        resp: JsonDict = {
+            "ok": True,
+            "n_templates": len(templates),
+            "trained": False,
+        }
         if _model_dir_for(cfg, lang) is not None:
             try:
                 # force=True, so a False return means there was nothing to
@@ -369,8 +450,8 @@ def create_app(cfg) -> Flask:
                 resp["trained"] = trained
                 resp["message"] = (
                     f"Saved and retrained ({len(templates)} sentences)."
-                    if trained else
-                    "Saved, but there are no sentences to train — enable at "
+                    if trained
+                    else "Saved, but there are no sentences to train — enable at "
                     "least one command, or the previous grammar stays in use."
                 )
             except Exception as e:  # noqa: BLE001
@@ -386,13 +467,15 @@ def create_app(cfg) -> Flask:
     return app
 
 
-def _load_json(path, default):
+def _load_json(path: Optional[Union[str, Path]], default: Any) -> Any:
     if path and Path(path).exists():
-        return json.loads(Path(path).read_text())
+        return json.loads(Path(path).read_text(encoding="utf-8"))
     return default
 
 
-def _current_records(cfg, lang: Optional[str] = None) -> list:
+def _current_records(
+    cfg: argparse.Namespace, lang: Optional[str] = None
+) -> EntityRecords:
     """Live enriched entity records (name/domain/device_class/features/area/
     floor): HA registry in the container, fixture/dev otherwise. Re-fetched at
     each training event so renames/adds/feature changes are picked up. Drives the
@@ -403,11 +486,13 @@ def _current_records(cfg, lang: Optional[str] = None) -> list:
     return _overrides(cfg, lang).filter_records(_raw_records(cfg))
 
 
-def _overrides(cfg, lang: Optional[str] = None):
+def _overrides(
+    cfg: argparse.Namespace, lang: Optional[str] = None
+) -> overrides.Overrides:
     return overrides.load(Path(cfg.data), lang or cfg.language)
 
 
-def _raw_records(cfg) -> list:
+def _raw_records(cfg: argparse.Namespace) -> EntityRecords:
     """Entity records straight from Home Assistant / the fixture, before the
     user's voice-targeting overrides are applied."""
     if cfg.hass_token:
@@ -425,7 +510,7 @@ def _raw_records(cfg) -> list:
     return data
 
 
-def _hass_flags(cfg, lang: str) -> Dict[str, bool]:
+def _hass_flags(cfg: argparse.Namespace, lang: str) -> Dict[str, bool]:
     """Whether each Home-Assistant sentence source is on for `lang`: the add-on
     option is the default for every language, the web UI overrides one."""
     return {
@@ -436,7 +521,7 @@ def _hass_flags(cfg, lang: str) -> Dict[str, bool]:
     }
 
 
-def _hass_sentences_grouped(cfg, lang: str) -> Dict[str, List[str]]:
+def _hass_sentences_grouped(cfg: argparse.Namespace, lang: str) -> Dict[str, List[str]]:
     """Phrases Home Assistant is already listening for, by source, honouring the
     two switches. A switched-off source is fetched from neither HA nor cache, so
     turning both off costs nothing.
@@ -453,7 +538,7 @@ def _hass_sentences_grouped(cfg, lang: str) -> Dict[str, List[str]]:
     )
 
 
-def _hass_sentences(cfg, lang: str) -> List[str]:
+def _hass_sentences(cfg: argparse.Namespace, lang: str) -> List[str]:
     grouped = _hass_sentences_grouped(cfg, lang)
     return [s for source in hs.SOURCES for s in grouped[source]]
 
@@ -462,10 +547,10 @@ def _hass_sentences(cfg, lang: str) -> List[str]:
 # debug view asks for one, and thrown away when the grammar is retrained -- an
 # attributor from the previous grammar would name a source for a phrase the
 # recognizer can no longer produce.
-_attributors: Dict[tuple, object] = {}
+_attributors: Dict[Tuple[str, Optional[str]], Optional[sources.Attributor]] = {}
 
 
-def _attributor(cfg, lang: str):
+def _attributor(cfg: argparse.Namespace, lang: str) -> Optional[sources.Attributor]:
     """A sources.Attributor for `lang`'s current grammar, or None if the grammar
     can't be assembled. Cached on the fingerprint the trainer recorded."""
     import sources
@@ -484,10 +569,12 @@ def _attributor(cfg, lang: str):
     try:
         combos = bi.available_combos(ADDON_ROOT, lang, bi.load_intents_meta())
         by_source, list_values = training.assemble_sources(
-            ADDON_ROOT, lang,
+            ADDON_ROOT,
+            lang,
             _read_enabled(data_dir, lang, combos, cfg.default_importance),
             cc.load(data_dir, lang),
-            _current_records(cfg, lang), _current_slot_lists(cfg, lang),
+            _current_records(cfg, lang),
+            _current_slot_lists(cfg, lang),
             extra_sentences=ex.load(data_dir, lang),
             ov=_overrides(cfg, lang),
             hass_sentences=_hass_sentences_grouped(cfg, lang),
@@ -501,7 +588,13 @@ def _attributor(cfg, lang: str):
     return attributor
 
 
-def _hass_sentences_state(cfg, lang: str, records, slot_lists, ov) -> dict:
+def _hass_sentences_state(
+    cfg: argparse.Namespace,
+    lang: str,
+    records: training.EntityInput,
+    slot_lists: Dict[str, List[str]],
+    ov: overrides.Overrides,
+) -> JsonDict:
     """The Home-Assistant sentence sources for the UI: each switch's state, the
     phrases it currently contributes, and what they cost.
 
@@ -509,7 +602,7 @@ def _hass_sentences_state(cfg, lang: str, records, slot_lists, ov) -> dict:
     off is not to go asking Home Assistant for them."""
     grouped = _hass_sentences_grouped(cfg, lang)
     flags = _hass_flags(cfg, lang)
-    out = {"sources": {}, "phrases": 0}
+    out: Dict[str, Any] = {"sources": {}, "phrases": 0}
     for source in hs.SOURCES:
         costs = training.hass_sentence_costs(
             ADDON_ROOT, lang, grouped[source], records, slot_lists, ov=ov
@@ -525,7 +618,9 @@ def _hass_sentences_state(cfg, lang: str, records, slot_lists, ov) -> dict:
     return out
 
 
-def _current_slot_lists(cfg, lang: Optional[str] = None) -> Dict[str, List[str]]:
+def _current_slot_lists(
+    cfg: argparse.Namespace, lang: Optional[str] = None
+) -> Dict[str, List[str]]:
     """Slot value lists for training/display. area + floor come live from the HA
     registries (all of them); language lists (color, brightness_level, ...) come
     from the fixture/file. Re-fetched per training event so registry edits are
@@ -534,12 +629,16 @@ def _current_slot_lists(cfg, lang: Optional[str] = None) -> Dict[str, List[str]]
     return _overrides(cfg, lang).filter_slot_lists(_raw_slot_lists(cfg))
 
 
-def _raw_slot_lists(cfg) -> Dict[str, List[str]]:
-    lists = {k: list(v) for k, v in
-             _load_json(cfg.slot_lists_file, training.DEV_SLOT_LISTS).items()}
+def _raw_slot_lists(cfg: argparse.Namespace) -> Dict[str, List[str]]:
+    lists = {
+        k: list(v)
+        for k, v in _load_json(cfg.slot_lists_file, training.DEV_SLOT_LISTS).items()
+    }
     if cfg.hass_token:
         try:
-            areas, floors = training.areas_floors_from_hass(cfg.hass_api, cfg.hass_token)
+            areas, floors = training.areas_floors_from_hass(
+                cfg.hass_api, cfg.hass_token
+            )
             lists["area"], lists["floor"] = areas, floors
             _LOGGER.debug("Loaded %d areas, %d floors from HA", len(areas), len(floors))
         except Exception:  # noqa: BLE001
@@ -547,19 +646,28 @@ def _raw_slot_lists(cfg) -> Dict[str, List[str]]:
     return lists
 
 
-def _read_enabled(data_dir: Path, lang: str, combos, default_importance) -> list:
+def _read_enabled(
+    data_dir: Path,
+    lang: str,
+    combos: List[JsonDict],
+    default_importance: str,
+) -> List[List[Any]]:
     f = data_dir / lang / "enabled.json"
     if f.exists():
         return json.loads(f.read_text())
     return bi.default_enabled(combos, default_importance)
 
 
-def _usage(lang: str, enabled_set, commands: list):
+def _usage(
+    lang: str,
+    enabled_set: Set[Tuple[str, str]],
+    commands: Sequence[JsonDict],
+) -> Tuple[List[str], List[str], Dict[str, List[str]]]:
     """Which commands consume each slot list, for the Devices & Lists view.
     Returns (area_used_by, floor_used_by, {domain: name_used_by})."""
     import re
 
-    def refs(sentence: str):
+    def refs(sentence: str) -> Set[str]:
         return set(re.findall(r"\{([^}]+)\}", sentence))
 
     import s2p_intents
@@ -618,7 +726,7 @@ def _custom_commands(data_dir: Path, lang: str) -> list:
     return cc.load(data_dir, lang)
 
 
-def _model_id(cfg, lang: str) -> str:
+def _model_id(cfg: argparse.Namespace, lang: str) -> str:
     """Which acoustic model `lang` will be trained against, by name.
 
     Part of the grammar fingerprint, and cheap on purpose: a name lookup, never
@@ -629,7 +737,12 @@ def _model_id(cfg, lang: str) -> str:
     return models.model_name_for(lang, cfg.backend) or ""
 
 
-def _fingerprint(templates, list_values, backend, model_id: str) -> str:
+def _fingerprint(
+    templates: Sequence[str],
+    list_values: Mapping[str, Sequence[str]],
+    backend: str,
+    model_id: str,
+) -> str:
     """Hash of everything that determines the grammar -- templates, the
     name/area/floor/list values, AND the model it is compiled for. Changes here
     mean the grammar is stale.
@@ -641,14 +754,18 @@ def _fingerprint(templates, list_values, backend, model_id: str) -> str:
     match, so no retrain fired and the recognizer returned an empty transcript
     for every utterance, silently and forever."""
     blob = json.dumps(
-        {"backend": backend, "model": model_id, "templates": sorted(templates),
-         "lists": {k: sorted(v) for k, v in list_values.items()}},
+        {
+            "backend": backend,
+            "model": model_id,
+            "templates": sorted(templates),
+            "lists": {k: sorted(v) for k, v in list_values.items()},
+        },
         sort_keys=True,
     )
     return hashlib.sha256(blob.encode()).hexdigest()
 
 
-def _model_dir_for(cfg, lang: str) -> Optional[Path]:
+def _model_dir_for(cfg: argparse.Namespace, lang: str) -> Optional[Path]:
     if lang == cfg.language and cfg.model:
         return Path(cfg.model)
     try:
@@ -658,8 +775,15 @@ def _model_dir_for(cfg, lang: str) -> Optional[Path]:
         return None
 
 
-def _ensure_trained(cfg, lang, meta, entities, slot_lists, data_dir: Path,
-                    force: bool = False) -> bool:
+def _ensure_trained(
+    cfg: argparse.Namespace,
+    lang: str,
+    meta: JsonDict,
+    entities: training.EntityInput,
+    slot_lists: Dict[str, List[str]],
+    data_dir: Path,
+    force: bool = False,
+) -> bool:
     """(Re)train `lang` iff the grammar is missing or its input fingerprint
     changed (templates, enabled combos, custom text, or entity/area/floor lists).
     Returns True if it (re)trained. Logged at INFO so retrains are visible."""
@@ -667,7 +791,12 @@ def _ensure_trained(cfg, lang, meta, entities, slot_lists, data_dir: Path,
     enabled = _read_enabled(data_dir, lang, combos, cfg.default_importance)
     commands = _custom_commands(data_dir, lang)
     templates, list_values = training.assemble(
-        ADDON_ROOT, lang, enabled, commands, entities, slot_lists,
+        ADDON_ROOT,
+        lang,
+        enabled,
+        commands,
+        entities,
+        slot_lists,
         extra_sentences=ex.load(data_dir, lang),
         ov=overrides.load(data_dir, lang),
         hass_sentences=_hass_sentences(cfg, lang),
@@ -683,7 +812,8 @@ def _ensure_trained(cfg, lang, meta, entities, slot_lists, data_dir: Path,
         _LOGGER.warning(
             "No sentences to train for '%s': the grammar was left unchanged. "
             "Enable some commands in the web UI, or check that this language "
-            "has Speech-to-Phrase templates.", lang,
+            "has Speech-to-Phrase templates.",
+            lang,
         )
         return False
     fp = _fingerprint(templates, list_values, cfg.backend, _model_id(cfg, lang))
@@ -704,35 +834,46 @@ def _ensure_trained(cfg, lang, meta, entities, slot_lists, data_dir: Path,
         _LOGGER.warning("Cannot (re)train '%s': no acoustic model available", lang)
         return False
 
-    reason = ("first boot" if not grammar.exists()
-              else "save" if force else "inputs changed (entities/areas/floors/config)")
-    _LOGGER.info("Training grammar for '%s' (%s): %d sentences. This may take a moment.",
-                 lang, reason, len(templates))
+    reason = (
+        "first boot"
+        if not grammar.exists()
+        else "save" if force else "inputs changed (entities/areas/floors/config)"
+    )
+    _LOGGER.info(
+        "Training grammar for '%s' (%s): %d sentences. This may take a moment.",
+        lang,
+        reason,
+        len(templates),
+    )
     d.mkdir(parents=True, exist_ok=True)
     if not (d / "enabled.json").exists():
         (d / "enabled.json").write_text(json.dumps(enabled, indent=2))
     training.train(cfg.backend, model_dir, lang, templates, list_values, grammar)
-    meta_path.write_text(json.dumps(
-        {"fingerprint": fp, "backend": cfg.backend, "n_templates": len(templates)}
-    ))
+    meta_path.write_text(
+        json.dumps(
+            {"fingerprint": fp, "backend": cfg.backend, "n_templates": len(templates)}
+        )
+    )
     _LOGGER.info("Trained grammar for '%s' -> %s", lang, grammar)
     return True
 
 
-def _start_watch(cfg, meta, data_dir: Path) -> None:
+def _start_watch(cfg: argparse.Namespace, meta: JsonDict, data_dir: Path) -> None:
     """Background timer: periodically re-check the live registry and retrain any
     set-up language whose inputs changed (entity/area/floor renames, adds, …)."""
     interval = cfg.refresh_interval
     if interval <= 0:
         return
 
-    def loop():
+    def loop() -> None:
         while True:
             time.sleep(interval)
             try:
                 langs = {cfg.language} | {
-                    p.name for p in data_dir.iterdir()
-                    if p.is_dir() and (p / "grammar.fst").exists()
+                    p.name
+                    for p in data_dir.iterdir()
+                    if p.is_dir()
+                    and (p / "grammar.fst").exists()
                     and _known_lang(p.name)
                 }
                 # Fetch the registry once per pass, then apply each language's
@@ -743,10 +884,16 @@ def _start_watch(cfg, meta, data_dir: Path) -> None:
                 for lang in sorted(langs):
                     ov = overrides.load(data_dir, lang)
                     if _ensure_trained(
-                        cfg, lang, meta, ov.filter_records(raw_records),
-                        ov.filter_slot_lists(raw_lists), data_dir
+                        cfg,
+                        lang,
+                        meta,
+                        ov.filter_records(raw_records),
+                        ov.filter_slot_lists(raw_lists),
+                        data_dir,
                     ):
-                        _LOGGER.info("Auto-retrained '%s' after a registry/config change", lang)
+                        _LOGGER.info(
+                            "Auto-retrained '%s' after a registry/config change", lang
+                        )
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("watch loop iteration failed")
 
@@ -754,7 +901,7 @@ def _start_watch(cfg, meta, data_dir: Path) -> None:
     _LOGGER.info("Watching for entity/area/floor changes every %ds", interval)
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=os.environ.get("DATA_DIR", "./data"))
     ap.add_argument("--language", default="en")
@@ -765,15 +912,21 @@ def main():
     # CTC topology, and the wrong choice only ever produced a model that would
     # not load. Still switchable on the command line for testing one backend
     # against the other.
-    ap.add_argument("--backend", default="auto",
-                    choices=["auto", "citrinet", "coqui"])
-    ap.add_argument("--model", default=os.environ.get("MODEL_DIR"),
-                    help="model dir (dev) or HuggingFace model name; "
-                         "if unset, derived from language+backend")
-    ap.add_argument("--models-dir", default=os.environ.get("MODELS_DIR", "/data/models"))
+    ap.add_argument("--backend", default="auto", choices=["auto", "citrinet", "coqui"])
+    ap.add_argument(
+        "--model",
+        default=os.environ.get("MODEL_DIR"),
+        help="model dir (dev) or HuggingFace model name; "
+        "if unset, derived from language+backend",
+    )
+    ap.add_argument(
+        "--models-dir", default=os.environ.get("MODELS_DIR", "/data/models")
+    )
     ap.add_argument("--entities-file", default=os.environ.get("ENTITIES_FILE"))
     ap.add_argument("--slot-lists-file", default=os.environ.get("SLOT_LISTS_FILE"))
-    ap.add_argument("--hass-api", default=os.environ.get("HASS_API", "http://supervisor/core/api"))
+    ap.add_argument(
+        "--hass-api", default=os.environ.get("HASS_API", "http://supervisor/core/api")
+    )
     ap.add_argument("--hass-token", default=os.environ.get("SUPERVISOR_TOKEN"))
     # Which importance buckets are on the first time a language is set up.
     # "usable" is a deliberate middle -- 24 of 46 combos on German -- because the
@@ -784,41 +937,70 @@ def main():
     # option (changing one that silently does nothing is worse than not having
     # it). Pass "optional" to exercise every combo the package ships, which is
     # what the round-trip checks in tools/ do when validating a language.
-    ap.add_argument("--default-importance", default="usable",
-                    choices=["required", "usable", "complete", "optional"])
+    ap.add_argument(
+        "--default-importance",
+        default="usable",
+        choices=["required", "usable", "complete", "optional"],
+    )
     # Phrases Home Assistant is already listening for. On, because a trigger or
     # question answer that isn't in the grammar can never be transcribed and the
     # automation would never fire. Each one widens the grammar and the answer
     # crawl costs a websocket round-trip per automation/script, so both can be
     # switched off -- per language, in the web UI, where the cost is shown next
     # to the switch.
-    ap.add_argument("--no-sentence-triggers", dest="sentence_triggers",
-                    action="store_false",
-                    help="don't add automation sentence-trigger phrases to the grammar")
-    ap.add_argument("--no-question-answers", dest="question_answers",
-                    action="store_false",
-                    help="don't add assist_satellite.ask_question answers to the grammar")
-    ap.add_argument("--refresh-interval", type=int,
-                    default=int(os.environ.get("REFRESH_INTERVAL", "600")),
-                    help="seconds between registry-change checks (0 disables)")
+    ap.add_argument(
+        "--no-sentence-triggers",
+        dest="sentence_triggers",
+        action="store_false",
+        help="don't add automation sentence-trigger phrases to the grammar",
+    )
+    ap.add_argument(
+        "--no-question-answers",
+        dest="question_answers",
+        action="store_false",
+        help="don't add assist_satellite.ask_question answers to the grammar",
+    )
+    ap.add_argument(
+        "--refresh-interval",
+        type=int,
+        default=int(os.environ.get("REFRESH_INTERVAL", "600")),
+        help="seconds between registry-change checks (0 disables)",
+    )
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=8099)
-    ap.add_argument("--wyoming-uri", default=os.environ.get("WYOMING_URI", "tcp://0.0.0.0:10300"))
-    ap.add_argument("--intent-uri", default=os.environ.get("INTENT_URI", "tcp://0.0.0.0:10500"))
-    ap.add_argument("--max-score", type=float, default=None,
-                    help="score gate; if unset, a per-backend default is used "
-                         "(citrinet 5.0, coqui 2.0)")
+    ap.add_argument(
+        "--wyoming-uri", default=os.environ.get("WYOMING_URI", "tcp://0.0.0.0:10300")
+    )
+    ap.add_argument(
+        "--intent-uri", default=os.environ.get("INTENT_URI", "tcp://0.0.0.0:10500")
+    )
+    ap.add_argument(
+        "--max-score",
+        type=float,
+        default=None,
+        help="score gate; if unset, a per-backend default is used "
+        "(citrinet 5.0, coqui 2.0)",
+    )
     # Offsets the decoder's bias toward short paths (see models.DEFAULT_TOKEN_BONUS).
     # Unset => the per-backend default (citrinet 2.0, coqui 0.0).
-    ap.add_argument("--token-bonus", type=float, default=None,
-                    help="word-insertion reward per emitted token (0 = off); "
-                         "if unset, a per-backend default is used "
-                         "(citrinet 2.0, coqui 0.0)")
-    ap.add_argument("--no-wyoming", action="store_true", help="UI only (don't serve Wyoming STT)")
+    ap.add_argument(
+        "--token-bonus",
+        type=float,
+        default=None,
+        help="word-insertion reward per emitted token (0 = off); "
+        "if unset, a per-backend default is used "
+        "(citrinet 2.0, coqui 0.0)",
+    )
+    ap.add_argument(
+        "--no-wyoming", action="store_true", help="UI only (don't serve Wyoming STT)"
+    )
     # Off by default: the add-on ships as speech-to-text only, and Home Assistant
     # handles the transcript with its own conversation agent.
-    ap.add_argument("--intent", action="store_true",
-                    help="also serve the Wyoming intent service (experimental)")
+    ap.add_argument(
+        "--intent",
+        action="store_true",
+        help="also serve the Wyoming intent service (experimental)",
+    )
     ap.add_argument("--debug", action="store_true")
     cfg = ap.parse_args()
 
@@ -831,8 +1013,13 @@ def main():
     if cfg.model and not cfg.no_wyoming:
         grammar = Path(cfg.data) / cfg.language / "grammar.fst"
         wyoming_server.start_background(
-            cfg.wyoming_uri, cfg.backend, cfg.model, cfg.language, grammar,
-            cfg.max_score, cfg.token_bonus
+            cfg.wyoming_uri,
+            cfg.backend,
+            cfg.model,
+            cfg.language,
+            grammar,
+            cfg.max_score,
+            cfg.token_bonus,
         )
     elif cfg.no_wyoming:
         _LOGGER.info("Wyoming server disabled (--no-wyoming)")
@@ -846,17 +1033,28 @@ def main():
         import intent_server
 
         intent_server.start_background(
-            cfg.intent_uri, cfg.language, Path(cfg.data), ADDON_ROOT,
+            cfg.intent_uri,
+            cfg.language,
+            Path(cfg.data),
+            ADDON_ROOT,
             get_entities=lambda: _current_records(cfg),
             get_slot_lists=lambda: _current_slot_lists(cfg),
-            api_url=cfg.hass_api, token=cfg.hass_token,
+            api_url=cfg.hass_api,
+            token=cfg.hass_token,
             ttl=max(cfg.refresh_interval, 60),
         )
     else:
-        _LOGGER.info("Speech-to-text only; intent service not started (--intent enables it)")
+        _LOGGER.info(
+            "Speech-to-text only; intent service not started (--intent enables it)"
+        )
 
-    _LOGGER.info("Speech-to-Phrase UI on http://%s:%s (data=%s, model=%s)",
-                 cfg.host, cfg.port, cfg.data, cfg.model or "<none>")
+    _LOGGER.info(
+        "Speech-to-Phrase UI on http://%s:%s (data=%s, model=%s)",
+        cfg.host,
+        cfg.port,
+        cfg.data,
+        cfg.model or "<none>",
+    )
     app.run(host=cfg.host, port=cfg.port)
 
 

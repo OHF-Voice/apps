@@ -404,6 +404,68 @@ running a benchmark does not disturb the assistant &mdash; but voice handling
 pauses for its duration. While the model is still loading the page says so and
 the button stays disabled.
 
+## Docker with GPU
+
+`Dockerfile.gpu` builds llama.cpp with CUDA and runs the model on an NVIDIA GPU.
+The host must have the [NVIDIA Container Toolkit][] configured.
+
+From the `script-agent` directory, build and run the image with:
+
+```shell
+export HASS_API=http://192.168.1.100:8123/api
+docker build --file Dockerfile.gpu --tag script-agent:gpu .
+docker run --rm --gpus all \
+  --name script-agent \
+  --env HASS_TOKEN="${HASS_TOKEN}" \
+  --env HASS_API="${HASS_API}" \
+  --publish 10500:10500 \
+  --publish 5000:5000 \
+  --volume script-agent-data:/data \
+  script-agent:gpu
+```
+
+Set `HASS_TOKEN` to a Home Assistant long-lived access token before running the
+command, and replace `192.168.1.100` with the LAN address of your Home Assistant
+server. A `.local` mDNS hostname such as `homeassistant.local` may not resolve
+inside a Docker container, so use an IP address or a hostname provided by DNS.
+
+### Docker Compose
+
+A Compose service can instead be configured as follows:
+
+```yaml
+services:
+  script-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    gpus: all
+    environment:
+      HASS_TOKEN: ${HASS_TOKEN}
+      HASS_API: ${HASS_API}
+    ports:
+      - "10500:10500"
+      - "5000:5000"
+    volumes:
+      - script-agent-data:/data
+
+volumes:
+  script-agent-data:
+```
+
+Configure Home Assistant's Wyoming integration with the Docker host and port
+`10500`.
+
+Every agent CLI option has an uppercase environment variable:
+`URI`, `HTTP_HOST`, `HTTP_PORT`, `HASS_TOKEN`, `HASS_API`, `HF_REPO`,
+`HF_FILENAME`, `TOOL_CALL_CACHE_SIZE`, `LLAMA_STATE`, `N_CTX`,
+`N_CTX_OVERHEAD`, `N_THREADS`, `N_GPU_LAYERS`, `MAX_TOKENS`,
+`FLASH_ATTENTION`, `BENCHMARK_FIXTURE`, `OVERRIDES`, and `DEBUG`. The image
+defaults `N_GPU_LAYERS` to `-1` to offload all model layers. `HF_TOKEN` may
+also be set for authenticated Hugging Face downloads. Boolean variables accept
+`true`/`false`, `yes`/`no`, `on`/`off`, or `1`/`0`.
+
+
 ## Benchmarks
 
 Seconds per command with 5 scripts and 35 exposed entities.
@@ -432,5 +494,6 @@ Seconds per command with 5 scripts and 35 exposed entities.
 [official model]: https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF
 [media player]: https://www.home-assistant.io/integrations/media_player
 [Music Assistant]: https://www.home-assistant.io/integrations/music_assistant/
+[NVIDIA Container Toolkit]: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 [wyoming]: https://www.home-assistant.io/integrations/wyoming/
 [blueprints]: https://github.com/OHF-Voice/apps/tree/main/script-agent/blueprints

@@ -65,6 +65,40 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
         self.assertIn("GGML_CPU_ARM_ARCH=armv8.2-a+fp16+dotprod", dockerfile)
 
+    def test_gpu_dockerfile_enables_cuda_and_exposes_cli_environment(self):
+        dockerfile = (self.project_dir / "Dockerfile.gpu").read_text("utf-8")
+        entrypoint = (self.project_dir / "docker-entrypoint").read_text("utf-8")
+        image_sources = dockerfile + entrypoint
+
+        self.assertIn("-DGGML_CUDA=ON", dockerfile)
+        self.assertIn("NVIDIA_VISIBLE_DEVICES=all", dockerfile)
+        for variable in (
+            "URI",
+            "HTTP_HOST",
+            "HTTP_PORT",
+            "HASS_TOKEN",
+            "HASS_API",
+            "HF_REPO",
+            "HF_FILENAME",
+            "TOOL_CALL_CACHE_SIZE",
+            "LLAMA_STATE",
+            "N_CTX",
+            "N_CTX_OVERHEAD",
+            "N_THREADS",
+            "N_GPU_LAYERS",
+            "MAX_TOKENS",
+            "FLASH_ATTENTION",
+            "BENCHMARK_FIXTURE",
+            "OVERRIDES",
+            "DEBUG",
+        ):
+            self.assertTrue(
+                (f"{variable}=" in image_sources)
+                or (f"${{{variable}}}" in image_sources)
+                or (f"${{{variable}:" in image_sources),
+                variable,
+            )
+
     def test_python_environment_matches_app_name(self):
         python_environment = (self.project_dir / ".python-version").read_text("utf-8")
         self.assertEqual("script-agent", python_environment.strip())

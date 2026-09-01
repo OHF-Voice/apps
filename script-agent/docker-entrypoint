@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if (( $# > 0 )) && [[ "$1" != -* ]]; then
+    exec "$@"
+fi
+
+: "${HASS_TOKEN:?HASS_TOKEN must contain a Home Assistant long-lived access token}"
+
+args=(
+    --uri "${URI}"
+    --http-host "${HTTP_HOST}"
+    --http-port "${HTTP_PORT}"
+    --hass-token "${HASS_TOKEN}"
+    --hass-api "${HASS_API}"
+    --hf-repo "${HF_REPO}"
+    --hf-filename "${HF_FILENAME}"
+    --tool-call-cache-size "${TOOL_CALL_CACHE_SIZE}"
+    --llama-state "${LLAMA_STATE}"
+    --n-ctx "${N_CTX}"
+    --n-ctx-overhead "${N_CTX_OVERHEAD}"
+    --n-threads "${N_THREADS}"
+    --n-gpu-layers "${N_GPU_LAYERS}"
+    --max-tokens "${MAX_TOKENS}"
+)
+
+add_boolean_flag() {
+    local value="${1,,}"
+    local enabled_flag="$2"
+    local disabled_flag="${3:-}"
+
+    case "${value}" in
+        1 | true | yes | on)
+            args+=("${enabled_flag}")
+            ;;
+        0 | false | no | off)
+            if [[ -n "${disabled_flag}" ]]; then
+                args+=("${disabled_flag}")
+            fi
+            ;;
+        *)
+            echo "Invalid boolean value '${1}' for ${enabled_flag}" >&2
+            exit 2
+            ;;
+    esac
+}
+
+add_boolean_flag "${FLASH_ATTENTION}" --flash-attention --no-flash-attention
+add_boolean_flag "${DEBUG}" --debug
+
+if [[ -n "${BENCHMARK_FIXTURE}" ]]; then
+    args+=(--benchmark-fixture "${BENCHMARK_FIXTURE}")
+fi
+
+if [[ -n "${OVERRIDES}" ]]; then
+    args+=(--overrides "${OVERRIDES}")
+fi
+
+exec /usr/src/.venv/bin/python3 /usr/src/app.py "${args[@]}" "$@"

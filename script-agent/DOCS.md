@@ -412,22 +412,23 @@ The host must have the [NVIDIA Container Toolkit][] configured.
 From the `script-agent` directory, build and run the image with:
 
 ```shell
-export HASS_API=http://192.168.1.100:8123/api
+export SCRIPT_AGENT_HASS_API=http://192.168.1.100:8123/api
 docker build --file Dockerfile.gpu --tag script-agent:gpu .
 docker run --rm --gpus all \
   --name script-agent \
-  --env HASS_TOKEN="${HASS_TOKEN}" \
-  --env HASS_API="${HASS_API}" \
+  --env SCRIPT_AGENT_HASS_TOKEN="${SCRIPT_AGENT_HASS_TOKEN}" \
+  --env SCRIPT_AGENT_HASS_API="${SCRIPT_AGENT_HASS_API}" \
   --publish 10500:10500 \
   --publish 5000:5000 \
   --volume script-agent-data:/data \
   script-agent:gpu
 ```
 
-Set `HASS_TOKEN` to a Home Assistant long-lived access token before running the
-command, and replace `192.168.1.100` with the LAN address of your Home Assistant
-server. A `.local` mDNS hostname such as `homeassistant.local` may not resolve
-inside a Docker container, so use an IP address or a hostname provided by DNS.
+Set `SCRIPT_AGENT_HASS_TOKEN` to a Home Assistant long-lived access token before
+running the command, and replace `192.168.1.100` with the LAN address of your
+Home Assistant server. A `.local` mDNS hostname such as `homeassistant.local`
+may not resolve inside a Docker container, so use an IP address or a hostname
+provided by DNS.
 
 ### Docker Compose
 
@@ -441,8 +442,8 @@ services:
       dockerfile: Dockerfile.gpu
     gpus: all
     environment:
-      HASS_TOKEN: ${HASS_TOKEN}
-      HASS_API: ${HASS_API}
+      SCRIPT_AGENT_HASS_TOKEN: ${SCRIPT_AGENT_HASS_TOKEN}
+      SCRIPT_AGENT_HASS_API: ${SCRIPT_AGENT_HASS_API}
     ports:
       - "10500:10500"
       - "5000:5000"
@@ -456,14 +457,19 @@ volumes:
 Configure Home Assistant's Wyoming integration with the Docker host and port
 `10500`.
 
-Every agent CLI option has an uppercase environment variable:
-`URI`, `HTTP_HOST`, `HTTP_PORT`, `HASS_TOKEN`, `HASS_API`, `HF_REPO`,
-`HF_FILENAME`, `TOOL_CALL_CACHE_SIZE`, `LLAMA_STATE`, `N_CTX`,
-`N_CTX_OVERHEAD`, `N_THREADS`, `N_GPU_LAYERS`, `MAX_TOKENS`,
-`FLASH_ATTENTION`, `BENCHMARK_FIXTURE`, `OVERRIDES`, and `DEBUG`. The image
-defaults `N_GPU_LAYERS` to `-1` to offload all model layers. `HF_TOKEN` may
-also be set for authenticated Hugging Face downloads. Boolean variables accept
-`true`/`false`, `yes`/`no`, `on`/`off`, or `1`/`0`.
+Every agent CLI option has an uppercase environment variable prefixed with
+`SCRIPT_AGENT_`: `SCRIPT_AGENT_URI`, `SCRIPT_AGENT_HTTP_HOST`,
+`SCRIPT_AGENT_HTTP_PORT`, `SCRIPT_AGENT_HASS_TOKEN`, `SCRIPT_AGENT_HASS_API`,
+`SCRIPT_AGENT_HF_REPO`, `SCRIPT_AGENT_HF_FILENAME`,
+`SCRIPT_AGENT_TOOL_CALL_CACHE_SIZE`, `SCRIPT_AGENT_LLAMA_STATE`,
+`SCRIPT_AGENT_N_CTX`, `SCRIPT_AGENT_N_CTX_OVERHEAD`, `SCRIPT_AGENT_N_THREADS`,
+`SCRIPT_AGENT_N_GPU_LAYERS`, `SCRIPT_AGENT_MAX_TOKENS`,
+`SCRIPT_AGENT_FLASH_ATTENTION`, `SCRIPT_AGENT_BENCHMARK_FIXTURE`,
+`SCRIPT_AGENT_OVERRIDES`, and `SCRIPT_AGENT_DEBUG`. The image defaults
+`SCRIPT_AGENT_N_GPU_LAYERS` to `-1` to offload all model layers. The
+ecosystem-standard `HF_TOKEN` may also be set for authenticated Hugging Face
+downloads. Boolean variables accept `true`/`false`, `yes`/`no`, `on`/`off`, or
+`1`/`0`.
 
 
 ## Benchmarks

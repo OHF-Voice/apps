@@ -42,23 +42,23 @@ ENV \
     HF_HOME=/data/cache \
     NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility \
-    URI=tcp://0.0.0.0:10500 \
-    HTTP_HOST=0.0.0.0 \
-    HTTP_PORT=5000 \
-    HASS_API=http://homeassistant.local:8123/api \
-    HF_REPO=bartowski/google_gemma-4-E2B-it-GGUF \
-    HF_FILENAME=google_gemma-4-E2B-it-Q5_K_M.gguf \
-    TOOL_CALL_CACHE_SIZE=100 \
-    LLAMA_STATE=/data/llama_state.bin \
-    N_CTX=0 \
-    N_CTX_OVERHEAD=128 \
-    N_THREADS=0 \
-    N_GPU_LAYERS=-1 \
-    MAX_TOKENS=128 \
-    FLASH_ATTENTION=true \
-    BENCHMARK_FIXTURE="" \
-    OVERRIDES=/data/overrides.yaml \
-    DEBUG=false
+    SCRIPT_AGENT_URI=tcp://0.0.0.0:10500 \
+    SCRIPT_AGENT_HTTP_HOST=0.0.0.0 \
+    SCRIPT_AGENT_HTTP_PORT=5000 \
+    SCRIPT_AGENT_HASS_API=http://homeassistant.local:8123/api \
+    SCRIPT_AGENT_HF_REPO=bartowski/google_gemma-4-E2B-it-GGUF \
+    SCRIPT_AGENT_HF_FILENAME=google_gemma-4-E2B-it-Q5_K_M.gguf \
+    SCRIPT_AGENT_TOOL_CALL_CACHE_SIZE=100 \
+    SCRIPT_AGENT_LLAMA_STATE=/data/llama_state.bin \
+    SCRIPT_AGENT_N_CTX=0 \
+    SCRIPT_AGENT_N_CTX_OVERHEAD=128 \
+    SCRIPT_AGENT_N_THREADS=0 \
+    SCRIPT_AGENT_N_GPU_LAYERS=-1 \
+    SCRIPT_AGENT_MAX_TOKENS=128 \
+    SCRIPT_AGENT_FLASH_ATTENTION=true \
+    SCRIPT_AGENT_BENCHMARK_FIXTURE="" \
+    SCRIPT_AGENT_OVERRIDES=/data/overrides.yaml \
+    SCRIPT_AGENT_DEBUG=false
 
 WORKDIR /usr/src
 
@@ -88,6 +88,6 @@ VOLUME ["/data"]
 EXPOSE 5000 10500
 
 HEALTHCHECK --start-period=10m \
-    CMD curl -f "http://localhost:${HTTP_PORT}/health" || exit 1
+    CMD curl -f "http://localhost:${SCRIPT_AGENT_HTTP_PORT}/health" || exit 1
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint"]

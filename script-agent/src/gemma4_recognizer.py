@@ -73,6 +73,7 @@ class Gemma4Recognizer:
         n_ctx: Optional[int] = None,
         n_ctx_overhead: int = 128,
         n_threads: Optional[int] = None,
+        n_gpu_layers: int = 0,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         flash_attn: bool = True,
         debug: bool = False,
@@ -90,6 +91,7 @@ class Gemma4Recognizer:
         self.n_ctx = n_ctx
         self.n_ctx_overhead = n_ctx_overhead
         self.n_threads = n_threads
+        self.n_gpu_layers = n_gpu_layers
         self.max_tokens = max_tokens
         self.flash_attn = flash_attn
         self.model_path: Optional[Path] = None
@@ -152,6 +154,7 @@ class Gemma4Recognizer:
             chat_template_kwargs={"enable_thinking": self.enable_thinking},
             n_ctx=n_ctx,
             n_threads=self.n_threads,
+            n_gpu_layers=self.n_gpu_layers,
             flash_attn=self.flash_attn,
             verbose=self.debug,
         )
@@ -164,6 +167,7 @@ class Gemma4Recognizer:
         runtime_model_id = (
             f"llama-cpp-python/{LLAMA_CPP_VERSION};"
             f"n_ctx={self.llm.n_ctx()};"
+            f"n_gpu_layers={self.n_gpu_layers};"
             f"flash_attn={int(self.flash_attn)};"
             f"model_path={self.model_path};"
             f"{self.repo_id}/{self.filename}"

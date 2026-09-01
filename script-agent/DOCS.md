@@ -404,6 +404,74 @@ running a benchmark does not disturb the assistant &mdash; but voice handling
 pauses for its duration. While the model is still loading the page says so and
 the button stays disabled.
 
+## Docker with GPU
+
+`Dockerfile.gpu` builds llama.cpp with CUDA and runs the model on an NVIDIA GPU.
+The host must have the [NVIDIA Container Toolkit][] configured.
+
+From the `script-agent` directory, build and run the image with:
+
+```shell
+export SCRIPT_AGENT_HASS_API=http://192.168.1.100:8123/api
+docker build --file Dockerfile.gpu --tag script-agent:gpu .
+docker run --rm --gpus all \
+  --name script-agent \
+  --env SCRIPT_AGENT_HASS_TOKEN="${SCRIPT_AGENT_HASS_TOKEN}" \
+  --env SCRIPT_AGENT_HASS_API="${SCRIPT_AGENT_HASS_API}" \
+  --publish 10500:10500 \
+  --publish 5000:5000 \
+  --volume script-agent-data:/data \
+  script-agent:gpu
+```
+
+Set `SCRIPT_AGENT_HASS_TOKEN` to a Home Assistant long-lived access token before
+running the command, and replace `192.168.1.100` with the LAN address of your
+Home Assistant server. A `.local` mDNS hostname such as `homeassistant.local`
+may not resolve inside a Docker container, so use an IP address or a hostname
+provided by DNS.
+
+### Docker Compose
+
+A Compose service can instead be configured as follows:
+
+```yaml
+services:
+  script-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    gpus: all
+    environment:
+      SCRIPT_AGENT_HASS_TOKEN: ${SCRIPT_AGENT_HASS_TOKEN}
+      SCRIPT_AGENT_HASS_API: ${SCRIPT_AGENT_HASS_API}
+    ports:
+      - "10500:10500"
+      - "5000:5000"
+    volumes:
+      - script-agent-data:/data
+
+volumes:
+  script-agent-data:
+```
+
+Configure Home Assistant's Wyoming integration with the Docker host and port
+`10500`.
+
+Every agent CLI option has an uppercase environment variable prefixed with
+`SCRIPT_AGENT_`: `SCRIPT_AGENT_URI`, `SCRIPT_AGENT_HTTP_HOST`,
+`SCRIPT_AGENT_HTTP_PORT`, `SCRIPT_AGENT_HASS_TOKEN`, `SCRIPT_AGENT_HASS_API`,
+`SCRIPT_AGENT_HF_REPO`, `SCRIPT_AGENT_HF_FILENAME`,
+`SCRIPT_AGENT_TOOL_CALL_CACHE_SIZE`, `SCRIPT_AGENT_LLAMA_STATE`,
+`SCRIPT_AGENT_N_CTX`, `SCRIPT_AGENT_N_CTX_OVERHEAD`, `SCRIPT_AGENT_N_THREADS`,
+`SCRIPT_AGENT_N_GPU_LAYERS`, `SCRIPT_AGENT_MAX_TOKENS`,
+`SCRIPT_AGENT_FLASH_ATTENTION`, `SCRIPT_AGENT_BENCHMARK_FIXTURE`,
+`SCRIPT_AGENT_OVERRIDES`, and `SCRIPT_AGENT_DEBUG`. The image defaults
+`SCRIPT_AGENT_N_GPU_LAYERS` to `-1` to offload all model layers. The
+ecosystem-standard `HF_TOKEN` may also be set for authenticated Hugging Face
+downloads. Boolean variables accept `true`/`false`, `yes`/`no`, `on`/`off`, or
+`1`/`0`.
+
+
 ## Benchmarks
 
 Seconds per command with 5 scripts and 35 exposed entities.
@@ -432,5 +500,6 @@ Seconds per command with 5 scripts and 35 exposed entities.
 [official model]: https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF
 [media player]: https://www.home-assistant.io/integrations/media_player
 [Music Assistant]: https://www.home-assistant.io/integrations/music_assistant/
+[NVIDIA Container Toolkit]: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 [wyoming]: https://www.home-assistant.io/integrations/wyoming/
 [blueprints]: https://github.com/OHF-Voice/apps/tree/main/script-agent/blueprints

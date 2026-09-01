@@ -85,6 +85,12 @@ async def main() -> None:
         "Assistant on the same box rather than using every core.",
     )
     parser.add_argument(
+        "--n-gpu-layers",
+        type=int,
+        default=0,
+        help="Number of model layers to offload to the GPU (-1 = all)",
+    )
+    parser.add_argument(
         "--max-tokens",
         type=int,
         default=DEFAULT_MAX_TOKENS,
@@ -184,6 +190,7 @@ async def main() -> None:
         n_ctx=args.n_ctx if args.n_ctx > 0 else None,
         n_ctx_overhead=args.n_ctx_overhead,
         n_threads=args.n_threads if args.n_threads > 0 else None,
+        n_gpu_layers=args.n_gpu_layers,
         max_tokens=all_overrides.max_tokens or args.max_tokens,
         flash_attn=args.flash_attention,
         debug=args.debug,

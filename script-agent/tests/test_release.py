@@ -65,6 +65,40 @@ class ReleaseMetadataTests(unittest.TestCase):
         )
         self.assertIn("GGML_CPU_ARM_ARCH=armv8.2-a+fp16+dotprod", dockerfile)
 
+    def test_gpu_dockerfile_enables_cuda_and_exposes_cli_environment(self):
+        dockerfile = (self.project_dir / "Dockerfile.gpu").read_text("utf-8")
+        entrypoint = (self.project_dir / "docker-entrypoint").read_text("utf-8")
+        image_sources = dockerfile + entrypoint
+
+        self.assertIn("-DGGML_CUDA=ON", dockerfile)
+        self.assertIn("NVIDIA_VISIBLE_DEVICES=all", dockerfile)
+        for variable in (
+            "SCRIPT_AGENT_URI",
+            "SCRIPT_AGENT_HTTP_HOST",
+            "SCRIPT_AGENT_HTTP_PORT",
+            "SCRIPT_AGENT_HASS_TOKEN",
+            "SCRIPT_AGENT_HASS_API",
+            "SCRIPT_AGENT_HF_REPO",
+            "SCRIPT_AGENT_HF_FILENAME",
+            "SCRIPT_AGENT_TOOL_CALL_CACHE_SIZE",
+            "SCRIPT_AGENT_LLAMA_STATE",
+            "SCRIPT_AGENT_N_CTX",
+            "SCRIPT_AGENT_N_CTX_OVERHEAD",
+            "SCRIPT_AGENT_N_THREADS",
+            "SCRIPT_AGENT_N_GPU_LAYERS",
+            "SCRIPT_AGENT_MAX_TOKENS",
+            "SCRIPT_AGENT_FLASH_ATTENTION",
+            "SCRIPT_AGENT_BENCHMARK_FIXTURE",
+            "SCRIPT_AGENT_OVERRIDES",
+            "SCRIPT_AGENT_DEBUG",
+        ):
+            self.assertTrue(
+                (f"{variable}=" in image_sources)
+                or (f"${{{variable}}}" in image_sources)
+                or (f"${{{variable}:" in image_sources),
+                variable,
+            )
+
     def test_python_environment_matches_app_name(self):
         python_environment = (self.project_dir / ".python-version").read_text("utf-8")
         self.assertEqual("script-agent", python_environment.strip())

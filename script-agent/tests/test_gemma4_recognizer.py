@@ -95,6 +95,20 @@ class RecognitionTests(unittest.TestCase):
         self.assertIn("64-token generation limit", text)
 
 
+class ModelCreationTests(unittest.TestCase):
+    @patch("gemma4_recognizer.Llama")
+    @patch("gemma4_recognizer.hf_hub_download", return_value="/model")
+    def test_gpu_layers_are_passed_to_llama(self, _download, llama):
+        recognizer = Gemma4Recognizer(
+            state_path="unused.bin",
+            n_gpu_layers=-1,
+        )
+
+        recognizer._create_llm(256)  # pylint: disable=protected-access
+
+        self.assertEqual(-1, llama.call_args.kwargs["n_gpu_layers"])
+
+
 class PromptTests(unittest.TestCase):
     def test_default_user_prompt_carries_the_current_date(self):
         # Without it the model cannot turn "Saturday" into a date, and answers a
@@ -329,7 +343,7 @@ class StateCacheTests(unittest.TestCase):
             recognizer.model_path = Path("/model")
             runtime_model_id = (
                 f"llama-cpp-python/{LLAMA_CPP_VERSION};"
-                "n_ctx=64;flash_attn=1;model_path=/model;"
+                "n_ctx=64;n_gpu_layers=0;flash_attn=1;model_path=/model;"
                 f"{recognizer.repo_id}/{recognizer.filename}"
             )
             state_path.with_suffix(".sha256").write_text(

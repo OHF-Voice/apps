@@ -1,0 +1,93 @@
+FROM nvidia/cuda:12.8.1-devel-ubuntu24.04 AS llama
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /usr/src
+
+RUN \
+    apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        ninja-build \
+        python3 \
+        python3-dev \
+        python3-pip \
+        python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN \
+    python3 -m venv .venv \
+    && .venv/bin/pip install --no-cache-dir --upgrade \
+        wheel setuptools
+
+COPY requirements.llama.txt ./
+
+RUN \
+    CMAKE_ARGS="-DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=ON" \
+    FORCE_CMAKE=1 \
+    .venv/bin/pip install --no-cache-dir \
+        -r ./requirements.llama.txt
+
+# -----------------------------------------------------------------------------
+
+FROM nvidia/cuda:12.8.1-runtime-ubuntu24.04
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+ENV \
+    PYTHONUNBUFFERED=1 \
+    HF_HOME=/data/cache \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    SCRIPT_AGENT_URI=tcp://0.0.0.0:10500 \
+    SCRIPT_AGENT_HTTP_HOST=0.0.0.0 \
+    SCRIPT_AGENT_HTTP_PORT=5000 \
+    SCRIPT_AGENT_HASS_API=http://homeassistant.local:8123/api \
+    SCRIPT_AGENT_HF_REPO=bartowski/google_gemma-4-E2B-it-GGUF \
+    SCRIPT_AGENT_HF_FILENAME=google_gemma-4-E2B-it-Q5_K_M.gguf \
+    SCRIPT_AGENT_TOOL_CALL_CACHE_SIZE=100 \
+    SCRIPT_AGENT_LLAMA_STATE=/data/llama_state.bin \
+    SCRIPT_AGENT_N_CTX=0 \
+    SCRIPT_AGENT_N_CTX_OVERHEAD=128 \
+    SCRIPT_AGENT_N_THREADS=0 \
+    SCRIPT_AGENT_N_GPU_LAYERS=-1 \
+    SCRIPT_AGENT_MAX_TOKENS=128 \
+    SCRIPT_AGENT_FLASH_ATTENTION=true \
+    SCRIPT_AGENT_BENCHMARK_FIXTURE="" \
+    SCRIPT_AGENT_OVERRIDES=/data/overrides.yaml \
+    SCRIPT_AGENT_DEBUG=false
+
+WORKDIR /usr/src
+
+RUN \
+    apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        libgomp1 \
+        python3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /data
+
+COPY --from=llama /usr/src/.venv/ ./.venv/
+
+COPY requirements.txt ./
+
+RUN \
+    .venv/bin/pip install --no-cache-dir \
+        -r ./requirements.txt
+
+COPY src/*.py ./
+COPY src/benchmark.yaml ./
+COPY src/templates/ ./templates/
+COPY --chmod=755 docker-entrypoint /usr/local/bin/docker-entrypoint
+
+VOLUME ["/data"]
+EXPOSE 5000 10500
+
+HEALTHCHECK --start-period=10m \
+    CMD curl -f "http://localhost:${SCRIPT_AGENT_HTTP_PORT}/health" || exit 1
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint"]

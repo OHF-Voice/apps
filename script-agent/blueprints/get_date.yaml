@@ -1,0 +1,16 @@
+---
+blueprint:
+  name: Get date
+  description: Get the current date
+  domain: script
+
+mode: parallel
+
+sequence:
+  - action: assist_satellite.announce
+    target:
+      entity_id: "{{ satellite.entity_id }}"
+    data:
+      preannounce: false
+      message: >-
+        {{ now().strftime("%-d %B, %Y") }}

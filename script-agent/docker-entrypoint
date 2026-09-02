@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if (( $# > 0 )) && [[ "$1" != -* ]]; then
+    exec "$@"
+fi
+
+: "${SCRIPT_AGENT_HASS_TOKEN:?SCRIPT_AGENT_HASS_TOKEN must contain a Home Assistant long-lived access token}"
+
+args=(
+    --uri "${SCRIPT_AGENT_URI}"
+    --http-host "${SCRIPT_AGENT_HTTP_HOST}"
+    --http-port "${SCRIPT_AGENT_HTTP_PORT}"
+    --hass-token "${SCRIPT_AGENT_HASS_TOKEN}"
+    --hass-api "${SCRIPT_AGENT_HASS_API}"
+    --hf-repo "${SCRIPT_AGENT_HF_REPO}"
+    --hf-filename "${SCRIPT_AGENT_HF_FILENAME}"
+    --tool-call-cache-size "${SCRIPT_AGENT_TOOL_CALL_CACHE_SIZE}"
+    --llama-state "${SCRIPT_AGENT_LLAMA_STATE}"
+    --n-ctx "${SCRIPT_AGENT_N_CTX}"
+    --n-ctx-overhead "${SCRIPT_AGENT_N_CTX_OVERHEAD}"
+    --n-threads "${SCRIPT_AGENT_N_THREADS}"
+    --n-gpu-layers "${SCRIPT_AGENT_N_GPU_LAYERS}"
+    --max-tokens "${SCRIPT_AGENT_MAX_TOKENS}"
+)
+
+add_boolean_flag() {
+    local value="${1,,}"
+    local enabled_flag="$2"
+    local disabled_flag="${3:-}"
+
+    case "${value}" in
+        1 | true | yes | on)
+            args+=("${enabled_flag}")
+            ;;
+        0 | false | no | off)
+            if [[ -n "${disabled_flag}" ]]; then
+                args+=("${disabled_flag}")
+            fi
+            ;;
+        *)
+            echo "Invalid boolean value '${1}' for ${enabled_flag}" >&2
+            exit 2
+            ;;
+    esac
+}
+
+add_boolean_flag "${SCRIPT_AGENT_FLASH_ATTENTION}" --flash-attention --no-flash-attention
+add_boolean_flag "${SCRIPT_AGENT_DEBUG}" --debug
+
+if [[ -n "${SCRIPT_AGENT_BENCHMARK_FIXTURE}" ]]; then
+    args+=(--benchmark-fixture "${SCRIPT_AGENT_BENCHMARK_FIXTURE}")
+fi
+
+if [[ -n "${SCRIPT_AGENT_OVERRIDES}" ]]; then
+    args+=(--overrides "${SCRIPT_AGENT_OVERRIDES}")
+fi
+
+exec /usr/src/.venv/bin/python3 /usr/src/app.py "${args[@]}" "$@"

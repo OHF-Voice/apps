@@ -1,0 +1,133 @@
+---
+# Fixed fixture for the latency/correctness benchmark.
+#
+# This is intentionally INDEPENDENT of the scripts exposed in any particular
+# Home Assistant instance so that runs are reproducible and comparable across
+# machines and model/config changes. The benchmark builds a temporary llama.cpp
+# prefix from these tools (without disturbing the live assistant) and runs each
+# sentence, comparing the parsed tool call against `expected`.
+#
+# `tools` use the same OpenAI function spec the app generates from scripts.
+# Each sentence's `expected` is a list of tool calls (empty = expect no call).
+
+language: en
+
+tools:
+  - type: function
+    function:
+      name: HassTurnOn
+      description: Turns on a device or entity by name
+      parameters:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Name of the device or entity
+        required:
+          - name
+  - type: function
+    function:
+      name: HassTurnOff
+      description: Turns off a device or entity by name
+      parameters:
+        type: object
+        properties:
+          name:
+            type: string
+            description: Name of the device or entity
+        required:
+          - name
+  - type: function
+    function:
+      name: HassGetCurrentTime
+      description: Get the current time
+  - type: function
+    function:
+      name: start_timer
+      description: Set a timer with a duration and optional name
+      parameters:
+        type: object
+        properties:
+          total_seconds:
+            type: integer
+            minimum: 0
+          name:
+            type: string
+        required:
+          - total_seconds
+  - type: function
+    function:
+      name: media_control
+      description: Pause, resume, or stop media playback
+      parameters:
+        type: object
+        properties:
+          action:
+            type: string
+            enum:
+              - pause
+              - resume
+              - stop
+        required:
+          - action
+  - type: function
+    function:
+      name: configure_rooms
+      description: Set the operating mode in one or more rooms
+      parameters:
+        type: object
+        properties:
+          mode:
+            type: string
+            enum:
+              - cleaning
+              - normal
+              - quiet
+          room_names:
+            type: array
+            items:
+              type: string
+              enum:
+                - Bedroom
+                - Kitchen
+                - Office
+            uniqueItems: true
+        required:
+          - mode
+          - room_names
+
+sentences:
+  - text: "turn on the kitchen lights"
+    expected:
+      - name: HassTurnOn
+        args:
+          name: kitchen lights
+  - text: "turn off the bedroom fan"
+    expected:
+      - name: HassTurnOff
+        args:
+          name: bedroom fan
+  - text: "what time is it"
+    expected:
+      - name: HassGetCurrentTime
+        args: {}
+  - text: "set a timer for 5 minutes"
+    expected:
+      - name: start_timer
+        args:
+          total_seconds: 300
+  - text: "pause the music"
+    expected:
+      - name: media_control
+        args:
+          action: pause
+  - text: "set the kitchen and office to cleaning mode"
+    expected:
+      - name: configure_rooms
+        args:
+          mode: cleaning
+          room_names:
+            - Kitchen
+            - Office
+  - text: "the quick brown fox jumps over the lazy dog"
+    expected: []

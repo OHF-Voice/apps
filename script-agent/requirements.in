@@ -1,0 +1,6 @@
+-r requirements.llama.txt
+
+aiohttp
+flask
+huggingface-hub
+wyoming>=1.9.0

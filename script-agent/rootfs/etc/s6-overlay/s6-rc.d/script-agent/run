@@ -1,0 +1,39 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Start script-agent service
+# ==============================================================================
+cd /usr/src || exit 1
+
+flags=()
+
+if bashio::config.true 'debug_logging'; then
+    flags+=('--debug')
+fi
+
+if bashio::config.true 'flash_attention'; then
+    flags+=('--flash-attention')
+else
+    flags+=('--no-flash-attention')
+fi
+
+export HF_HOME=/data/cache
+HF_TOKEN="$(bashio::config 'hf_token')"
+export HF_TOKEN
+
+exec .venv/bin/python3 app.py \
+    --uri 'tcp://0.0.0.0:10500' \
+    --hass-token "${SUPERVISOR_TOKEN}" \
+    --hass-api 'http://supervisor/core/api' \
+    --http-host 0.0.0.0 \
+    --http-port 5000 \
+    --llama-state '/data/llama_state.bin' \
+    --overrides '/data/overrides.yaml' \
+    --hf-repo "$(bashio::config 'hf_repo')" \
+    --hf-filename "$(bashio::config 'hf_model')" \
+    --tool-call-cache-size "$(bashio::config 'tool_call_cache_size')" \
+    --n-ctx "$(bashio::config 'n_ctx')" \
+    --n-ctx-overhead "$(bashio::config 'n_ctx_overhead')" \
+    --n-threads "$(bashio::config 'n_threads')" \
+    --max-tokens "$(bashio::config 'max_tokens')" \
+    "${flags[@]}"

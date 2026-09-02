@@ -1,0 +1,39 @@
+---
+blueprint:
+  name: Device on/off
+  description: Turn a device on or off by name
+  domain: script
+
+mode: parallel
+
+fields:
+  action:
+    name: Action
+    required: true
+    selector:
+      select:
+        options:
+          - "on"
+          - "off"
+  device_name:
+    name: Device name
+    required: true
+    selector:
+      entity:
+        filter:
+          domain:
+            - light
+            - switch
+            - fan
+            - media_player
+            - input_boolean
+
+sequence:
+  - action: >-
+      {% if action == 'on' %}
+      homeassistant.turn_on
+      {% else %}
+      homeassistant.turn_off
+      {% endif %}
+    target:
+      entity_id: "{{ device_name }}"

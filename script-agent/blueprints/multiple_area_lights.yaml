@@ -1,0 +1,65 @@
+---
+blueprint:
+  name: Multiple area lights
+  description: Set lights in one or more areas with optional brightness and color
+  domain: script
+
+mode: parallel
+
+fields:
+  areas:
+    name: Areas
+    description: Names of all areas whose lights should change
+    required: true
+    selector:
+      area:
+        multiple: true
+  turn_on:
+    name: Turn on
+    description: Turn the lights on when true, or off when false
+    required: true
+    selector:
+      boolean:
+  brightness:
+    name: Brightness
+    description: Brightness percentage
+    selector:
+      number:
+        min: 1
+        max: 100
+        step: 1
+        unit_of_measurement: "%"
+  rgb_color:
+    name: RGB color
+    description: Color as red, green, and blue values
+    selector:
+      color_rgb:
+  color_temperature:
+    name: Color temperature
+    description: White color temperature in kelvin
+    selector:
+      color_temp:
+
+sequence:
+  - variables:
+      light_data: >-
+        {% set data = dict() %}
+        {% if brightness is defined %}
+          {% set data = dict(data, brightness_pct=brightness) %}
+        {% endif %}
+        {% if rgb_color is defined %}
+          {% set data = dict(data, rgb_color=rgb_color) %}
+        {% endif %}
+        {% if color_temperature is defined %}
+          {% set data = dict(data, color_temp_kelvin=color_temperature) %}
+        {% endif %}
+        {{ data }}
+  - action: >-
+      {% if turn_on %}
+      light.turn_on
+      {% else %}
+      light.turn_off
+      {% endif %}
+    target:
+      area_id: "{{ areas }}"
+    data: "{{ light_data }}"

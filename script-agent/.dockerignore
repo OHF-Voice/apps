@@ -1,0 +1,8 @@
+.git
+.mypy_cache
+.venv
+**/__pycache__
+*.py[cod]
+*.gguf
+local
+tests

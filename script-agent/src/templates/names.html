@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+{% block title %}Script Agent - Names{% endblock %}
+{% block heading %}Names{% endblock %}
+
+{% block style %}
+  .names-input { font-size: 0.95rem; padding: 0.35rem 0.4rem; border: 1px solid var(--border);
+                 border-radius: 6px; width: 100%; box-sizing: border-box; }
+  .names-input.changed { border-color: var(--accent); background: var(--accent-soft); }
+  .names-input.invalid { border-color: var(--warning); background: var(--warning-bg); }
+  td.target-id { width: 22rem; }
+  td.target-enabled { width: 7rem; text-align: center; }
+  .target-checkbox { width: 1.15rem; height: 1.15rem; }
+  td.reset { width: 5rem; }
+  #apply-bar { position: sticky; bottom: 0; background: var(--surface); padding: 0.75rem;
+               border: 1px solid var(--border); border-radius: 8px; margin-top: 1rem; display: flex;
+               gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+  #apply-bar.hidden { display: none; }
+  .default-names { font-size: 0.8rem; color: var(--muted); }
+  .names-search { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+                  margin: 1rem 0; }
+  .names-search label { font-weight: 600; }
+  #names-search { width: min(32rem, 100%); padding: 0.55rem 0.65rem;
+                  border-radius: 7px; font: inherit; }
+  .names-section { margin-top: 1rem; border: 1px solid var(--border);
+                   border-radius: 10px; background: var(--surface); overflow: hidden; }
+  .names-section summary { padding: 0.9rem 1.1rem; cursor: pointer;
+                           background: var(--surface-subtle); }
+  .names-section summary:hover { color: var(--accent); }
+  .section-heading { font-size: 1.1rem; font-weight: 700; }
+  .section-description { padding: 0 1.1rem; }
+  .names-section table { margin: 0; }
+{% endblock %}
+
+{% block content %}
+<p class="muted">These are the names the model may use when it fills in a field.
+They come from Home Assistant's names and aliases, which are not always what
+someone actually says &mdash; and sometimes include things that only confuse the
+model. Editing here changes only what this app offers the model; nothing in Home
+Assistant is modified.</p>
+
+<p class="muted">Names are comma-separated. Uncheck <b>Targetable</b> to keep
+something out of the enums entirely, so the model can never target it.
+<b>Reset</b> includes it again with Home Assistant's own names. If you want a
+name to work everywhere in Home Assistant, add it as an [alias] there instead.</p>
+
+<div class="names-search">
+  <label for="names-search">Search</label>
+  <input id="names-search" type="search" autocomplete="off"
+         placeholder="Search IDs, names, aliases, or entity types">
+  <span id="search-status" class="muted" role="status" aria-live="polite"></span>
+</div>
+
+{% for kind, title, blurb in [
+    ("entity", "Entities", "Only entities exposed to Assist are listed: those are the only ones that reach the enums."),
+    ("area", "Areas", "Every area is available to an area field."),
+    ("floor", "Floors", "Every floor is available to a floor field.")] %}
+<details class="names-section" data-kind="{{ kind }}" open>
+<summary>
+  <span class="section-heading" role="heading" aria-level="2">{{ title }}</span>
+  <span class="muted section-count" data-total="{{ rows[kind]|length }}">
+    ({{ rows[kind]|length }})
+  </span>
+</summary>
+<p class="muted section-description">{{ blurb }}</p>
+{% if rows[kind] %}
+<div class="table-scroll">
+<table>
+  <caption class="sr-only">{{ title }} and names available to the model</caption>
+  <thead><tr><th scope="col">Home Assistant id</th><th scope="col">Names the model may use</th><th scope="col">Targetable</th><th scope="col">Actions</th></tr></thead>
+  <tbody>
+  {% for r in rows[kind] %}
+    <tr class="name-row{% if r.excluded %} excluded{% endif %}">
+      <td class="target-id"><code>{{ r.id }}</code>
+        {%- if r.extra %} <span class="tag">{{ r.extra }}</span>{% endif %}
+        {%- if r.overridden %}
+        <br><span class="default-names">Home Assistant says:
+        {{ r.default_names|join(", ") or "(no name)" }}</span>
+        {%- endif %}</td>
+      <td><input type="text" class="names-input"
+                 aria-label="Names for {{ r.id }}"
+                 data-kind="{{ kind }}" data-id="{{ r.id }}"
+                 data-default="{{ r.default_names|join(', ') }}"
+                 value="{{ (r.default_names if r.excluded else r.names)|join(', ') }}"
+                 {% if not can_save or r.excluded %}disabled{% endif %}></td>
+      <td class="target-enabled">
+        <input type="checkbox" class="target-checkbox"
+               aria-label="Allow the model to target {{ r.id }}"
+               {% if not r.excluded %}checked{% endif %}
+               {% if not can_save %}disabled{% endif %}>
+      </td>
+      <td class="reset">
+        <button class="reset-one" data-kind="{{ kind }}" data-id="{{ r.id }}"
+                aria-label="Reset names for {{ r.id }}"
+                {% if not can_save %}disabled{% endif %}>Reset</button></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="muted section-description">None.</p>
+{% endif %}
+</details>
+{% endfor %}
+
+{% if can_save %}
+<div id="apply-bar" class="hidden">
+  <button id="apply-btn" data-needs-model>Apply</button>
+  <button id="discard-btn" class="secondary">Discard changes</button>
+  <span id="apply-info" class="muted" role="status" aria-live="polite"></span>
+</div>
+{% else %}
+<p class="muted">Names cannot be changed: this app was started without a path to
+save them to.</p>
+{% endif %}
+{% endblock %}
+
+{% block script %}
+<script>
+const namesSearch = document.getElementById("names-search");
+const searchStatus = document.getElementById("search-status");
+const sections = [...document.querySelectorAll(".names-section")];
+const inputs = [...document.querySelectorAll("input.names-input")];
+const targetCheckboxes = [...document.querySelectorAll(".target-checkbox")];
+
+function filterNames() {
+  const query = namesSearch.value.trim().toLocaleLowerCase();
+  let totalMatches = 0;
+  for (const section of sections) {
+    let sectionMatches = 0;
+    for (const row of section.querySelectorAll(".name-row")) {
+      const input = row.querySelector(".names-input");
+      const searchable = [
+        row.textContent,
+        input.value,
+        input.dataset.default
+      ].join(" ").toLocaleLowerCase();
+      const matches = !query || searchable.includes(query);
+      row.hidden = !matches;
+      if (matches) sectionMatches++;
+    }
+
+    const count = section.querySelector(".section-count");
+    const total = Number(count.dataset.total);
+    count.textContent = query ? "(" + sectionMatches + " of " + total + ")"
+                              : "(" + total + ")";
+    if (query && sectionMatches) section.open = true;
+    totalMatches += sectionMatches;
+  }
+  if (!query) {
+    searchStatus.textContent = "";
+  } else if (!totalMatches) {
+    searchStatus.textContent = "No matching items";
+  } else {
+    searchStatus.textContent = totalMatches + " matching "
+      + (totalMatches === 1 ? "item" : "items");
+  }
+}
+
+namesSearch.addEventListener("input", filterNames);
+
+{% if can_save %}
+// Applying re-reads Home Assistant and rebuilds the model prefix, so edits are
+// staged until Apply rather than taking effect per keystroke.
+const applyBar = document.getElementById("apply-bar");
+const applyBtn = document.getElementById("apply-btn");
+const discardBtn = document.getElementById("discard-btn");
+const applyInfo = document.getElementById("apply-info");
+const initial = new Map(inputs.map(input => [
+  input.dataset.kind + "|" + input.dataset.id,
+  {
+    value: input.value,
+    targetable: checkboxFor(input).checked
+  }
+]));
+const applyUrl = "{{ url_for('names_apply') }}";
+
+function splitNames(value) {
+  return value.split(",").map(s => s.trim()).filter(Boolean);
+}
+function keyOf(input) { return input.dataset.kind + "|" + input.dataset.id; }
+function checkboxFor(input) {
+  return input.closest(".name-row").querySelector(".target-checkbox");
+}
+
+function refresh() {
+  let changed = 0, excluded = 0, unnamed = 0;
+  for (const input of inputs) {
+    const checkbox = checkboxFor(input);
+    const targetable = checkbox.checked;
+    const names = splitNames(input.value);
+    const starting = initial.get(keyOf(input));
+    const isChanged = input.value !== starting.value
+      || targetable !== starting.targetable;
+    input.disabled = !targetable;
+    input.classList.toggle("changed", isChanged);
+    input.classList.toggle("invalid", targetable && names.length === 0);
+    input.closest(".name-row").classList.toggle("excluded", !targetable);
+    if (isChanged) changed++;
+    if (!targetable) excluded++;
+    if (targetable && names.length === 0) unnamed++;
+  }
+  applyBar.classList.toggle("hidden", changed === 0);
+  applyBtn.disabled = unnamed > 0;
+  if (changed) {
+    if (unnamed) {
+      applyInfo.textContent = unnamed + " targetable item(s) need a name. "
+        + "Add a name or uncheck Targetable.";
+    } else {
+      applyInfo.textContent = changed + " change(s)" +
+        (excluded ? ", " + excluded + " thing(s) excluded from the enums" : "") +
+        ". Applying re-reads Home Assistant and rebuilds the model prefix; " +
+        "recognition pauses until it finishes.";
+    }
+  }
+}
+
+function collect() {
+  const out = {entity: {}, area: {}, floor: {}};
+  for (const input of inputs) {
+    const targetable = checkboxFor(input).checked;
+    const names = splitNames(input.value);
+    const defaultNames = splitNames(input.dataset.default);
+    const isDefault = input.value.trim() === input.dataset.default.trim();
+    // Only send a target when it actually differs from Home Assistant, so the
+    // file stays a list of exceptions rather than a copy of the whole home.
+    if (!targetable) {
+      if (defaultNames.length) out[input.dataset.kind][input.dataset.id] = [];
+    } else if (!isDefault) {
+      out[input.dataset.kind][input.dataset.id] = names;
+    }
+  }
+  return out;
+}
+
+async function apply() {
+  applyBtn.disabled = true;
+  discardBtn.disabled = true;
+  applyInfo.textContent = "Applying… this can take minutes on slow hardware.";
+  beginModelChange("Applying names and rebuilding model context…");
+  try {
+    const resp = await fetch(applyUrl, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({names: collect()})
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || ("HTTP " + resp.status));
+    window.location.reload();
+  } catch (e) {
+    endModelChange();
+    applyInfo.innerHTML = "<span class='fail'>" + esc(e.message) + "</span>";
+    applyBtn.disabled = false;
+    discardBtn.disabled = false;
+  }
+}
+
+for (const input of inputs) {
+  input.addEventListener("input", () => {
+    refresh();
+    filterNames();
+  });
+}
+for (const checkbox of targetCheckboxes) {
+  checkbox.addEventListener("change", () => {
+    const input = checkbox.closest(".name-row").querySelector(".names-input");
+    if (checkbox.checked && splitNames(input.value).length === 0) {
+      input.value = input.dataset.default;
+    }
+    refresh();
+    filterNames();
+  });
+}
+for (const button of document.querySelectorAll("button.reset-one")) {
+  button.addEventListener("click", () => {
+    const input = inputs.find(i => i.dataset.kind === button.dataset.kind &&
+                                  i.dataset.id === button.dataset.id);
+    input.value = input.dataset.default;
+    checkboxFor(input).checked = splitNames(input.dataset.default).length > 0;
+    refresh();
+    filterNames();
+  });
+}
+applyBtn.addEventListener("click", apply);
+discardBtn.addEventListener("click", () => {
+  for (const input of inputs) {
+    const starting = initial.get(keyOf(input));
+    input.value = starting.value;
+    checkboxFor(input).checked = starting.targetable;
+  }
+  refresh();
+  filterNames();
+});
+{% endif %}
+</script>
+{% endblock %}

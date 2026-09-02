@@ -1,0 +1,44 @@
+---
+blueprint:
+  name: Multiple entities on/off
+  description: Turn one or more devices on or off by name
+  domain: script
+
+mode: parallel
+
+fields:
+  action:
+    name: Action
+    description: Whether to turn the devices on or off
+    required: true
+    selector:
+      select:
+        options:
+          - label: Turn on
+            value: "on"
+          - label: Turn off
+            value: "off"
+  entity_names:
+    name: Devices
+    description: Names of all devices to control
+    required: true
+    selector:
+      entity:
+        multiple: true
+        filter:
+          domain:
+            - fan
+            - input_boolean
+            - light
+            - media_player
+            - switch
+
+sequence:
+  - action: >-
+      {% if action == 'on' %}
+      homeassistant.turn_on
+      {% else %}
+      homeassistant.turn_off
+      {% endif %}
+    target:
+      entity_id: "{{ entity_names }}"

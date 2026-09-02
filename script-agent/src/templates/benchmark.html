@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Script Agent - Benchmark{% endblock %}
+{% block heading %}Benchmark{% endblock %}
+
+{% block content %}
+<p class="muted">Runs a fixed tool/sentence fixture against the loaded model.
+Live state is snapshotted and restored, so this does not disturb the running
+assistant &mdash; but voice handling pauses for the benchmark's duration.</p>
+<div class="controls">
+  <label>Passes <input id="passes" type="number" min="1" max="{{ max_passes }}" value="3"></label>
+  <button id="run" data-needs-model>Run benchmark</button>
+  <span id="status" role="status" aria-live="polite"></span>
+</div>
+<div id="summary" role="status" aria-live="polite"></div>
+<div id="results" role="region" aria-label="Benchmark results"></div>
+{% endblock %}
+
+{% block script %}
+<script>
+const runBtn = document.getElementById("run");
+const statusEl = document.getElementById("status");
+const summaryEl = document.getElementById("summary");
+const resultsEl = document.getElementById("results");
+const runUrl = "{{ url_for('benchmark_run') }}";
+
+function fmt(n, d) { return (n === null || n === undefined) ? "&mdash;" : n.toFixed(d); }
+function calls(list) {
+  if (!list || !list.length) return "<em>(none)</em>";
+  return list.map(c => "<code>" + esc(c.name) + " " +
+    esc(JSON.stringify(c.args || {})) + "</code>").join("<br>");
+}
+
+async function run() {
+  runBtn.disabled = true;
+  statusEl.textContent = "Running…";
+  summaryEl.innerHTML = "";
+  resultsEl.innerHTML = "";
+  const passes = parseInt(document.getElementById("passes").value, 10) || 3;
+  const started = performance.now();
+  try {
+    const resp = await fetch(runUrl, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({passes})
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || ("HTTP " + resp.status));
+    }
+    const data = await resp.json();
+    render(data);
+    const elapsed = ((performance.now() - started) / 1000).toFixed(1);
+    statusEl.textContent = "Done in " + elapsed + "s";
+  } catch (e) {
+    statusEl.textContent = "Error: " + e.message;
+  } finally {
+    runBtn.disabled = false;
+  }
+}
+
+function render(data) {
+  const s = data.summary;
+  const c = s.config || {};
+  summaryEl.innerHTML =
+    "<div class='summary'>" +
+    "<div><b>Correctness:</b> " + s.num_passed + " / " + s.num_sentences +
+      " passed (" + fmt(s.pass_rate * 100, 0) + "%)</div>" +
+    "<div><b>Latency (median of per-sentence medians):</b> " +
+      fmt(s.median_latency_ms, 0) + " ms &nbsp; " +
+      "<span class='muted'>mean " + fmt(s.mean_latency_ms, 0) +
+      " ms, max " + fmt(s.max_latency_ms, 0) + " ms</span></div>" +
+    "<div><b>Throughput:</b> " + fmt(s.overall_tokens_per_second, 1) +
+      " tok/s &nbsp; <span class='muted'>prefix rebuild " +
+      fmt(s.rebuild_seconds, 2) + " s, " + s.passes + " pass(es), " +
+      s.num_tools + " tools</span></div>" +
+    "<div class='muted'><b>Config:</b> " + esc(c.filename || "?") +
+      " &middot; n_ctx=" + c.n_ctx + " &middot; n_threads=" + c.n_threads +
+      " &middot; max_tokens=" + c.max_tokens + " &middot; flash_attn=" + c.flash_attn +
+      " &middot; temp=" + c.temperature +
+      " &middot; draft=" + (c.draft_model || "none") + "</div>" +
+    "</div>";
+
+  let rows = "";
+  for (const r of data.sentences) {
+    rows +=
+      "<tr>" +
+      "<td>" + esc(r.text) + "</td>" +
+      "<td class='" + (r.passed ? "pass" : "fail") + "'>" +
+        (r.passed ? "PASS" : "FAIL") + "</td>" +
+      "<td>" + calls(r.expected) + "</td>" +
+      "<td>" + calls(r.got) + "</td>" +
+      "<td class='num'>" + fmt(r.median_latency_ms, 0) + "</td>" +
+      "<td class='num muted'>" + fmt(r.min_latency_ms, 0) + " / " +
+        fmt(r.max_latency_ms, 0) + "</td>" +
+      "<td class='num'>" + r.completion_tokens + "</td>" +
+      "<td class='num'>" + fmt(r.tokens_per_second, 1) + "</td>" +
+      "</tr>";
+  }
+  resultsEl.innerHTML =
+    "<table><thead><tr>" +
+    "<th scope='col'>Sentence</th><th scope='col'>Result</th><th scope='col'>Expected</th><th scope='col'>Got</th>" +
+    "<th scope='col'>Median ms</th><th scope='col'>min / max</th><th scope='col'>Tokens</th><th scope='col'>tok/s</th>" +
+    "</tr></thead><tbody>" + rows + "</tbody></table>";
+}
+
+runBtn.addEventListener("click", run);
+</script>
+{% endblock %}

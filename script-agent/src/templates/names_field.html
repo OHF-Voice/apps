@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Script Agent - Field Names{% endblock %}
+{% block heading %}Names for one field{% endblock %}
+
+{% block style %}
+  .names-input { font-size: 0.95rem; padding: 0.35rem 0.4rem; border: 1px solid var(--border);
+                 border-radius: 6px; width: 100%; box-sizing: border-box; }
+  .names-input.changed { border-color: var(--accent); background: var(--accent-soft); }
+  .names-input.empty { border-color: var(--warning); background: var(--warning-bg); }
+  td.target-id { width: 24rem; }
+  td.reset { width: 5rem; }
+  #apply-bar { position: sticky; bottom: 0; background: var(--surface); padding: 0.75rem;
+               border: 1px solid var(--border); border-radius: 8px; margin-top: 1rem; display: flex;
+               gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+  #apply-bar.hidden { display: none; }
+  .default-names { font-size: 0.8rem; color: var(--muted); }
+{% endblock %}
+
+{% block content %}
+{% if tool is none %}
+<p class="warn">No field <code>{{ field }}</code> on script <code>{{ script }}</code>
+takes names. It may have been removed &mdash;
+<a href="{{ url_for('index') }}">back to Scripts</a>.</p>
+{% else %}
+<p class="muted">Names for <code>{{ field }}</code> on
+<code>{{ script }}</code> ({{ tool.friendly_name }}) only. Everything listed is a
+{{ kind }} this field could refer to, after its own filter. Changing a name here
+affects this one field; other scripts keep using the names from the
+<a href="{{ url_for('names_page') }}">Names</a> page.</p>
+
+<p class="muted">Comma-separated. <b>Clear a box</b> to keep that
+{{ kind }} out of this field, so this script can never target it. <b>Reset</b>
+goes back to the name used everywhere else.</p>
+
+<table>
+  <caption class="sr-only">Names available to {{ field }} on {{ script }}</caption>
+  <thead><tr><th scope="col">Home Assistant id</th><th scope="col">Names for this field</th><th scope="col">Actions</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td class="target-id"><code>{{ r.id }}</code>
+        {%- if r.overridden %}
+        <span class="tag">only here</span>
+        <br><span class="default-names">Elsewhere:
+        {{ r.global_names|join(", ") or "(excluded)" }}</span>
+        {%- endif %}</td>
+      <td><input type="text" class="names-input {% if r.excluded %}empty{% endif %}"
+                 aria-label="Names for {{ r.id }}"
+                 data-id="{{ r.id }}"
+                 data-global="{{ r.global_names|join(', ') }}"
+                 value="{{ r.names|join(', ') }}"
+                 placeholder="(excluded from this field)"
+                 {% if not can_save %}disabled{% endif %}></td>
+      <td class="reset">
+        <button class="reset-one" data-id="{{ r.id }}"
+                aria-label="Reset names for {{ r.id }}"
+                {% if not can_save %}disabled{% endif %}>Reset</button></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% if can_save %}
+<div id="apply-bar" class="hidden">
+  <button id="apply-btn" data-needs-model>Apply</button>
+  <button id="discard-btn" class="secondary">Discard changes</button>
+  <span id="apply-info" class="muted" role="status" aria-live="polite"></span>
+</div>
+{% else %}
+<p class="muted">Names cannot be changed: this app was started without a path to
+save them to.</p>
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block script %}
+<script>
+{% if tool is not none and can_save %}
+// Applying re-reads Home Assistant and rebuilds the model prefix, so edits are
+// staged until Apply rather than taking effect per keystroke.
+const applyBar = document.getElementById("apply-bar");
+const applyBtn = document.getElementById("apply-btn");
+const discardBtn = document.getElementById("discard-btn");
+const applyInfo = document.getElementById("apply-info");
+const inputs = [...document.querySelectorAll("input.names-input")];
+const initial = new Map(inputs.map(i => [i.dataset.id, i.value]));
+const applyUrl = "{{ url_for('names_field_apply') }}";
+const SCRIPT = {{ script | tojson }};
+const FIELD = {{ field | tojson }};
+
+function splitNames(value) {
+  return value.split(",").map(s => s.trim()).filter(Boolean);
+}
+
+function refresh() {
+  let changed = 0, excluded = 0;
+  for (const input of inputs) {
+    const isChanged = input.value !== initial.get(input.dataset.id);
+    input.classList.toggle("changed", isChanged);
+    input.classList.toggle("empty", splitNames(input.value).length === 0);
+    if (isChanged) changed++;
+    if (splitNames(input.value).length === 0) excluded++;
+  }
+  applyBar.classList.toggle("hidden", changed === 0);
+  if (changed) {
+    applyInfo.textContent = changed + " change(s)" +
+      (excluded ? ", " + excluded + " excluded from this field" : "") +
+      ". Applying rebuilds the model prefix; recognition pauses until it finishes.";
+  }
+}
+
+function collect() {
+  const out = {};
+  for (const input of inputs) {
+    // Only send a target whose names differ from the ones used elsewhere, so the
+    // file records exceptions rather than a copy of every name.
+    if (input.value.trim() !== input.dataset.global.trim()) {
+      out[input.dataset.id] = splitNames(input.value);
+    }
+  }
+  return out;
+}
+
+async function apply() {
+  applyBtn.disabled = true;
+  discardBtn.disabled = true;
+  applyInfo.textContent = "Applying… this can take minutes on slow hardware.";
+  beginModelChange("Applying field names and rebuilding model context…");
+  try {
+    const resp = await fetch(applyUrl, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({script: SCRIPT, field: FIELD, names: collect()})
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || ("HTTP " + resp.status));
+    window.location.reload();
+  } catch (e) {
+    endModelChange();
+    applyInfo.innerHTML = "<span class='fail'>" + esc(e.message) + "</span>";
+    applyBtn.disabled = false;
+    discardBtn.disabled = false;
+  }
+}
+
+for (const input of inputs) input.addEventListener("input", refresh);
+for (const button of document.querySelectorAll("button.reset-one")) {
+  button.addEventListener("click", () => {
+    const input = inputs.find(i => i.dataset.id === button.dataset.id);
+    input.value = input.dataset.global;
+    refresh();
+  });
+}
+applyBtn.addEventListener("click", apply);
+discardBtn.addEventListener("click", () => {
+  for (const input of inputs) input.value = initial.get(input.dataset.id);
+  refresh();
+});
+{% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,27 @@
+---
+blueprint:
+  name: Lights on/off
+  description: Turn the lights on or off
+  domain: script
+
+mode: parallel
+
+fields:
+  action:
+    name: Action
+    required: true
+    selector:
+      select:
+        options:
+          - "on"
+          - "off"
+
+sequence:
+  - action: >-
+      {% if action == 'on' %}
+      light.turn_on
+      {% else %}
+      light.turn_off
+      {% endif %}
+    target:
+      area_id: "{{ satellite.area_id }}"

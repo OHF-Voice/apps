@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% block title %}Script Agent - Test{% endblock %}
+{% block heading %}Test a command{% endblock %}
+
+{% block style %}
+  .tester { max-width: 960px; }
+  .test-form { display: grid;
+               grid-template-columns: minmax(16rem, 1fr) minmax(12rem, auto) 8rem auto;
+               gap: 0.65rem; align-items: end; }
+  .test-field { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+  .test-field label { color: var(--muted); font-size: 0.8rem; font-weight: 600; }
+  #sentence, #language, #test-satellite { font: inherit; padding: 0.55rem 0.65rem;
+                                          border-radius: 7px; min-width: 0; }
+  #test-status { min-height: 1.4rem; margin-top: 0.75rem; }
+  .variable-object { display: grid; gap: 0.35rem; margin: 0; padding-left: 0.75rem;
+                     border-left: 2px solid var(--border); }
+  .variable-object > div { display: grid; grid-template-columns: minmax(7rem, auto) 1fr;
+                           gap: 0.65rem; align-items: baseline; }
+  .variable-object dt { color: var(--muted); font-family: ui-monospace, monospace; }
+  .variable-object dd { margin: 0; min-width: 0; }
+  .satellite-variable { margin-top: 1rem; padding: 0.85rem;
+                        background: var(--surface-subtle); border: 1px solid var(--border);
+                        border-radius: 7px; }
+  .satellite-variable h3 { display: flex; align-items: baseline; gap: 0.5rem;
+                           margin: 0 0 0.65rem; font-size: 0.9rem; }
+  .satellite-variable h3 span { font-size: 0.78rem; font-weight: normal; }
+  .run-controls { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.75rem; }
+  @media (max-width: 700px) {
+    .test-form { grid-template-columns: 1fr 8rem; }
+    .command-field, .satellite-field { grid-column: 1 / -1; }
+    #test-btn { grid-column: 1 / -1; }
+  }
+  .run-script { margin-top: 1rem; }
+{% endblock %}
+
+{% block content %}
+<p class="page-intro">See which script the model would choose and how its variables
+resolve. Testing alone never runs the script; use <b>Run in Home Assistant</b>
+on a successful result to execute it.</p>
+
+<div class="card tester">
+  <div class="card-body">
+    <form id="test-form" class="test-form">
+      <div class="test-field command-field">
+        <label for="sentence">Command to test</label>
+        <input id="sentence" type="text" autocomplete="off" autofocus
+               placeholder="Type a command, e.g. notify Mike that dinner is ready">
+      </div>
+      <div class="test-field satellite-field">
+        <label for="test-satellite">Satellite</label>
+        <select id="test-satellite"
+                title="Satellite context used to resolve names and script variables">
+        <option value="">No satellite</option>
+        {% for satellite in satellites %}
+        <option value="{{ satellite.id }}">{{ satellite.name }} ({{ satellite.id }})</option>
+        {% endfor %}
+        </select>
+      </div>
+      <div class="test-field">
+        <label for="language">Response language</label>
+        <input id="language" type="text" value="en" title="Response language code"
+               autocomplete="off">
+      </div>
+      <button id="test-btn" type="submit" data-needs-model>Test command</button>
+    </form>
+    <div id="test-status" class="muted" role="status" aria-live="polite"></div>
+  </div>
+</div>
+<div id="result" class="tester" role="region" aria-live="polite"
+     aria-label="Test result"></div>
+{% endblock %}
+
+{% block script %}
+<script>
+const testBtn = document.getElementById("test-btn");
+const testForm = document.getElementById("test-form");
+const sentenceEl = document.getElementById("sentence");
+const languageEl = document.getElementById("language");
+const testStatusEl = document.getElementById("test-status");
+const resultEl = document.getElementById("result");
+const testUrl = "{{ url_for('test') }}";
+const runUrl = "{{ url_for('test_run') }}";
+const satelliteEl = document.getElementById("test-satellite");
+
+function renderValue(value) {
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    const entries = Object.entries(value);
+    if (!entries.length) return "<span class='muted'>Empty object</span>";
+    return "<dl class='variable-object'>" +
+      entries.map(([key, nestedValue]) =>
+        "<div><dt>" + esc(key) + "</dt><dd>" + renderValue(nestedValue) +
+        "</dd></div>").join("") + "</dl>";
+  }
+  return "<code>" + esc(JSON.stringify(value)) + "</code>";
+}
+
+function renderVariables(vars) {
+  const entries = Object.entries(vars).filter(([key]) => key !== "satellite");
+  const hasSatellite = Object.prototype.hasOwnProperty.call(vars, "satellite");
+  if (!entries.length && !hasSatellite) {
+    return "<div class='muted'>No variables.</div>";
+  }
+
+  let html = "";
+  if (entries.length) {
+    html += "<div class='table-scroll'><table><caption class='sr-only'>Resolved script variables</caption><thead><tr><th scope='col'>Variable</th><th scope='col'>Value</th></tr></thead><tbody>" +
+      entries.map(([k, v]) =>
+        "<tr><td>" + esc(k) + "</td><td>" + renderValue(v) +
+        "</td></tr>").join("") + "</tbody></table></div>";
+  }
+  if (hasSatellite) {
+    html += "<section class='satellite-variable' aria-label='Satellite variable'>" +
+      "<h3><code>satellite</code><span class='muted'>Special variable</span></h3>" +
+      renderValue(vars.satellite) + "</section>";
+  }
+  return html;
+}
+
+function renderCall(call) {
+  let html = "<div class='summary'>";
+  html += "<div><b>" + (call.can_run ? "<span class='pass'>Would run</span>"
+                                     : "<span class='fail'>Would not run</span>") +
+          "</b> <code>" + esc(call.script_id) + "</code></div>";
+  if (call.unknown_tool) {
+    html += "<div class='fail'>The model made this name up; it is not a targeted script.</div>";
+  }
+  if (call.missing_required.length) {
+    html += "<div class='fail'>Required field(s) " +
+      esc(call.missing_required.join(", ")) +
+      " could not be resolved to anything in this home.</div>";
+  }
+  for (const [field, ids] of Object.entries(call.ambiguous || {})) {
+    html += "<div class='fail'>" + esc(field) + " matched " + ids.length +
+      " things and the selected satellite did not pick one: <code>" +
+      esc(ids.join(", ")) + "</code>. Select a satellite above or give them distinct names.</div>";
+  }
+  const unresolved = Object.entries(call.unresolved);
+  if (unresolved.length) {
+    html += "<div class='muted'>Dropped (not a known name): " +
+      unresolved.map(([k, v]) => esc(k) + "=" + esc(JSON.stringify(v))).join(", ") +
+      "</div>";
+  }
+  html += renderVariables(call.variables);
+  if (call.can_run && call.run_id) {
+    html += "<div class='run-controls'><button type='button' class='run-script' " +
+      "data-run-id='" + call.run_id + "'>Run in Home Assistant</button>" +
+      "<span class='run-status muted' role='status' aria-live='polite'></span></div>";
+  }
+  html += "</div>";
+  return html;
+}
+
+async function runScript(button) {
+  const status = button.parentElement.querySelector(".run-status");
+  button.disabled = true;
+  status.textContent = "Running…";
+  try {
+    const resp = await fetch(runUrl, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({run_id: button.dataset.runId})
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || ("HTTP " + resp.status));
+    status.innerHTML = "<span class='pass'>Ran " + esc(data.script_id) + ".</span>";
+  } catch (error) {
+    status.innerHTML = "<span class='fail'>" + esc(error.message) +
+      " Test the command again to retry.</span>";
+  }
+}
+
+async function test() {
+  const text = sentenceEl.value.trim();
+  if (!text) {
+    sentenceEl.focus();
+    return;
+  }
+  testBtn.disabled = true;
+  testStatusEl.textContent = "Recognizing…";
+  resultEl.innerHTML = "";
+  try {
+    const resp = await fetch(testUrl, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        text,
+        language: languageEl.value.trim() || "en",
+        satellite_id: satelliteEl.value
+      })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || ("HTTP " + resp.status));
+
+    testStatusEl.textContent = "Completed in " + data.latency_ms.toFixed(0) + " ms";
+    if (!data.calls.length) {
+      resultEl.innerHTML = "<div class='summary'><b>No script matched.</b>" +
+        (data.text ? "<div class='muted'>Model said: " + esc(data.text) + "</div>" : "") +
+        "</div>";
+      return;
+    }
+    resultEl.innerHTML = data.calls.map(renderCall).join("");
+  } catch (e) {
+    testStatusEl.textContent = "";
+    resultEl.innerHTML = "<div class='warn'>" + esc(e.message) + "</div>";
+  } finally {
+    testBtn.disabled = false;
+  }
+}
+
+testForm.addEventListener("submit", event => {
+  event.preventDefault();
+  test();
+});
+
+resultEl.addEventListener("click", event => {
+  const button = event.target.closest(".run-script");
+  if (button) runScript(button);
+});
+</script>
+{% endblock %}

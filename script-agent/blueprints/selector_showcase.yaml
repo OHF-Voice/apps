@@ -1,0 +1,65 @@
+---
+blueprint:
+  name: Selector showcase
+  description: Write example selector values to the Home Assistant log
+  domain: script
+
+mode: parallel
+
+fields:
+  messages:
+    name: Messages
+    description: One or more messages to record
+    required: true
+    selector:
+      text:
+        multiple: true
+  categories:
+    name: Categories
+    description: One or more categories for the messages
+    selector:
+      select:
+        multiple: true
+        options:
+          - label: Information
+            value: info
+          - label: Reminder
+            value: reminder
+          - label: Warning
+            value: warning
+  floors:
+    name: Floors
+    description: One or more floor names associated with the messages
+    selector:
+      floor:
+        multiple: true
+  date:
+    name: Date
+    selector:
+      date:
+  time:
+    name: Time
+    selector:
+      time:
+  date_and_time:
+    name: Date and time
+    selector:
+      datetime:
+  duration:
+    name: Duration
+    selector:
+      duration:
+
+sequence:
+  - action: system_log.write
+    data:
+      level: info
+      logger: script.selector_showcase
+      message: >-
+        messages={{ messages }};
+        categories={{ categories | default([]) }};
+        floors={{ floors | default([]) }};
+        date={{ date | default('') }};
+        time={{ time | default('') }};
+        date_and_time={{ date_and_time | default('') }};
+        duration={{ duration | default('') }}

@@ -1,0 +1,40 @@
+---
+version: 1.1.0
+slug: script-agent
+name: Script Agent
+description: Run Home Assistant scripts by voice with a local language model
+url: https://github.com/OHF-Voice/apps/tree/main/script-agent
+arch:
+  - amd64
+  - aarch64
+init: false
+discovery:
+  - wyoming
+homeassistant_api: true
+options:
+  hf_repo: "bartowski/google_gemma-4-E2B-it-GGUF"
+  hf_model: "google_gemma-4-E2B-it-Q5_K_M.gguf"
+  tool_call_cache_size: 100
+  hf_token: ""
+  n_ctx: 0
+  n_ctx_overhead: 128
+  n_threads: 0
+  max_tokens: 128
+  flash_attention: true
+  debug_logging: false
+schema:
+  hf_repo: str
+  hf_model: str
+  tool_call_cache_size: int
+  hf_token: str
+  n_ctx: int
+  n_ctx_overhead: int
+  n_threads: int
+  max_tokens: int
+  flash_attention: bool
+  debug_logging: bool
+ports:
+  "10500/tcp": null
+homeassistant: 2026.5.0
+ingress: true
+ingress_port: 5000

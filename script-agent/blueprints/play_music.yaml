@@ -1,0 +1,75 @@
+---
+blueprint:
+  name: Play music
+  description: Search for music and play it
+  domain: script
+
+mode: parallel
+
+fields:
+  artist:
+    name: Artist
+    selector:
+      text:
+  album:
+    name: Album
+    selector:
+      text:
+  track:
+    name: Track
+    selector:
+      text:
+
+sequence:
+  - variables:
+      media_type: >-
+        {% if track is defined and track %}
+          track
+        {% elif album is defined and album %}
+          album
+        {% elif artist is defined and artist %}
+          artist
+        {% else %}
+          track
+        {% endif %}
+
+      name: >-
+        {% if media_type == 'track' %}
+          {{ track }}
+        {% elif media_type == 'album' %}
+          {{ album }}
+        {% elif media_type == 'artist' %}
+          {{ artist }}
+        {% endif %}
+  - if:
+      - condition: template
+        value_template: "{{ name.strip() | length > 0 }}"
+    then:
+      - action: music_assistant.search
+        metadata: {}
+        data:
+          limit: 1
+          library_only: false
+          config_entry_id: "{{ satellite.music_assistant_id }}"
+          media_type: "{{ media_type }}"
+          name: "{{ name }}"
+          artist: "{% if media_type != 'artist' %}{{ artist | default('', true) }}{% endif %}"
+          album: "{% if media_type != 'album' %}{{ album | default('', true) }}{% endif %}"
+        response_variable: search_results
+      - if:
+          - condition: template
+            value_template: >-
+              {{ (search_results.artists | count > 0) or (search_results.albums | count > 0) or (search_results.tracks | count > 0) }}
+        then:
+          - action: music_assistant.play_media
+            target:
+              entity_id: "{{ satellite.music_player_id }}"
+            data:
+              media_id: |-
+                {% if search_results.tracks %}
+                {{ search_results.tracks[0].uri }}
+                {% elif search_results.albums %}
+                {{ search_results.albums[0].uri }}
+                {% elif search_results.artists %}
+                {{ search_results.artists[0].uri }}
+                {% endif %}

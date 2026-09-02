@@ -1,0 +1,69 @@
+---
+blueprint:
+  name: Create calendar event
+  description: Add an event to a calendar at a date and time for some length of time
+  domain: script
+
+mode: parallel
+
+fields:
+  calendar:
+    name: Calendar
+    description: Name of the calendar to add the event to
+    required: true
+    selector:
+      entity:
+        filter:
+          domain: calendar
+
+  start:
+    name: Start
+    description: Date and time the event starts
+    required: true
+    selector:
+      datetime:
+
+  duration:
+    name: Duration
+    description: How long the event lasts
+    required: true
+    selector:
+      duration:
+
+  summary:
+    name: Summary
+    description: Title of the event
+    required: true
+    selector:
+      text:
+
+sequence:
+  - variables:
+      event_start: "{{ as_datetime(start).isoformat() }}"
+      # A duration selector holds a mapping in Home Assistant's UI, but the model
+      # fills the field in as an "HH:MM:SS" string, so accept both.
+      event_end: >-
+        {%- if duration is mapping -%}
+          {%- set length = timedelta(
+                days=duration.get('days', 0) | int(0),
+                hours=duration.get('hours', 0) | int(0),
+                minutes=duration.get('minutes', 0) | int(0),
+                seconds=duration.get('seconds', 0) | int(0)
+              ) -%}
+        {%- else -%}
+          {#- Home Assistant reads "01:00" as MM:SS, but a model that leaves the
+              seconds off means one hour, so fill them in. -#}
+          {%- set text = duration | string -%}
+          {%- set length = as_timedelta(
+                (text ~ ':00') if text.count(':') == 1 else text
+              ) -%}
+        {%- endif -%}
+        {{ (as_datetime(start) + length).isoformat() }}
+
+  - action: calendar.create_event
+    target:
+      entity_id: "{{ calendar }}"
+    data:
+      summary: "{{ summary }}"
+      start_date_time: "{{ event_start }}"
+      end_date_time: "{{ event_end }}"

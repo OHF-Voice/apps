@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""Recompile the pinned requirements from the .in files.
+
+The order is the reason this script exists: requirements.in reads
+requirements.llama.txt, so llama has to be compiled first or the main file is
+pinned against a stale copy of it.
+
+Arguments are passed to pip-compile, so `script/update-deps --upgrade` bumps
+every pin and `script/update-deps --upgrade-package flask` bumps just one.
+Bumping llama-cpp-python is expensive twice over: it is compiled from source
+when the app is installed, and it is part of the model state hash, so every
+user pays a prompt cache rebuild on their next boot. Say so in the changelog.
+"""
+
+import subprocess
+import sys
+import venv
+from pathlib import Path
+
+_DIR = Path(__file__).parent
+_PROGRAM_DIR = _DIR.parent
+_VENV_DIR = _PROGRAM_DIR / ".venv"
+
+# Compiled in this order; the first is an input to the second.
+_REQUIREMENTS = ["requirements.llama.in", "requirements.in"]
+
+if _VENV_DIR.exists():
+    context = venv.EnvBuilder().ensure_directories(_VENV_DIR)
+    python_exe = context.env_exe
+else:
+    python_exe = "python3"
+
+for requirements_in in _REQUIREMENTS:
+    subprocess.check_call(
+        [python_exe, "-m", "piptools", "compile", requirements_in] + sys.argv[1:],
+        cwd=_PROGRAM_DIR,
+    )

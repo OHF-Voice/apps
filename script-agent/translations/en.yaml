@@ -1,0 +1,50 @@
+---
+configuration:
+  hf_repo:
+    name: Gemma4 repo id
+    description: >-
+      Hugging Face repository id for Gemma4 (GGUF).
+      Official repo: https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF
+  hf_model:
+    name: Gemma4 filename
+    description: >-
+      Model filename for Gemma4 (GGUF) in the repo.
+      Official model: gemma-4-E2B-it-Q8_0.gguf
+  tool_call_cache_size:
+    name: Tool call cache size
+    description: >-
+      Number of sentences to remember tool calls for to avoid LLM overhead.
+  hf_token:
+    name: HuggingFace token
+    description: >-
+      API token for HuggingFace for faster model downloading.
+  n_ctx:
+    name: Context size
+    description: >-
+      Size of model context in tokens (0 = auto).
+  n_ctx_overhead:
+    name: Context overhead
+    description: >-
+      Number of tokens expected beyond user prompt (only when n_ctx = auto).
+  n_threads:
+    name: CPU threads
+    description: >-
+      CPU threads used by the model (0 = llama.cpp default). More threads gives
+      little speedup and can cause latency spikes on a box shared with Home
+      Assistant; leaving a core or two free is usually more consistent.
+  max_tokens:
+    name: Maximum tokens
+    description: >-
+      Maximum number of tokens the model is allowed to generate. Complex scripts
+      with many fields need a larger value to avoid truncated tool calls.
+  flash_attention:
+    name: Flash attention
+    description: >-
+      Use llama.cpp flash attention. Enabled by default for lower latency and a
+      faster model-prefix rebuild; it does not add a separate compilation step.
+  debug_logging:
+    name: Debug logging
+    description: >-
+      Enable debug logging.
+network:
+  10500/tcp: script-agent Wyoming Protocol

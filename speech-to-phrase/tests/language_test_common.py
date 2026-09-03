@@ -140,7 +140,6 @@ def build_matcher(
 ) -> intent_matcher.IntentMatcher:
     fixtures = fixtures or load_fixtures(language)
     matcher = intent_matcher.build_matcher(
-        SERVER_ROOT,
         language,
         enabled_all(language),
         fixtures.entities,
@@ -277,9 +276,7 @@ def build_harness(language: str, grammar_path: Path) -> LanguageHarness:
     model_dir = models.resolve(None, MODELS_DIR, language, backend, tools_dir=TOOLS_DIR)
     if model_dir is None:
         raise ValueError(f"No acoustic model for {language}/{backend}")
-
     templates, list_values = training.assemble(
-        SERVER_ROOT,
         language,
         enabled_all(language),
         [],

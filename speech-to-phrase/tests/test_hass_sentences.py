@@ -143,7 +143,7 @@ async def main() -> int:
 
     # ...and they reach the assembled grammar.
     enabled = [["HassTurnOn", "name_only"]]
-    args = (ROOT, "en", enabled, [], training.DEV_ENTITY_RECORDS,
+    args = ("en", enabled, [], training.DEV_ENTITY_RECORDS,
             training.DEV_SLOT_LISTS)
     base, _ = training.assemble(*args)
     with_ha, _ = training.assemble(*args, hass_sentences=triggers + answers)
@@ -154,7 +154,7 @@ async def main() -> int:
     # Per-sentence grammar cost, for the UI. A sentence that costs 0 is one the
     # UI has to flag: it is in Home Assistant but cannot be recognized.
     costs = training.hass_sentence_costs(
-        ROOT, "en",
+        "en",
         ["movie time", "start [the] movie", "turn on {mystery}", "lights in the {area}"],
         training.DEV_ENTITY_RECORDS, training.DEV_SLOT_LISTS,
     )

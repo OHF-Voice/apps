@@ -25,6 +25,7 @@ import hashlib
 import json
 import logging
 import os
+import tempfile
 import threading
 import time
 from functools import lru_cache
@@ -71,6 +72,12 @@ EntityRecords = List[JsonDict]
 RouteResult = Union[Response, Tuple[Response, int]]
 StartResponse = Callable[..., Any]
 WSGIApp = Callable[[Dict[str, Any], StartResponse], Iterable[bytes]]
+_ENTITY_CACHE = ".ha-entity-records.json"
+_AREA_FLOOR_CACHE = ".ha-area-floor-lists.json"
+
+
+class HomeAssistantUnavailable(RuntimeError):
+    """Live registry data and a last-known-good cache are both unavailable."""
 
 
 @lru_cache(maxsize=1)
@@ -78,7 +85,7 @@ def supported_languages() -> Tuple[str, ...]:
     """Languages that ship Speech-to-Phrase templates. Cached: it is the
     allowlist every request validates against, and it cannot change without a
     restart (it comes from the installed home-assistant-intents package)."""
-    return tuple(bi.languages(ADDON_ROOT))
+    return tuple(bi.languages())
 
 
 def _known_lang(lang: str) -> bool:
@@ -171,14 +178,26 @@ def create_app(cfg: argparse.Namespace) -> Flask:
     # Train the configured language now if its inputs changed (first boot,
     # entity/area/floor renames, config edits), then watch for further changes.
     if cfg.model:
-        _ensure_trained(
-            cfg,
-            cfg.language,
-            meta,
-            _current_records(cfg),
-            _current_slot_lists(cfg),
-            data_dir,
-        )
+        try:
+            records = _current_records(cfg)
+            slot_lists = _current_slot_lists(cfg)
+        except HomeAssistantUnavailable:
+            grammar = data_dir / cfg.language / "grammar.fst"
+            if not grammar.exists():
+                raise
+            _LOGGER.warning(
+                "Home Assistant registry unavailable; serving the existing "
+                "grammar until the next successful refresh"
+            )
+        else:
+            _ensure_trained(
+                cfg,
+                cfg.language,
+                meta,
+                records,
+                slot_lists,
+                data_dir,
+            )
         _start_watch(cfg, meta, data_dir)
 
     # ---- per-language persistence -------------------------------------------
@@ -229,7 +248,7 @@ def create_app(cfg: argparse.Namespace) -> Flask:
         lang = request.args.get("lang") or cfg.language
         if lang != cfg.language:
             return wrong_lang(lang)
-        combos = bi.available_combos(ADDON_ROOT, lang, meta)
+        combos = bi.available_combos(lang, meta)
         amap = training.enabled_domain_map(read_enabled(lang, combos))
         ov = _overrides(cfg, lang)
         range_definitions = s2p_intents.range_list_definitions(lang)
@@ -251,7 +270,6 @@ def create_app(cfg: argparse.Namespace) -> Flask:
             # splits a combo into one card per domain), or a single number for
             # combos that target none ("what time is it").
             c["cost"] = training.combo_cost(
-                ADDON_ROOT,
                 lang,
                 c["intent"],
                 c["combo"],
@@ -263,7 +281,6 @@ def create_app(cfg: argparse.Namespace) -> Flask:
             )
             c["cost_by_domain"] = {
                 d: training.combo_cost(
-                    ADDON_ROOT,
                     lang,
                     c["intent"],
                     c["combo"],
@@ -452,7 +469,6 @@ def create_app(cfg: argparse.Namespace) -> Flask:
         entities = _current_records(cfg, lang)
         slot_lists = _current_slot_lists(cfg, lang)
         templates, _ = training.assemble(
-            ADDON_ROOT,
             lang,
             enabled,
             commands,
@@ -520,6 +536,21 @@ def _load_json(path: Optional[Union[str, Path]], default: Any) -> Any:
     return default
 
 
+def _write_json(path: Path, value: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w", encoding="utf-8", dir=path.parent, delete=False
+        ) as tmp:
+            json.dump(value, tmp)
+            tmp_path = Path(tmp.name)
+        tmp_path.replace(path)
+    finally:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
+
+
 def _current_records(
     cfg: argparse.Namespace, lang: Optional[str] = None
 ) -> EntityRecords:
@@ -543,12 +574,20 @@ def _raw_records(cfg: argparse.Namespace) -> EntityRecords:
     """Entity records straight from Home Assistant / the fixture, before the
     user's voice-targeting overrides are applied."""
     if cfg.hass_token:
+        cache_path = Path(cfg.data) / _ENTITY_CACHE
         try:
             recs = training.entity_records_from_hass(cfg.hass_api, cfg.hass_token)
             _LOGGER.debug("Loaded %d entity records from Home Assistant", len(recs))
+            _write_json(cache_path, recs)
             return recs
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("entity fetch failed; falling back to fixture/dev")
+        except Exception as err:  # noqa: BLE001
+            cached = _load_json(cache_path, None)
+            if not isinstance(cached, list):
+                raise HomeAssistantUnavailable(
+                    "entity registry fetch failed and no valid cache exists"
+                ) from err
+            _LOGGER.exception("entity fetch failed; using last-known-good cache")
+            return cached
     data = _load_json(cfg.entities_file, None)
     if data is None:
         return training.DEV_ENTITY_RECORDS
@@ -614,9 +653,8 @@ def _attributor(cfg: argparse.Namespace, lang: str) -> Optional[sources.Attribut
     if key in _attributors:
         return _attributors[key]
     try:
-        combos = bi.available_combos(ADDON_ROOT, lang, bi.load_intents_meta())
+        combos = bi.available_combos(lang, bi.load_intents_meta())
         by_source, list_values = training.assemble_sources(
-            ADDON_ROOT,
             lang,
             _read_enabled(data_dir, lang, combos, cfg.default_importance),
             cc.load(data_dir, lang),
@@ -655,7 +693,7 @@ def _hass_sentences_state(
     out: Dict[str, Any] = {"sources": {}, "phrases": 0}
     for source in hs.SOURCES:
         costs = training.hass_sentence_costs(
-            ADDON_ROOT, lang, grouped[source], records, slot_lists, ov=ov
+            lang, grouped[source], records, slot_lists, ov=ov
         )
         out["sources"][source] = {
             "enabled": flags[source],
@@ -685,14 +723,29 @@ def _raw_slot_lists(cfg: argparse.Namespace) -> Dict[str, List[str]]:
         for k, v in _load_json(cfg.slot_lists_file, training.DEV_SLOT_LISTS).items()
     }
     if cfg.hass_token:
+        cache_path = Path(cfg.data) / _AREA_FLOOR_CACHE
         try:
             areas, floors = training.areas_floors_from_hass(
                 cfg.hass_api, cfg.hass_token
             )
             lists["area"], lists["floor"] = areas, floors
             _LOGGER.debug("Loaded %d areas, %d floors from HA", len(areas), len(floors))
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("area/floor fetch failed; keeping fixture areas/floors")
+            _write_json(cache_path, {"area": areas, "floor": floors})
+        except Exception as err:  # noqa: BLE001
+            cached = _load_json(cache_path, None)
+            if not (
+                isinstance(cached, dict)
+                and isinstance(cached.get("area"), list)
+                and isinstance(cached.get("floor"), list)
+                and all(isinstance(v, str) for v in cached["area"])
+                and all(isinstance(v, str) for v in cached["floor"])
+            ):
+                raise HomeAssistantUnavailable(
+                    "area/floor registry fetch failed and no valid cache exists"
+                ) from err
+            _LOGGER.exception("area/floor fetch failed; using last-known-good cache")
+            lists["area"] = list(cached["area"])
+            lists["floor"] = list(cached["floor"])
     return lists
 
 
@@ -719,8 +772,6 @@ def _usage(
 
     def refs(sentence: str) -> Set[str]:
         return set(re.findall(r"\{([^}]+)\}", sentence))
-
-    import s2p_intents
 
     area_used: List[str] = []
     floor_used: List[str] = []
@@ -877,11 +928,10 @@ def _ensure_trained(
     """(Re)train `lang` iff the grammar is missing or its input fingerprint
     changed (templates, enabled combos, custom text, or entity/area/floor lists).
     Returns True if it (re)trained. Logged at INFO so retrains are visible."""
-    combos = bi.available_combos(ADDON_ROOT, lang, meta)
+    combos = bi.available_combos(lang, meta)
     enabled = _read_enabled(data_dir, lang, combos, cfg.default_importance)
     commands = _custom_commands(data_dir, lang)
     templates, list_values = training.assemble(
-        ADDON_ROOT,
         lang,
         enabled,
         commands,
@@ -1133,7 +1183,6 @@ def main() -> None:
             cfg.intent_uri,
             cfg.language,
             Path(cfg.data),
-            ADDON_ROOT,
             get_entities=lambda: _current_records(cfg),
             get_slot_lists=lambda: _current_slot_lists(cfg),
             api_url=cfg.hass_api,

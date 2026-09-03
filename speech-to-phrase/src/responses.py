@@ -8,18 +8,16 @@ handling, with live state. A matched built-in combo selects one by its response
 """
 
 import logging
-from pathlib import Path
 from typing import Dict, Optional
 
 _LOGGER = logging.getLogger("speech-to-phrase.intent")
 
 
-def load_responses(s2p_repo: Path, lang: str) -> Dict[str, Dict[str, str]]:
+def load_responses(lang: str) -> Dict[str, Dict[str, str]]:
     """Return {intent: {response_key: template}} for a language.
 
     Sourced from the home-assistant-intents package (the ``speech_to_phrase``
-    tagged responses), not the add-on's ``responses/`` tree. ``s2p_repo`` is kept
-    for signature compatibility.
+    tagged responses), not the add-on's ``responses/`` tree.
     """
     import s2p_intents
 

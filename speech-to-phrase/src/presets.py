@@ -656,7 +656,7 @@ def _combo_domains(combo_def: dict) -> List[str]:
     return sorted(out)
 
 
-def available_combos(s2p_repo: Path, lang: str, meta: dict) -> List[dict]:
+def available_combos(lang: str, meta: dict) -> List[dict]:
     """Every (intent, combo) the package ships tagged templates for, in `lang`."""
     import s2p_intents
 
@@ -683,7 +683,7 @@ def available_combos(s2p_repo: Path, lang: str, meta: dict) -> List[dict]:
     return combos
 
 
-def languages(s2p_repo: Path) -> List[str]:
+def languages() -> List[str]:
     import s2p_intents
 
     return s2p_intents.languages()

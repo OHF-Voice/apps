@@ -41,7 +41,7 @@ async def _recognize(text, context=None, *, via="transcript"):
 
 async def main() -> int:
     intent_server.start_background(
-        URI, "en", ROOT / "tests" / "_intent_data", ROOT,
+        URI, "en", ROOT / "tests" / "_intent_data",
         get_entities=lambda: training.DEV_ENTITY_RECORDS,
         get_slot_lists=lambda: training.DEV_SLOT_LISTS,
         api_url="http://unused", token=None,

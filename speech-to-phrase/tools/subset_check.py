@@ -185,10 +185,10 @@ def check_combo(s2p: Fst, ha: Fst, n_examples: int = 10) -> List[str]:
             f"fstshortestpath --nshortest={n_examples} {d}/diff.fst "
             f"| fstprint --acceptor"
         ).decode()
-        return _paths_to_sentences(printed, {i: s for s, i in syms.items()})
+        return _paths_to_sentences(printed)
 
 
-def _paths_to_sentences(fstprint: str, id2sym: Dict[int, str]) -> List[str]:
+def _paths_to_sentences(fstprint: str) -> List[str]:
     """Reconstruct sentences from fstprint of a (forest of) linear path(s)."""
     nxt: Dict[int, tuple] = {}
     finals: Set[int] = set()

@@ -1,0 +1,8 @@
+---
+configuration:
+  language:
+    name: Language
+    description: Language used for speech recognition.
+  debug_logging:
+    name: Debug logging
+    description: Enable verbose debug logging.

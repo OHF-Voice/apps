@@ -55,7 +55,7 @@ class FakeHolder:
     async def maybe_reload(self):
         return None
 
-    async def transcribe(self, samples):
+    async def transcribe(self, _samples):
         return self.result
 
 
@@ -176,7 +176,7 @@ async def main() -> int:
 
     # --- attribution: which source produced the transcript -------------------
     by_source, list_values = training.assemble_sources(
-        ROOT, "en", [["HassTurnOn", "name_only"], ["HassLightSet", "name_brightness"]],
+        "en", [["HassTurnOn", "name_only"], ["HassLightSet", "name_brightness"]],
         [{"sentences": ["movie time please"], "mode": "stt"}],
         training.DEV_ENTITY_RECORDS, training.DEV_SLOT_LISTS,
         hass_sentences={"sentence_triggers": ["goodnight house"],
@@ -217,7 +217,7 @@ async def main() -> int:
          "name_domains": ["light"]},
     ]
     by_source, list_values = training.assemble_sources(
-        ROOT, "en", [], dialect,
+        "en", [], dialect,
         training.DEV_ENTITY_RECORDS, training.DEV_SLOT_LISTS,
     )
     att2 = sources.build(by_source, list_values, "en")

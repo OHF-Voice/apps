@@ -34,13 +34,11 @@ import random
 import sys
 import unicodedata
 import urllib.request
-from itertools import product
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
 import soundfile as sf
-import yaml
 from scipy.signal import fftconvolve
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
@@ -198,7 +196,7 @@ def enumerate_realizations(
     return {norm(" ".join(s)) for s in seqs}
 
 
-def load_templates(s2p_repo: Path, language: str) -> List[str]:
+def load_templates(language: str) -> List[str]:
     """Templates for the whole enabled grammar, built by the add-on's own
     trainer.
 
@@ -213,10 +211,10 @@ def load_templates(s2p_repo: Path, language: str) -> List[str]:
     import training
 
     meta = bi.load_intents_meta()
-    combos = bi.available_combos(s2p_repo, language, meta)
+    combos = bi.available_combos(language, meta)
     enabled = bi.default_enabled(combos, "optional")
     templates, list_values = training.assemble(
-        s2p_repo, language, enabled, [], ENTITIES, STATIC_LISTS
+        language, enabled, [], ENTITIES, STATIC_LISTS
     )
     # sample_words/enumerate_realizations resolve {list} refs through this.
     LIST_VALUES.clear()
@@ -386,7 +384,7 @@ def main() -> int:
 
     rng = random.Random(args.seed)
     np.random.seed(args.seed)
-    templates = load_templates(args.s2p_repo, args.language)
+    templates = load_templates(args.language)
     if args.limit:
         templates = templates[: args.limit]
 
@@ -480,8 +478,10 @@ def main() -> int:
     clean_legit = [s for c, s in legit_scores if c == "clean"]
     all_legit = [s for _, s in legit_scores]
     all_conf = [s for _, s in confusion_scores]
-    print("\n=== gate fitting (production front-end) — score "
-          f"distributions (lower = more confident) ===")
+    print(
+        "\n=== gate fitting (production front-end) — score "
+        "distributions (lower = more confident) ==="
+    )
     _summ("legit correct (clean)", clean_legit)
     _summ("legit correct (all cond)", all_legit)
     _summ("confusion (wrong tmpl)", all_conf)

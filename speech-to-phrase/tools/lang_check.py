@@ -153,11 +153,10 @@ def build_grammar(language: str, entities: Dict[str, str], areas, floors):
 
     slot_lists = {"area": list(areas), "floor": list(floors)}
     meta = bi.load_intents_meta()
-    repo_root = Path(__file__).resolve().parent.parent
-    combos = bi.available_combos(repo_root, language, meta)
+    combos = bi.available_combos(language, meta)
     enabled = bi.default_enabled(combos, "optional")
     templates, list_values = training.assemble(
-        repo_root, language, enabled, [], entities, slot_lists
+        language, enabled, [], entities, slot_lists
     )
     return templates, list_values
 
@@ -168,12 +167,11 @@ def build_matcher(language: str, entities: Dict[str, str], areas, floors):
     import intent_matcher  # noqa: PLC0415
     import presets as bi  # noqa: PLC0415
 
-    repo_root = Path(__file__).resolve().parent.parent
     meta = bi.load_intents_meta()
-    combos = bi.available_combos(repo_root, language, meta)
+    combos = bi.available_combos(language, meta)
     enabled = bi.default_enabled(combos, "optional")
     return intent_matcher.build_matcher(
-        repo_root, language, enabled, entities,
+        language, enabled, entities,
         {"area": list(areas), "floor": list(floors)},
     )
 

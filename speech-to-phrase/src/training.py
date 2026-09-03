@@ -304,18 +304,6 @@ def block_domains(block: Mapping[str, Any]) -> List[str]:
     return [inf] if inf else []
 
 
-def combo_domains(s2p_repo: Path, lang: str, intent: str, combo: str) -> List[str]:
-    """Distinct domains a combo targets across its blocks, in first-seen order."""
-    import s2p_intents
-
-    out: List[str] = []
-    for block in s2p_intents.combo_blocks(lang, intent, combo):
-        for d in block_domains(block):
-            if d not in out:
-                out.append(d)
-    return out
-
-
 def enabled_domain_map(
     entries: Sequence[Sequence[Any]],
 ) -> Dict[Tuple[str, str], Optional[frozenset]]:
@@ -480,7 +468,6 @@ def bindable_lists(lang: str, slot_lists: Dict[str, List[str]]) -> Set[str]:
 
 
 def assemble(
-    s2p_repo: Path,
     lang: str,
     enabled: Sequence[Sequence[Any]],
     custom_commands: Sequence[Dict[str, Any]],
@@ -501,7 +488,6 @@ def assemble(
     to the grammar as plain sentences. Either a flat sequence, or
     ``{source: [sentence]}`` to keep the sources apart in `assemble_sources`."""
     templates, _labels, list_values = _assemble(
-        s2p_repo,
         lang,
         enabled,
         custom_commands,
@@ -516,7 +502,6 @@ def assemble(
 
 
 def assemble_sources(
-    s2p_repo: Path,
     lang: str,
     enabled: Sequence[Sequence[Any]],
     custom_commands: Sequence[Dict[str, Any]],
@@ -537,7 +522,6 @@ def assemble_sources(
     the code that decided.
     """
     templates, labels, list_values = _assemble(
-        s2p_repo,
         lang,
         enabled,
         custom_commands,
@@ -555,7 +539,6 @@ def assemble_sources(
 
 
 def _assemble(
-    s2p_repo: Path,
     lang: str,
     enabled: Sequence[Sequence[Any]],
     custom_commands: Sequence[Dict[str, Any]],
@@ -724,7 +707,6 @@ def phrase_count(templates: Sequence[str], list_values: Dict[str, List[str]]) ->
 
 
 def combo_cost(
-    s2p_repo: Path,
     lang: str,
     intent: str,
     combo: str,
@@ -739,7 +721,6 @@ def combo_cost(
     ``{"sentences": n_templates, "phrases": n_utterances}``."""
     entry = [intent, combo, [domain]] if domain else [intent, combo]
     templates, list_values = assemble(
-        s2p_repo,
         lang,
         [entry],
         [],
@@ -764,7 +745,6 @@ class HassSentenceCost(TypedDict):
 
 
 def hass_sentence_costs(
-    s2p_repo: Path,
     lang: str,
     hass_sentences: Sequence[str],
     entities: EntityInput,
@@ -786,7 +766,6 @@ def hass_sentence_costs(
     # whose size is what its cost is *made of*), then price each sentence
     # against them.
     _templates, list_values = assemble(
-        s2p_repo,
         lang,
         [],
         [],

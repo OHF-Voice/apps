@@ -97,7 +97,6 @@ def test_restriction_changes_grammar_cost_and_hassil_matcher():
     assert training.phrase_count(templates, {}) == 10
 
     matcher = intent_matcher.build_matcher(
-        ROOT,
         "en",
         [["HassLightSet", "name_brightness"]],
         training.DEV_ENTITY_RECORDS,
@@ -115,7 +114,6 @@ def test_restriction_changes_grammar_cost_and_hassil_matcher():
 def test_restricted_matcher_preserves_package_multiplier():
     selection = numeric_ranges.parse("10-100/10", (0, 100, 1))
     matcher = intent_matcher.build_matcher(
-        ROOT,
         "en",
         [["HassSetVolumeRelative", "default"]],
         [{"name": "speaker", "domain": "media_player"}],

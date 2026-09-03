@@ -15,15 +15,11 @@ _LOGGER = logging.getLogger("speech-to-phrase.numeric_ranges")
 Definition = Tuple[int, int, int]
 Definitions = Mapping[str, Definition]
 
-_ITEM_RE = re.compile(
-    r"^\s*(-?\d+)(?:\s*(?:-|\.\.)\s*(-?\d+)" r"(?:\s*/\s*(\d+))?)?\s*$"
-)
+_ITEM_RE = re.compile(r"^\s*(-?\d+)(?:\s*(?:-|\.\.)\s*(-?\d+)(?:\s*/\s*(\d+))?)?\s*$")
 _REF_RE = re.compile(r"\{([^{}]+)\}")
-_SINGLE_INLINE_RE = re.compile(
-    r"^\s*(-?\d+)\s*\.\.\s*(-?\d+)" r"(?:\s*[,/]\s*(\d+))?\s*$"
-)
+_SINGLE_INLINE_RE = re.compile(r"^\s*(-?\d+)\s*\.\.\s*(-?\d+)(?:\s*[,/]\s*(\d+))?\s*$")
 _UNION_INLINE_ITEM_RE = re.compile(
-    r"^\s*(-?\d+)(?:\s*\.\.\s*(-?\d+)" r"(?:\s*/\s*(\d+))?)?\s*$"
+    r"^\s*(-?\d+)(?:\s*\.\.\s*(-?\d+)(?:\s*/\s*(\d+))?)?\s*$"
 )
 _MULTIPLIED_SLOT_PREFIX = "__numeric__"
 

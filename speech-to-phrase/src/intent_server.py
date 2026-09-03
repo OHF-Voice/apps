@@ -80,7 +80,7 @@ def _render_local(template: Optional[str], slots: Mapping[str, Any]) -> str:
         return template
 
 
-def _read_enabled(data_dir: Path, lang: str, s2p_repo: Path) -> List[Sequence[Any]]:
+def _read_enabled(data_dir: Path, lang: str) -> List[Sequence[Any]]:
     """Enabled (intent, combo) pairs: the saved set if present, else every combo
     that has a curated sentence file (so the matcher works before first save)."""
     f = data_dir / lang / "enabled.json"
@@ -89,8 +89,6 @@ def _read_enabled(data_dir: Path, lang: str, s2p_repo: Path) -> List[Sequence[An
             return [tuple(e) for e in json.loads(f.read_text())]
         except Exception:  # noqa: BLE001
             _LOGGER.warning("could not parse %s; using all on-disk combos", f)
-    import s2p_intents
-
     return list(s2p_intents.combos(lang))
 
 
@@ -100,14 +98,12 @@ class MatcherHolder:
 
     def __init__(
         self,
-        s2p_repo: Path,
         lang: str,
         data_dir: Path,
         get_entities: Callable[[], training.EntityRecordsInput],
         get_slot_lists: Callable[[], Dict[str, List[str]]],
         ttl: float = 600.0,
     ) -> None:
-        self._s2p_repo = s2p_repo
         self._lang = lang
         self._data_dir = data_dir
         self._get_entities = get_entities
@@ -117,10 +113,6 @@ class MatcherHolder:
         self._sig: Optional[tuple] = None
         self._built_at: float = 0.0
         self._lock = asyncio.Lock()
-
-    @property
-    def s2p_repo(self) -> Path:
-        return self._s2p_repo
 
     def _disk_sig(
         self,
@@ -168,7 +160,7 @@ class MatcherHolder:
         # Runs in an executor thread (no running loop), so the blocking HA
         # fetchers in training.* are safe to call here.
         try:
-            enabled = _read_enabled(self._data_dir, self._lang, self._s2p_repo)
+            enabled = _read_enabled(self._data_dir, self._lang)
             _LOGGER.info(
                 "matcher inputs: %d enabled combo(s) for '%s'", len(enabled), self._lang
             )
@@ -190,7 +182,6 @@ class MatcherHolder:
                 len(extras),
             )
             matcher = build_matcher(
-                self._s2p_repo,
                 self._lang,
                 enabled,
                 entities,
@@ -450,7 +441,7 @@ async def serve(
     uri: str, language: str, holder: MatcherHolder, api_url: str, token: Optional[str]
 ) -> None:
     info = build_info(language)
-    responses = load_responses(holder.s2p_repo, language)
+    responses = load_responses(language)
     # Warm the matcher in the background so a slow/hanging HA fetch can't keep
     # the server from accepting connections.
     asyncio.create_task(holder.get())
@@ -472,7 +463,6 @@ def start_background(
     uri: str,
     language: str,
     data_dir: Path,
-    s2p_repo: Path,
     get_entities: Callable[[], training.EntityRecordsInput],
     get_slot_lists: Callable[[], Dict[str, List[str]]],
     api_url: str,
@@ -480,9 +470,7 @@ def start_background(
     ttl: float = 600.0,
 ) -> "threading.Thread":
     """Run the intent server in a daemon thread with its own asyncio loop."""
-    holder = MatcherHolder(
-        s2p_repo, language, data_dir, get_entities, get_slot_lists, ttl=ttl
-    )
+    holder = MatcherHolder(language, data_dir, get_entities, get_slot_lists, ttl=ttl)
 
     def _runner() -> None:
         try:

@@ -12,6 +12,7 @@ so a fresh install starts without network access; it is read-only and never
 written to, and ``--models-dir`` still wins if the same model is present there.
 """
 
+import hashlib
 import logging
 import os
 import platform
@@ -24,10 +25,17 @@ from typing import List, Optional
 
 _LOGGER = logging.getLogger("speech-to-phrase.models")
 
-HF_BASE = "https://huggingface.co/datasets/rhasspy/rhasspy-speech/resolve/main/models"
+HF_REVISION = "d43a4ca808807524732c919ac1287b0b10999629"
+HF_BASE = (
+    "https://huggingface.co/datasets/rhasspy/rhasspy-speech/"
+    f"resolve/{HF_REVISION}/models"
+)
 # Models baked into the image at build time, if any.
 BUNDLED_MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
-TOOLS_BASE = "https://huggingface.co/datasets/rhasspy/rhasspy-speech/resolve/main/tools"
+TOOLS_BASE = (
+    "https://huggingface.co/datasets/rhasspy/rhasspy-speech/"
+    f"resolve/{HF_REVISION}/tools"
+)
 
 # machine() -> stt_onlyprobs binary name (needed only for the coqui backend).
 STT_BINARIES = {
@@ -35,6 +43,14 @@ STT_BINARIES = {
     "amd64": "stt_onlyprobs.x86_64.bin",
     "aarch64": "stt_onlyprobs.arm64.bin",
     "arm64": "stt_onlyprobs.arm64.bin",
+}
+STT_BINARY_SHA256 = {
+    "stt_onlyprobs.x86_64.bin": (
+        "7288c48e9dfd284c5f83549bb4947fdd3fc07a2f91b48bc8357f2b515c0392b2"
+    ),
+    "stt_onlyprobs.arm64.bin": (
+        "c185d0afffeadcdec5923d09e367574d98004be662713144ccffce387e868c55"
+    ),
 }
 # A directory is "a model" if it holds an acoustic-model file: *.tflite (coqui),
 # *.onnx (citrinet, often named <model>.onnx), or *.fst (kaldi).
@@ -239,14 +255,31 @@ def ensure_stt_binary(tools_dir: Path) -> Path:
         raise RuntimeError(f"No stt_onlyprobs binary for architecture {arch!r}")
     tools_dir = Path(tools_dir)
     target = tools_dir / name
-    if not target.exists():
+    expected_sha256 = STT_BINARY_SHA256[name]
+
+    def verified(path: Path) -> bool:
+        if not path.is_file():
+            return False
+        with path.open("rb") as binary_file:
+            actual = hashlib.file_digest(binary_file, "sha256").hexdigest()
+        return actual == expected_sha256
+
+    if not verified(target):
         url = f"{TOOLS_BASE}/{name}"
         _LOGGER.info("Downloading stt_onlyprobs (%s) from %s", arch, url)
         tools_dir.mkdir(parents=True, exist_ok=True)
-        tmp = tools_dir / f".{name}.tmp"
-        urllib.request.urlretrieve(url, tmp)
-        tmp.chmod(0o755)
-        tmp.rename(target)
+        tmp: Optional[Path] = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=tools_dir, delete=False) as temp_file:
+                tmp = Path(temp_file.name)
+            urllib.request.urlretrieve(url, tmp)
+            if not verified(tmp):
+                raise RuntimeError(f"stt_onlyprobs integrity check failed for {name}")
+            tmp.chmod(0o755)
+            tmp.replace(target)
+        finally:
+            if tmp is not None:
+                tmp.unlink(missing_ok=True)
         _LOGGER.info("stt_onlyprobs ready at %s", target)
     os.environ["STT_ONLYPROBS"] = str(target)
     return target

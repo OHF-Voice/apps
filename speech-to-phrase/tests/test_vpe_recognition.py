@@ -116,7 +116,6 @@ def main() -> int:
     check("recording inventory", bool(wavs), f"{len(wavs)} WAVs")
     enabled = json.loads(ENABLED.read_text())
     templates, list_values = training.assemble(
-        ROOT,
         "en",
         enabled,
         CUSTOM_COMMANDS,
@@ -126,7 +125,6 @@ def main() -> int:
     recognizer = load_recognizer("citrinet", MODEL, language="en", token_bonus=2.0)
     recognizer.train(templates, list_values)
     matcher = build_matcher(
-        ROOT,
         "en",
         enabled,
         ENTITIES,

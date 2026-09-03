@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import logging
 import re
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 from hassil import Intents, RecognizeResult, SlotList, TextSlotList, recognize_best
@@ -109,7 +108,6 @@ class IntentMatcher:
 
 
 def build_matcher(
-    s2p_repo: Path,
     lang: str,
     enabled: Sequence[Sequence[Any]],
     entities: training.EntityInput,

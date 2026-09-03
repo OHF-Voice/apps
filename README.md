@@ -1,3 +1,3 @@
 # OHF Apps
 
-Home Assistant apps (formally add-ons) for voice.
+Home Assistant apps (formerly add-ons) for voice.

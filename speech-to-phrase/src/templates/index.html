@@ -193,7 +193,8 @@
   <nav class="tabs">
     <button data-tab="builtin" class="active">Commands</button>
     <button data-tab="custom">Custom commands</button>
-    <button data-tab="lists">Devices &amp; Lists</button>
+    <button data-tab="names">Names</button>
+    <button data-tab="numbers">Numbers</button>
     <button data-tab="settings">Settings</button>
   </nav>
 
@@ -249,14 +250,27 @@
         passed to Home Assistant as text, exactly as spoken — Home Assistant decides
         what they do. Use <code>{name}</code>, <code>{area}</code>,
         <code>{floor}</code>, <code>[optional]</code>, <code>(a|b)</code>,
-        <code>{0..100:slot}</code>.</p>
+        <code>{0..100}</code>.</p>
       <div id="custom-list"></div>
       <button id="add-cmd" class="ghost">+ Add command</button>
     </div>
   </section>
 
-  <!-- DEVICES & LISTS ----------------------------------------------------- -->
-  <section id="tab-lists" hidden>
+  <!-- NAMES --------------------------------------------------------------- -->
+  <section id="tab-names" hidden>
+    <div class="card">
+      <h2>Names</h2>
+      <p class="sub">Names pulled from Home Assistant and baked into the grammar.
+        Switch one off to stop recognizing it by voice — it drops out of every
+        command, which makes the grammar smaller and the rest easier to tell
+        apart. A name shared by several entities, or standing in as an alias for
+        another, lists what's behind it.</p>
+      <div id="lists"></div>
+    </div>
+  </section>
+
+  <!-- NUMBERS ------------------------------------------------------------- -->
+  <section id="tab-numbers" hidden>
     <div class="card">
       <h2>Numbers</h2>
       <p class="sub">Limit numeric values to make the grammar smaller and easier to
@@ -264,15 +278,6 @@
         number. Package bounds remain authoritative. Ranges are inclusive; use
         <code>3, 5, 8, 10-100/10</code> for individual values and stepped ranges.</p>
       <div id="numeric-ranges"></div>
-    </div>
-    <div class="card">
-      <h2>Devices &amp; Lists</h2>
-      <p class="sub">Names pulled from Home Assistant and baked into the grammar.
-        Switch one off to stop recognizing it by voice — it drops out of every
-        command, which makes the grammar smaller and the rest easier to tell
-        apart. A name shared by several entities, or standing in as an alias for
-        another, lists what's behind it.</p>
-      <div id="lists"></div>
     </div>
   </section>
 
@@ -784,7 +789,7 @@ function updateMeter(all) {
 /* ---- details drill-down ----
    Read-only: every phrasing the command accepts, with each slot as a picklist
    of the values it can actually take. Narrowing a device/area/floor is done
-   globally, on the Devices & Lists tab. */
+   globally, on the Names tab. */
 function openDetail(card) {
   const c = card.c;
   $("d-say").innerHTML = card.say || escapeHtml(c.description || "");
@@ -809,7 +814,7 @@ function openDetail(card) {
   $("detail").showModal();
 }
 
-/* ---- devices & lists -------------------------------------------------------
+/* ---- names -----------------------------------------------------------------
    Global voice targeting: switch a device/area/floor off and it disappears from
    every command that could have named it. */
 
@@ -1060,7 +1065,7 @@ async function save() {
 /* ---- tabs + wiring ---- */
 document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll("nav.tabs button").forEach(x=>x.classList.toggle("active", x===b));
-  ["builtin","custom","lists","settings"].forEach(t => $("tab-"+t).hidden = (t!==b.dataset.tab));
+  ["builtin","custom","names","numbers","settings"].forEach(t => $("tab-"+t).hidden = (t!==b.dataset.tab));
 }));
 $("add-cmd").addEventListener("click", () => {
   (S.commands ||= []).push({ sentences:[], mode:"stt" });

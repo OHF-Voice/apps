@@ -713,7 +713,7 @@ def _usage(
     enabled_set: Set[Tuple[str, str]],
     commands: Sequence[JsonDict],
 ) -> Tuple[List[str], List[str], Dict[str, List[str]]]:
-    """Which commands consume each slot list, for the Devices & Lists view.
+    """Which commands consume each slot list, for the Names view.
     Returns (area_used_by, floor_used_by, {domain: name_used_by})."""
     import re
 

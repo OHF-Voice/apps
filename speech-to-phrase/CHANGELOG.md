@@ -3,7 +3,7 @@
 ## 2.0.0
 
 - Numeric lists such as brightness, cover position, volume and timer duration can
-  now be narrowed per language in **Devices & Lists**. Voice-friendly
+  now be narrowed per language in **Numbers**. Voice-friendly
   **Recommended** ranges are the default, and the UI always shows their active
   segments and steps. Choose the full package range, common multiples of 5 or 10,
   or an inclusive expression such as `3, 5, 8, 10-100/10`. The package's

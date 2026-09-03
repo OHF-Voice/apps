@@ -44,13 +44,13 @@ the one the recognizer is running. Change it there and reload the page.
   Assistant as text. Supports `{name}`, `{area}`, `{floor}`, `[optional]`,
   `(a|b)` and `{0..100:slot}`; a sentence using `{name}` also picks which
   device types that slot may match.
-- **Devices & Lists** — numeric package lists plus the entity, area and floor
-  names pulled from your registry. Numeric lists can use their full package
-  range, common multiples of 5 or 10, or an inclusive custom expression such as
+- **Names** — entity, area and floor names pulled from your registry. Switching a
+  name off removes it from *every* command.
+- **Numbers** — numeric package lists. Use their full package range, common
+  multiples of 5 or 10, or an inclusive custom expression such as
   `3, 5, 8, 10-100/10`; values outside the package's minimum, maximum or base
   step are rejected. **Recommended** is the default, and the active ranges are
   always shown below the selector so you know which values can be said.
-  Switching a name off removes it from *every* command.
 - **Settings** — **Max score**, the confidence gate: a decode is accepted only
   when its score is at or below this, and anything above is handed back to Home
   Assistant as nothing so it can fall back to cloud speech-to-text. Lower is

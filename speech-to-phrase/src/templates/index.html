@@ -143,6 +143,12 @@
   .usedby { color:var(--mut); font-size:12px; margin-top:3px; }
   .usedby b { color:#374151; font-weight:600; }
   .empty { color:var(--mut); font-style:italic; }
+  .range-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+                    margin-top:7px; }
+  .range-controls select { min-width:150px; }
+  .range-spec { flex:1; min-width:240px; font-family:ui-monospace,monospace; }
+  .range-spec.invalid { border-color:#dc2626; outline-color:#dc2626; }
+  .range-error { color:#dc2626; font-size:12px; margin-top:4px; }
   /* ---- debug mode: live recognition feed ---- */
   .warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e;
           border-radius:10px; padding:8px 12px; font-size:13px; margin:10px 0 0; }
@@ -252,6 +258,14 @@
   <!-- DEVICES & LISTS ----------------------------------------------------- -->
   <section id="tab-lists" hidden>
     <div class="card">
+      <h2>Numbers</h2>
+      <p class="sub">Limit numeric values to make the grammar smaller and easier to
+        recognize. Recommended keeps common voice values without every possible
+        number. Package bounds remain authoritative. Ranges are inclusive; use
+        <code>3, 5, 8, 10-100/10</code> for individual values and stepped ranges.</p>
+      <div id="numeric-ranges"></div>
+    </div>
+    <div class="card">
       <h2>Devices &amp; Lists</h2>
       <p class="sub">Names pulled from Home Assistant and baked into the grammar.
         Switch one off to stop recognizing it by voice — it drops out of every
@@ -333,6 +347,7 @@ async function loadState() {
   renderHassSentences();
   renderCustom();
   renderCombos();
+  renderNumericRanges();
   renderLists();
   // Reloading state means the page is starting over; so does the feed.
   debugSince = 0; debugRows = [];
@@ -868,6 +883,137 @@ function renderLists() {
   });
 }
 
+/* ---- numeric package lists -------------------------------------------------
+   The server repeats validation authoritatively before writing anything. This
+   mirror exists for immediate feedback and to keep Save disabled on bad input. */
+function fullRangeExpression(row) {
+  return `${row.minimum}-${row.maximum}${row.step === 1 ? "" : `/${row.step}`}`;
+}
+
+function validateNumericRange(row) {
+  if (row.expression == null) {
+    const summary = row.step === 1
+      ? `${row.minimum}–${row.maximum}`
+      : `${row.minimum}–${row.maximum} in steps of ${row.step}`;
+    return {count:row.package_count, error:"", summary};
+  }
+  const text = String(row.expression).trim();
+  if (!text)
+    return {count:0, error:"Enter values, or choose Full range.", summary:""};
+  const values = new Set();
+  const segments = [];
+  for (const raw of text.split(",")) {
+    const m = raw.match(/^\s*(-?\d+)(?:\s*(?:-|\.\.)\s*(-?\d+)(?:\s*\/\s*(\d+))?)?\s*$/);
+    if (!m)
+      return {count:0, error:`Invalid item “${raw.trim()}”. Use N or START-END[/STEP].`, summary:""};
+    const start = Number(m[1]), stop = m[2] == null ? start : Number(m[2]);
+    const step = Number(m[3] || 1);
+    if (start > stop) return {count:0, error:`${start}-${stop} must be ascending.`, summary:""};
+    if (step <= 0) return {count:0, error:"The step must be greater than zero.", summary:""};
+    if (start < row.minimum || stop > row.maximum)
+      return {count:0, error:`Values must stay within ${row.minimum}-${row.maximum}.`, summary:""};
+    if ((start-row.minimum)%row.step || (stop-row.minimum)%row.step)
+      return {count:0, error:`Values must follow the package step of ${row.step}.`, summary:""};
+    if (start !== stop && step%row.step)
+      return {count:0, error:`The step must be a multiple of ${row.step}.`, summary:""};
+    if (start !== stop && (stop-start)%step)
+      return {count:0, error:`${start}-${stop}/${step} does not land on its end value.`, summary:""};
+    for (let value=start; value<=stop; value+=step) values.add(value);
+    segments.push(start === stop ? `${start}`
+      : step === 1 ? `${start}–${stop}`
+      : `${start}–${stop} in steps of ${step}`);
+  }
+  return {count:values.size, error:"", summary:segments.join("; ")};
+}
+
+function updateNumericValidity() {
+  $("save").disabled = !!document.querySelector(".range-spec.invalid");
+}
+
+function refreshNumericRow(host, row) {
+  const result = validateNumericRange(row);
+  const input = host.querySelector(".range-spec");
+  const error = host.querySelector(".range-error");
+  const count = host.querySelector(".range-count");
+  const summary = host.querySelector(".range-summary");
+  if (input) input.classList.toggle("invalid", !!result.error);
+  error.textContent = result.error;
+  count.textContent = result.error
+    ? ""
+    : `${result.count} of ${row.package_count} package values`;
+  summary.textContent = result.error ? "" : result.summary;
+  updateNumericValidity();
+}
+
+function renderNumericRanges() {
+  const host = $("numeric-ranges");
+  const rows = S.numeric_ranges || [];
+  if (!rows.length) {
+    host.innerHTML = '<div class="empty">No numeric lists are used by this language.</div>';
+    return;
+  }
+  host.innerHTML = rows.map((row, index) => {
+    const preset = row.mode === "custom" ? "custom" : row.expression == null
+      ? "full"
+      : ((row.presets || []).find(p => p.expression === row.expression) || {}).id || "custom";
+    const advanced = preset === "custom";
+    return `<div class="list-row numeric-row" data-index="${index}">
+      <h3>${escapeHtml(row.label)} <code>{${escapeHtml(row.name)}}</code></h3>
+      <div class="usedby">Package range: ${row.minimum}-${row.maximum}
+        ${row.step === 1 ? "" : `in steps of ${row.step}`}</div>
+      ${usedBy(row.used_by)}
+      <div class="range-controls">
+        <select class="range-preset" aria-label="${escapeHtml(row.label)} preset">
+          ${(row.presets || []).map(p => `<option value="${p.id}" ${p.id === preset ? "selected" : ""}>
+            ${escapeHtml(p.label)}${p.count == null ? "" : ` (${p.count})`}</option>`).join("")}
+        </select>
+        <input type="text" class="range-spec ${advanced ? "" : "hide"}"
+          value="${escapeHtml(row.expression == null ? "" : String(row.expression))}"
+          placeholder="3, 5, 8, 10-100/10"
+          aria-label="${escapeHtml(row.label)} allowed values">
+        <span class="v-count range-count"></span>
+      </div>
+      <div class="usedby"><b>Allowed values:</b> <span class="range-summary"></span></div>
+      <div class="range-error" role="alert"></div>
+    </div>`;
+  }).join("");
+
+  host.querySelectorAll(".numeric-row").forEach(rowHost => {
+    const row = rows[Number(rowHost.dataset.index)];
+    const select = rowHost.querySelector(".range-preset");
+    const input = rowHost.querySelector(".range-spec");
+    select.addEventListener("change", () => {
+      const preset = (row.presets || []).find(p => p.id === select.value);
+      if (preset.id === "custom") {
+        row.mode = "custom";
+        if (row.expression == null) row.expression = fullRangeExpression(row);
+      } else {
+        row.mode = preset.id;
+        row.expression = preset.expression;
+      }
+      renderNumericRanges();
+      markDirty();
+    });
+    input.addEventListener("input", () => {
+      row.mode = "custom";
+      row.expression = input.value;
+      refreshNumericRow(rowHost, row);
+      markDirty();
+    });
+    refreshNumericRow(rowHost, row);
+  });
+}
+
+function collectNumericRanges() {
+  const ranges = {};
+  for (const row of (S.numeric_ranges || [])) {
+    const result = validateNumericRange(row);
+    if (result.error) throw new Error(`${row.label}: ${result.error}`);
+    ranges[row.name] = row.expression;
+  }
+  return ranges;
+}
+
 /* enabled.json entry for a combo: [intent,combo] (all), [intent,combo,[domains]]
    (subset), or null (off). */
 function comboSelection(c) {
@@ -895,6 +1041,7 @@ async function save() {
         enabled: S.combos.map(comboSelection).filter(Boolean),
         commands: collectCommands(),
         overrides: S.overrides || {},
+        numeric_ranges: collectNumericRanges(),
         ...Object.fromEntries(HASS_SOURCES
           .filter(([key]) => typeof hassSource(key).enabled === "boolean")
           .map(([key]) => [key, hassSource(key).enabled])),
@@ -907,7 +1054,7 @@ async function save() {
     st.textContent = res.message || res.error || (res.ok?"Saved.":"Failed.");
     if (res.ok) { clearDirty(); await loadState(); }
   } catch (e) { st.className="err"; st.textContent = "Save failed: " + e; }
-  finally { btn.disabled = false; }
+  finally { btn.disabled = false; updateNumericValidity(); }
 }
 
 /* ---- tabs + wiring ---- */

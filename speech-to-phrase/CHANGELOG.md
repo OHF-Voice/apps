@@ -2,6 +2,15 @@
 
 ## 2.0.0
 
+- Numeric lists such as brightness, cover position, volume and timer duration can
+  now be narrowed per language in **Devices & Lists**. Voice-friendly
+  **Recommended** ranges are the default, and the UI always shows their active
+  segments and steps. Choose the full package range, common multiples of 5 or 10,
+  or an inclusive expression such as `3, 5, 8, 10-100/10`. The package's
+  minimum, maximum and base step remain authoritative, invalid settings are
+  rejected before anything is saved, and the same restriction is applied to both
+  the speech grammar and intent matcher.
+
 - The image is **275 MB smaller** (857 → 582 MB), because the log-mel front end
   no longer needs librosa. It was used for exactly three calls — the mel
   filterbank, the STFT and resampling — and hard-depends on numba and
@@ -53,7 +62,7 @@
   It was free text, so it was possible to type a language with no sentences to
   recognize and get an add-on that refused to start.
 
-- Seven more languages: `home-assistant-intents` 2026.8.25 ships the
+- Seven more languages: `home-assistant-intents` 2026.8.28 ships the
   Speech-to-Phrase sentence blocks for **Catalan, Czech, Dutch, French, German,
   Italian and Spanish**, so those languages now get a grammar instead of
   nothing. Each one round-trips every example command in its own language

@@ -23,6 +23,7 @@ matcher uses, surfaced after a match via ``RecognizeResult.intent_metadata``:
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
@@ -33,12 +34,26 @@ from training import _effective_name_domains, _rebind, combo_blocks, enabled_dom
 _LOGGER = logging.getLogger("speech-to-phrase.intent")
 
 if TYPE_CHECKING:
+    import numeric_ranges
     import overrides
     import training
 
 # Synthetic intent name for custom action-mode commands (no HA intent of their
 # own). The intent server routes this to the action executor, not to HA.
 CUSTOM_ACTION_INTENT = "_CustomAction"
+_INTRA_WORD_SEPARATOR = re.compile(r"(?<=[^\W\d_])[-–—/](?=[^\W\d_])")
+
+
+def result_slots(result: RecognizeResult) -> Dict[str, object]:
+    """Return the Home Assistant intent slots from a recognition result."""
+    metadata = result.intent_metadata or {}
+    slots: Dict[str, object] = dict(
+        canonical_entity(key, entity.value) for key, entity in result.entities.items()
+    )
+    if metadata.get("domain"):
+        slots["domain"] = metadata["domain"]
+    slots.update(metadata.get("slots") or {})
+    return slots
 
 
 def canonical_slot(key: str) -> str:
@@ -49,6 +64,9 @@ def canonical_slot(key: str) -> str:
     gating; map them back. Every other slot (including per-domain ``state``
     lists, which bind via ``{...states:state}``) already carries its HA name.
     """
+    import numeric_ranges
+
+    key, _multiplier = numeric_ranges.decode_hassil_slot(key)
     for prefix, canonical in (
         ("name__", "name"),
         ("area__", "area"),
@@ -57,6 +75,18 @@ def canonical_slot(key: str) -> str:
         if key.startswith(prefix):
             return canonical
     return key
+
+
+def canonical_entity(key: str, value: object) -> Tuple[str, object]:
+    """Canonical slot name and package-adjusted value for a Hassil entity."""
+    import numeric_ranges
+
+    slot, multiplier = numeric_ranges.decode_hassil_slot(key)
+    if multiplier is not None:
+        if not isinstance(value, (int, float)):
+            raise TypeError(f"Numeric slot {slot!r} produced non-number {value!r}")
+        value *= multiplier
+    return canonical_slot(slot), value
 
 
 class IntentMatcher:
@@ -87,15 +117,19 @@ def build_matcher(
     custom_commands: Optional[Sequence[Dict[str, Any]]] = None,
     extra_sentences: Optional[Dict[str, List[str]]] = None,
     ov: Optional[overrides.Overrides] = None,
+    range_overrides: Optional["numeric_ranges.Selections"] = None,
 ) -> Optional[IntentMatcher]:
     """Build an :class:`IntentMatcher` for the enabled combos + custom commands,
     or ``None`` if nothing is matchable."""
     import gating
+    import numeric_ranges as nr
     import overrides as ovr
     import s2p_intents
     import training
 
     ov = ov or ovr.EMPTY
+    selected_ranges = range_overrides or {}
+    range_multipliers = s2p_intents.range_list_multipliers(lang)
     info = training.as_entity_info(entities)
     extras = extra_sentences or {}
     intents_dict: Dict[str, dict] = {}
@@ -109,6 +143,7 @@ def build_matcher(
         name_domains: Optional[Sequence[str]],
         capability: Optional[str],
         key: str = "",
+        restrict_ranges: bool = False,
     ) -> List[str]:
         """Rewrite {name} to a domain-scoped list and apply the same capability
         gate as the grammar (gating.scope_sentence), then the user's per-command
@@ -156,6 +191,15 @@ def build_matcher(
                 )
             if dropped:
                 continue
+            # The STT grammar converts written separators in compounds to word
+            # boundaries (for example, Catalan "deixa-ho" becomes "deixa ho").
+            # Give Hassil the same spoken form so every decoder output remains
+            # matchable to its source intent.
+            rewritten = _INTRA_WORD_SEPARATOR.sub(" ", rewritten)
+            if restrict_ranges:
+                rewritten = nr.rewrite_hassil_refs(
+                    rewritten, selected_ranges, range_multipliers
+                )
             out.append(rewritten)
         return out
 
@@ -179,6 +223,7 @@ def build_matcher(
                 eff_nd,
                 capability,
                 ovr.combo_key(intent, combo),
+                restrict_ranges=True,
             )
             if not sentences:
                 continue
@@ -248,7 +293,10 @@ def build_matcher(
             "language": lang,
             "intents": intents_dict,
             "lists": s2p_intents.list_defs_dict(lang),
-            "expansion_rules": s2p_intents.expansion_rules(lang),
+            "expansion_rules": {
+                name: nr.rewrite_hassil_refs(body, selected_ranges, range_multipliers)
+                for name, body in s2p_intents.expansion_rules(lang).items()
+            },
         }
     )
     n_sentences = sum(

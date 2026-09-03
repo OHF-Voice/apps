@@ -51,9 +51,12 @@ from wyoming.server import AsyncEventHandler, AsyncServer
 import custom_commands as cc
 import extra_sentences as ex
 import hass_actions
+import numeric_ranges
 import overrides
+import s2p_intents
+import settings
 from hass_satellite import resolve_area_async
-from intent_matcher import IntentMatcher, build_matcher, canonical_slot
+from intent_matcher import IntentMatcher, build_matcher, canonical_entity
 from responses import load_responses, response_for
 
 _LOGGER = logging.getLogger("speech-to-phrase.intent")
@@ -119,7 +122,9 @@ class MatcherHolder:
     def s2p_repo(self) -> Path:
         return self._s2p_repo
 
-    def _disk_sig(self) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+    def _disk_sig(
+        self,
+    ) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
         """mtimes of the files that determine the matcher."""
         d = self._data_dir / self._lang
 
@@ -127,7 +132,12 @@ class MatcherHolder:
             f = d / name
             return f.stat().st_mtime if f.exists() else None
 
-        return (mt("enabled.json"), mt(cc.FILENAME), mt(ex.FILENAME))
+        return (
+            mt("enabled.json"),
+            mt(cc.FILENAME),
+            mt(ex.FILENAME),
+            mt(settings.FILENAME),
+        )
 
     async def get(self) -> Optional[IntentMatcher]:
         async with self._lock:
@@ -188,6 +198,11 @@ class MatcherHolder:
                 custom_commands=commands,
                 extra_sentences=extras,
                 ov=overrides.load(self._data_dir, self._lang),
+                range_overrides=numeric_ranges.load(
+                    self._data_dir,
+                    self._lang,
+                    s2p_intents.range_list_definitions(self._lang),
+                ),
             )
             if matcher is None:
                 _LOGGER.warning(
@@ -313,7 +328,8 @@ class IntentEventHandler(AsyncEventHandler):
     ) -> List[Entity]:
         entities: List[Entity] = []
         for key, ent in result.entities.items():
-            entities.append(Entity(name=canonical_slot(key), value=ent.value))
+            name, value = canonical_entity(key, ent.value)
+            entities.append(Entity(name=name, value=value))
         if metadata.get("domain"):  # built-in inferred_domain
             entities.append(Entity(name="domain", value=metadata["domain"]))
         for k, v in (metadata.get("slots") or {}).items():  # custom fixed slots

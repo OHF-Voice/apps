@@ -52,8 +52,10 @@ import debug_log
 import extra_sentences as ex
 import hass_sentences as hs
 import models
+import numeric_ranges
 import overrides
 import presets as bi
+import s2p_intents
 import settings
 import training
 import wyoming_server
@@ -230,6 +232,8 @@ def create_app(cfg: argparse.Namespace) -> Flask:
         combos = bi.available_combos(ADDON_ROOT, lang, meta)
         amap = training.enabled_domain_map(read_enabled(lang, combos))
         ov = _overrides(cfg, lang)
+        range_definitions = s2p_intents.range_list_definitions(lang)
+        range_overrides = numeric_ranges.load(data_dir, lang, range_definitions)
         records = _current_records(cfg, lang)
         slot_lists = _current_slot_lists(cfg, lang)
         for c in combos:
@@ -255,6 +259,7 @@ def create_app(cfg: argparse.Namespace) -> Flask:
                 records,
                 slot_lists,
                 ov=ov,
+                range_overrides=range_overrides,
             )
             c["cost_by_domain"] = {
                 d: training.combo_cost(
@@ -266,6 +271,7 @@ def create_app(cfg: argparse.Namespace) -> Flask:
                     records,
                     slot_lists,
                     ov=ov,
+                    range_overrides=range_overrides,
                 )
                 for d in c["domains"]
             }
@@ -331,6 +337,9 @@ def create_app(cfg: argparse.Namespace) -> Flask:
                 ),
                 "areas": {"values": raw_lists.get("area", []), "used_by": area_used},
                 "floors": {"values": raw_lists.get("floor", []), "used_by": floor_used},
+                "numeric_ranges": _numeric_ranges_state(
+                    lang, set(amap), range_definitions, range_overrides
+                ),
                 # Voice targeting, round-tripped by the UI. The UI only edits the
                 # global on/off switches; anything else already in the document
                 # (aliases, per-command exclusions) rides along untouched.
@@ -400,6 +409,21 @@ def create_app(cfg: argparse.Namespace) -> Flask:
             return wrong_lang(lang)
         enabled = [list(e) for e in body.get("enabled", [])]
         commands = body.get("commands", [])
+        range_definitions = s2p_intents.range_list_definitions(lang)
+        parsed_ranges = None
+        if "numeric_ranges" in body:
+            try:
+                parsed_range_choices = numeric_ranges.parse_payload(
+                    body["numeric_ranges"], range_definitions
+                )
+            except numeric_ranges.NumericRangeError as err:
+                return jsonify({"ok": False, "error": str(err)}), 400
+            parsed_ranges = numeric_ranges.active_selections(
+                parsed_range_choices, range_definitions
+            )
+        else:
+            parsed_range_choices = None
+
         d = lang_dir(lang)
         (d / "enabled.json").write_text(json.dumps(enabled, indent=2))
         cc.save(data_dir, lang, commands)
@@ -419,6 +443,11 @@ def create_app(cfg: argparse.Namespace) -> Flask:
         for source in hs.SOURCES:
             if body.get(source) is not None:
                 settings.set_bool(data_dir, lang, source, body[source])
+        range_overrides = (
+            parsed_ranges
+            if parsed_ranges is not None
+            else numeric_ranges.load(data_dir, lang, range_definitions)
+        )
 
         entities = _current_records(cfg, lang)
         slot_lists = _current_slot_lists(cfg, lang)
@@ -432,6 +461,7 @@ def create_app(cfg: argparse.Namespace) -> Flask:
             extra_sentences=ex.load(data_dir, lang),
             ov=_overrides(cfg, lang),
             hass_sentences=_hass_sentences(cfg, lang),
+            range_overrides=range_overrides,
         )
         resp: JsonDict = {
             "ok": True,
@@ -445,8 +475,17 @@ def create_app(cfg: argparse.Namespace) -> Flask:
                 # happen: with every command switched off the grammar on disk is
                 # the previous one, and voice keeps answering to it.
                 trained = _ensure_trained(
-                    cfg, lang, meta, entities, slot_lists, data_dir, force=True
+                    cfg,
+                    lang,
+                    meta,
+                    entities,
+                    slot_lists,
+                    data_dir,
+                    force=True,
+                    range_overrides=range_overrides,
                 )
+                if parsed_range_choices is not None:
+                    numeric_ranges.save(data_dir, lang, parsed_range_choices)
                 resp["trained"] = trained
                 resp["message"] = (
                     f"Saved and retrained ({len(templates)} sentences)."
@@ -456,8 +495,16 @@ def create_app(cfg: argparse.Namespace) -> Flask:
                 )
             except Exception as e:  # noqa: BLE001
                 _LOGGER.exception("training failed")
-                resp.update(ok=False, message=f"Saved, but training failed: {e}")
+                message = f"Saved, but training failed: {e}"
+                if parsed_ranges is not None:
+                    message = (
+                        "Saved other changes, but kept the previous numeric ranges "
+                        f"because training failed: {e}"
+                    )
+                resp.update(ok=False, message=message)
         else:
+            if parsed_range_choices is not None:
+                numeric_ranges.save(data_dir, lang, parsed_range_choices)
             resp["message"] = (
                 f"Saved ({len(templates)} sentences). No speech model for "
                 f"'{lang}' — skipped retrain."
@@ -578,6 +625,9 @@ def _attributor(cfg: argparse.Namespace, lang: str) -> Optional[sources.Attribut
             extra_sentences=ex.load(data_dir, lang),
             ov=_overrides(cfg, lang),
             hass_sentences=_hass_sentences_grouped(cfg, lang),
+            range_overrides=numeric_ranges.load(
+                data_dir, lang, s2p_intents.range_list_definitions(lang)
+            ),
         )
         attributor = sources.build(by_source, list_values, lang)
     except Exception:  # noqa: BLE001 -- the debug view must not 500
@@ -722,6 +772,45 @@ def _usage(
     return area_used, floor_used, name_used
 
 
+def _numeric_ranges_state(
+    lang: str,
+    enabled_set: Set[Tuple[str, str]],
+    definitions: numeric_ranges.Definitions,
+    selections: numeric_ranges.Selections,
+) -> List[JsonDict]:
+    """Numeric package lists used by Speech-to-Phrase commands."""
+    used_by: Dict[str, List[str]] = {}
+    all_used: Set[str] = set()
+    for intent, combo in s2p_intents.combos(lang):
+        referenced = s2p_intents.combo_range_lists(lang, intent, combo)
+        all_used.update(referenced)
+        if (intent, combo) in enabled_set:
+            label = f"{intent}/{combo}"
+            for name in referenced:
+                used_by.setdefault(name, []).append(label)
+
+    rows: List[JsonDict] = []
+    for name in sorted(all_used):
+        definition = definitions[name]
+        selection = selections.get(name)
+        package = numeric_ranges.package_values(definition)
+        rows.append(
+            {
+                "name": name,
+                "label": name.replace("_", " ").title(),
+                "minimum": definition[0],
+                "maximum": definition[1],
+                "step": definition[2],
+                "package_count": len(package),
+                "expression": selection.expression if selection else None,
+                "count": len(selection.values) if selection else len(package),
+                "presets": numeric_ranges.presets(name, definition),
+                "used_by": sorted(used_by.get(name, [])),
+            }
+        )
+    return rows
+
+
 def _custom_commands(data_dir: Path, lang: str) -> list:
     return cc.load(data_dir, lang)
 
@@ -783,6 +872,7 @@ def _ensure_trained(
     slot_lists: Dict[str, List[str]],
     data_dir: Path,
     force: bool = False,
+    range_overrides: Optional[numeric_ranges.Selections] = None,
 ) -> bool:
     """(Re)train `lang` iff the grammar is missing or its input fingerprint
     changed (templates, enabled combos, custom text, or entity/area/floor lists).
@@ -800,6 +890,13 @@ def _ensure_trained(
         extra_sentences=ex.load(data_dir, lang),
         ov=overrides.load(data_dir, lang),
         hass_sentences=_hass_sentences(cfg, lang),
+        range_overrides=(
+            range_overrides
+            if range_overrides is not None
+            else numeric_ranges.load(
+                data_dir, lang, s2p_intents.range_list_definitions(lang)
+            )
+        ),
     )
     if not templates:
         # Nothing to compile. The recognition library rejects an empty grammar,

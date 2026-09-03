@@ -1,0 +1,479 @@
+[
+  {
+    "language": "cs",
+    "intent": "HassCancelTimer",
+    "combo": "default",
+    "text": "zruš časovač",
+    "expected_intent": "HassCancelTimer",
+    "expected_slots": {},
+    "wav": "HassCancelTimer__default.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassClimateGetTemperature",
+    "combo": "area_only",
+    "text": "jaká je teplota v kuchyni",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "area": "kuchyni"
+    },
+    "wav": "HassClimateGetTemperature__area_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassClimateGetTemperature",
+    "combo": "default",
+    "text": "jaká je teplota",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {},
+    "wav": "HassClimateGetTemperature__default.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassClimateGetTemperature",
+    "combo": "name_only",
+    "text": "jaká je teplota Termostat",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "name": "Termostat"
+    },
+    "wav": "HassClimateGetTemperature__name_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassDecreaseTimer",
+    "combo": "hours_only",
+    "text": "zkrať časovač o 2 hodina",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassDecreaseTimer__hours_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassDecreaseTimer",
+    "combo": "minutes_only",
+    "text": "zkrať časovač o 5 minuta",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassDecreaseTimer__minutes_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassDecreaseTimer",
+    "combo": "seconds_only",
+    "text": "zkrať časovač o 30 sekunda",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassDecreaseTimer__seconds_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassFanSetSpeed",
+    "combo": "default",
+    "text": "nastav rychlost ventilátoru na 50 procent",
+    "expected_intent": "HassFanSetSpeed",
+    "expected_slots": {
+      "percentage": 50.0
+    },
+    "wav": "HassFanSetSpeed__default.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassFanSetSpeed",
+    "combo": "name_only",
+    "text": "nastav rychlost Ventilátor na 50 procent",
+    "expected_intent": "HassFanSetSpeed",
+    "expected_slots": {
+      "name": "Ventilátor",
+      "percentage": 50.0
+    },
+    "wav": "HassFanSetSpeed__name_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassGetCurrentDate",
+    "combo": "default",
+    "text": "jaké je dnešní datum",
+    "expected_intent": "HassGetCurrentDate",
+    "expected_slots": {},
+    "wav": "HassGetCurrentDate__default.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassGetCurrentTime",
+    "combo": "default",
+    "text": "kolik je hodin",
+    "expected_intent": "HassGetCurrentTime",
+    "expected_slots": {},
+    "wav": "HassGetCurrentTime__default.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassGetState",
+    "combo": "name_only",
+    "text": "jaký je stav Teploměr",
+    "expected_intent": "HassGetState",
+    "expected_slots": {
+      "name": "Teploměr"
+    },
+    "wav": "HassGetState__name_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassGetState",
+    "combo": "name_state",
+    "text": "je Lampička zapnutý",
+    "expected_intent": "HassGetState",
+    "expected_slots": {
+      "name": "Lampička",
+      "state": "on"
+    },
+    "wav": "HassGetState__name_state.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassGetWeather",
+    "combo": "default",
+    "text": "jaké je počasí",
+    "expected_intent": "HassGetWeather",
+    "expected_slots": {},
+    "wav": "HassGetWeather__default.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassIncreaseTimer",
+    "combo": "hours_only",
+    "text": "prodluž časovač o 2 hodina",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassIncreaseTimer__hours_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassIncreaseTimer",
+    "combo": "minutes_only",
+    "text": "prodluž časovač o 5 minuta",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassIncreaseTimer__minutes_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassIncreaseTimer",
+    "combo": "seconds_only",
+    "text": "prodluž časovač o 30 sekunda",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassIncreaseTimer__seconds_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassLightSet",
+    "combo": "area_brightness",
+    "text": "nastav jas v kuchyni na 50 procent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "area": "kuchyni",
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__area_brightness.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassLightSet",
+    "combo": "brightness_only",
+    "text": "nastav jas světla na 50 procent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__brightness_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassLightSet",
+    "combo": "name_brightness",
+    "text": "nastav jas Lampička na 50 procent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "name": "Lampička",
+      "brightness": 50.0
+    },
+    "wav": "HassLightSet__name_brightness.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassMediaNext",
+    "combo": "default",
+    "text": "další skladba",
+    "expected_intent": "HassMediaNext",
+    "expected_slots": {},
+    "wav": "HassMediaNext__default.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassMediaPause",
+    "combo": "default",
+    "text": "zastav písničku",
+    "expected_intent": "HassMediaPause",
+    "expected_slots": {},
+    "wav": "HassMediaPause__default.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassMediaPlayerMute",
+    "combo": "default",
+    "text": "ztlum zvuk",
+    "expected_intent": "HassMediaPlayerMute",
+    "expected_slots": {},
+    "wav": "HassMediaPlayerMute__default.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassMediaPlayerUnmute",
+    "combo": "default",
+    "text": "zapni zvuk",
+    "expected_intent": "HassMediaPlayerUnmute",
+    "expected_slots": {},
+    "wav": "HassMediaPlayerUnmute__default.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassMediaPrevious",
+    "combo": "default",
+    "text": "předchozí skladba",
+    "expected_intent": "HassMediaPrevious",
+    "expected_slots": {},
+    "wav": "HassMediaPrevious__default.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassMediaUnpause",
+    "combo": "default",
+    "text": "pokračuj",
+    "expected_intent": "HassMediaUnpause",
+    "expected_slots": {},
+    "wav": "HassMediaUnpause__default.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassNevermind",
+    "combo": "default",
+    "text": "to nevadí",
+    "expected_intent": "HassNevermind",
+    "expected_slots": {},
+    "wav": "HassNevermind__default.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassPauseTimer",
+    "combo": "default",
+    "text": "pozastav časovač",
+    "expected_intent": "HassPauseTimer",
+    "expected_slots": {},
+    "wav": "HassPauseTimer__default.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassSetPosition",
+    "combo": "name_only",
+    "text": "nastav pozici Garážová vrata na 50 procent",
+    "expected_intent": "HassSetPosition",
+    "expected_slots": {
+      "name": "Garážová vrata",
+      "position": 50.0
+    },
+    "wav": "HassSetPosition__name_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassSetVolume",
+    "combo": "default",
+    "text": "nastav hlasitost na 50 procent",
+    "expected_intent": "HassSetVolume",
+    "expected_slots": {
+      "volume_level": 50.0
+    },
+    "wav": "HassSetVolume__default.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassSetVolumeRelative",
+    "combo": "default",
+    "text": "zvyš hlasitost",
+    "expected_intent": "HassSetVolumeRelative",
+    "expected_slots": {
+      "volume_step": "up"
+    },
+    "wav": "HassSetVolumeRelative__default.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassStartTimer",
+    "combo": "hours_only",
+    "text": "nastav časovač na 2 hodina",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassStartTimer__hours_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassStartTimer",
+    "combo": "minutes_only",
+    "text": "nastav časovač na 5 minuta",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassStartTimer__minutes_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassStartTimer",
+    "combo": "seconds_only",
+    "text": "nastav časovač na 30 sekunda",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassStartTimer__seconds_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassTimerStatus",
+    "combo": "default",
+    "text": "stav časovače",
+    "expected_intent": "HassTimerStatus",
+    "expected_slots": {},
+    "wav": "HassTimerStatus__default.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassTurnOff",
+    "combo": "area_domain",
+    "text": "vypni světla v kuchyni",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "area": "kuchyni",
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__area_domain.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassTurnOff",
+    "combo": "domain_only",
+    "text": "vypni světla",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__domain_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassTurnOff",
+    "combo": "floor_domain",
+    "text": "vypni světla v prvním",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "floor": "prvním",
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__floor_domain.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassTurnOff",
+    "combo": "name_only",
+    "text": "vypni TV",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "name": "TV"
+    },
+    "wav": "HassTurnOff__name_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassTurnOn",
+    "combo": "area_domain",
+    "text": "zapni světla v kuchyni",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "area": "kuchyni",
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__area_domain.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassTurnOn",
+    "combo": "domain_only",
+    "text": "zapni světla",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__domain_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassTurnOn",
+    "combo": "floor_domain",
+    "text": "zapni světla v prvním",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "floor": "prvním",
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__floor_domain.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassTurnOn",
+    "combo": "name_area",
+    "text": "zapni TV v kuchyni",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "TV",
+      "area": "kuchyni"
+    },
+    "wav": "HassTurnOn__name_area.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassTurnOn",
+    "combo": "name_only",
+    "text": "zapni TV",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "TV"
+    },
+    "wav": "HassTurnOn__name_only.flac"
+  },
+  {
+    "language": "cs",
+    "intent": "HassUnpauseTimer",
+    "combo": "default",
+    "text": "obnov časovač",
+    "expected_intent": "HassUnpauseTimer",
+    "expected_slots": {},
+    "wav": "HassUnpauseTimer__default.flac"
+  }
+]

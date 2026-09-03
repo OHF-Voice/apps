@@ -1,0 +1,426 @@
+[
+  {
+    "language": "it",
+    "intent": "HassCancelTimer",
+    "combo": "default",
+    "text": "cancella il timer",
+    "expected_intent": "HassCancelTimer",
+    "expected_slots": {},
+    "wav": "HassCancelTimer__default.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassClimateGetTemperature",
+    "combo": "area_only",
+    "text": "qual è la temperatura in Cucina",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "area": "Cucina"
+    },
+    "wav": "HassClimateGetTemperature__area_only.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassClimateGetTemperature",
+    "combo": "default",
+    "text": "qual è la temperatura",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {},
+    "wav": "HassClimateGetTemperature__default.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassClimateGetTemperature",
+    "combo": "name_only",
+    "text": "qual è la temperatura del Termostato Soggiorno",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "name": "Termostato Soggiorno"
+    },
+    "wav": "HassClimateGetTemperature__name_only.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassDecreaseTimer",
+    "combo": "hours_only",
+    "text": "togli 2 ora dal timer",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassDecreaseTimer__hours_only.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassDecreaseTimer",
+    "combo": "minutes_only",
+    "text": "togli 5 minuto dal timer",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassDecreaseTimer__minutes_only.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassDecreaseTimer",
+    "combo": "seconds_only",
+    "text": "togli 30 secondo dal timer",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassDecreaseTimer__seconds_only.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassGetCurrentDate",
+    "combo": "default",
+    "text": "che giorno è oggi",
+    "expected_intent": "HassGetCurrentDate",
+    "expected_slots": {},
+    "wav": "HassGetCurrentDate__default.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassGetCurrentTime",
+    "combo": "default",
+    "text": "Che ore sono",
+    "expected_intent": "HassGetCurrentTime",
+    "expected_slots": {},
+    "wav": "HassGetCurrentTime__default.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassGetState",
+    "combo": "name_only",
+    "text": "qual è il valore del Temperatura Esterna",
+    "expected_intent": "HassGetState",
+    "expected_slots": {
+      "name": "Temperatura Esterna"
+    },
+    "wav": "HassGetState__name_only.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassGetState",
+    "combo": "name_state",
+    "text": "è lo Angolo Gioco acceso",
+    "expected_intent": "HassGetState",
+    "expected_slots": {
+      "name": "Angolo Gioco",
+      "state": "on"
+    },
+    "wav": "HassGetState__name_state.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassGetWeather",
+    "combo": "default",
+    "text": "che tempo fa",
+    "expected_intent": "HassGetWeather",
+    "expected_slots": {},
+    "wav": "HassGetWeather__default.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassIncreaseTimer",
+    "combo": "hours_only",
+    "text": "aggiungi 2 ora al timer",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassIncreaseTimer__hours_only.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassIncreaseTimer",
+    "combo": "minutes_only",
+    "text": "aggiungi 5 minuto al timer",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassIncreaseTimer__minutes_only.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassIncreaseTimer",
+    "combo": "seconds_only",
+    "text": "aggiungi 30 secondo al timer",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassIncreaseTimer__seconds_only.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassLightSet",
+    "combo": "area_brightness",
+    "text": "imposta la luminosità in Cucina al 50 per cento",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "area": "Cucina",
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__area_brightness.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassLightSet",
+    "combo": "name_brightness",
+    "text": "imposta la luminosità del Angolo Gioco al 50 per cento",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "name": "Angolo Gioco",
+      "brightness": 50.0
+    },
+    "wav": "HassLightSet__name_brightness.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassMediaNext",
+    "combo": "default",
+    "text": "vai avanti",
+    "expected_intent": "HassMediaNext",
+    "expected_slots": {},
+    "wav": "HassMediaNext__default.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassMediaPause",
+    "combo": "default",
+    "text": "metti in pausa la musica",
+    "expected_intent": "HassMediaPause",
+    "expected_slots": {},
+    "wav": "HassMediaPause__default.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassMediaPrevious",
+    "combo": "default",
+    "text": "vai indietro",
+    "expected_intent": "HassMediaPrevious",
+    "expected_slots": {},
+    "wav": "HassMediaPrevious__default.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassMediaUnpause",
+    "combo": "default",
+    "text": "riprendi la musica",
+    "expected_intent": "HassMediaUnpause",
+    "expected_slots": {},
+    "wav": "HassMediaUnpause__default.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassNevermind",
+    "combo": "default",
+    "text": "lascia stare",
+    "expected_intent": "HassNevermind",
+    "expected_slots": {},
+    "wav": "HassNevermind__default.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassPauseTimer",
+    "combo": "default",
+    "text": "metti in pausa il timer",
+    "expected_intent": "HassPauseTimer",
+    "expected_slots": {},
+    "wav": "HassPauseTimer__default.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassSetPosition",
+    "combo": "name_only",
+    "text": "imposta la posizione del Finestra Camera al 50 per cento",
+    "expected_intent": "HassSetPosition",
+    "expected_slots": {
+      "name": "Finestra Camera",
+      "position": 50.0
+    },
+    "wav": "HassSetPosition__name_only.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassSetVolume",
+    "combo": "default",
+    "text": "imposta il volume al 50 per cento",
+    "expected_intent": "HassSetVolume",
+    "expected_slots": {
+      "volume_level": 50.0
+    },
+    "wav": "HassSetVolume__default.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassSetVolumeRelative",
+    "combo": "default",
+    "text": "volume su",
+    "expected_intent": "HassSetVolumeRelative",
+    "expected_slots": {
+      "volume_step": "up"
+    },
+    "wav": "HassSetVolumeRelative__default.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassStartTimer",
+    "combo": "hours_only",
+    "text": "imposta un timer di 2 ora",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassStartTimer__hours_only.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassStartTimer",
+    "combo": "minutes_only",
+    "text": "imposta un timer di 5 minuto",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassStartTimer__minutes_only.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassStartTimer",
+    "combo": "seconds_only",
+    "text": "imposta un timer di 30 secondo",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassStartTimer__seconds_only.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassTimerStatus",
+    "combo": "default",
+    "text": "quanto tempo manca al timer",
+    "expected_intent": "HassTimerStatus",
+    "expected_slots": {},
+    "wav": "HassTimerStatus__default.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassTurnOff",
+    "combo": "area_domain",
+    "text": "spegni le luci in Cucina",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "area": "Cucina",
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__area_domain.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassTurnOff",
+    "combo": "domain_only",
+    "text": "spegni le luci",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__domain_only.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassTurnOff",
+    "combo": "floor_domain",
+    "text": "spegni le luci al Primo piano",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "floor": "Primo Piano",
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__floor_domain.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassTurnOff",
+    "combo": "name_only",
+    "text": "spegni lo Angolo Gioco",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "name": "Angolo Gioco"
+    },
+    "wav": "HassTurnOff__name_only.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassTurnOn",
+    "combo": "area_domain",
+    "text": "accendi le luci in Cucina",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "area": "Cucina",
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__area_domain.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassTurnOn",
+    "combo": "domain_only",
+    "text": "accendi le luci",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__domain_only.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassTurnOn",
+    "combo": "floor_domain",
+    "text": "accendi le luci al Primo piano",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "floor": "Primo Piano",
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__floor_domain.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassTurnOn",
+    "combo": "name_area",
+    "text": "accendi lo Angolo Gioco in Cucina",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "Angolo Gioco",
+      "area": "Cucina"
+    },
+    "wav": "HassTurnOn__name_area.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassTurnOn",
+    "combo": "name_only",
+    "text": "accendi lo Angolo Gioco",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "Angolo Gioco"
+    },
+    "wav": "HassTurnOn__name_only.flac"
+  },
+  {
+    "language": "it",
+    "intent": "HassUnpauseTimer",
+    "combo": "default",
+    "text": "riprendi il timer",
+    "expected_intent": "HassUnpauseTimer",
+    "expected_slots": {},
+    "wav": "HassUnpauseTimer__default.flac"
+  }
+]

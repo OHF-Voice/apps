@@ -44,6 +44,8 @@ from typing import (
 
 import aiohttp
 
+import numeric_ranges
+
 _LOGGER = logging.getLogger("speech-to-phrase.training")
 
 if TYPE_CHECKING:
@@ -487,6 +489,7 @@ def assemble(
     extra_sentences: Optional[Dict[str, List[str]]] = None,
     ov: Optional["overrides.Overrides"] = None,
     hass_sentences: HassSentences = None,
+    range_overrides: Optional["numeric_ranges.Selections"] = None,
 ) -> Tuple[List[str], Dict[str, List[str]]]:
     """Build (templates, list_values) for the enabled built-ins + custom commands.
 
@@ -507,6 +510,7 @@ def assemble(
         extra_sentences=extra_sentences,
         ov=ov,
         hass_sentences=hass_sentences,
+        range_overrides=range_overrides,
     )
     return templates, list_values
 
@@ -521,6 +525,7 @@ def assemble_sources(
     extra_sentences: Optional[Dict[str, List[str]]] = None,
     ov: Optional["overrides.Overrides"] = None,
     hass_sentences: HassSentences = None,
+    range_overrides: Optional["numeric_ranges.Selections"] = None,
 ) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
     """Same grammar as :func:`assemble`, but grouped: ``({source: [template]},
     list_values)``.
@@ -541,6 +546,7 @@ def assemble_sources(
         extra_sentences=extra_sentences,
         ov=ov,
         hass_sentences=hass_sentences,
+        range_overrides=range_overrides,
     )
     by_source: Dict[str, List[str]] = {}
     for template, label in zip(templates, labels):
@@ -558,6 +564,7 @@ def _assemble(
     extra_sentences: Optional[Dict[str, List[str]]] = None,
     ov: Optional["overrides.Overrides"] = None,
     hass_sentences: HassSentences = None,
+    range_overrides: Optional["numeric_ranges.Selections"] = None,
 ) -> Tuple[List[str], List[str], Dict[str, List[str]]]:
     """(templates, per-template source labels, list_values)."""
     import custom_commands as cc
@@ -606,7 +613,7 @@ def _assemble(
             # if expansion fails, fall back to using them verbatim.
             try:
                 flat_templates, _ref = s2p_intents.grammar_templates(
-                    ss.get("sentences", []), lang
+                    ss.get("sentences", []), lang, range_overrides
                 )
             except Exception:  # noqa: BLE001
                 flat_templates = list(ss.get("sentences", []))
@@ -696,8 +703,6 @@ def _hass_groups(hass_sentences: HassSentences) -> List[Tuple[str, List[str]]]:
 # by the size of each list they reference -- which tracks that cost far better
 # than a template count ("turn on {name}" is one template but 40 phrases).
 
-_RANGE_REF_RE = re.compile(r"^(-?\d+)\s*\.\.\s*(-?\d+)(?:\s*[,/]\s*(-?\d+))?$")
-
 
 def phrase_count(templates: Sequence[str], list_values: Dict[str, List[str]]) -> int:
     """Distinct utterances `templates` can produce with `list_values` bound."""
@@ -709,11 +714,9 @@ def phrase_count(templates: Sequence[str], list_values: Dict[str, List[str]]) ->
             # `{0..100:brightness}` is a 101-value range, and testing the whole
             # reference read it as an undefined list and priced it at 1 phrase.
             ref = ref.split(":", 1)[0].strip()
-            m = _RANGE_REF_RE.match(ref)
-            if m:
-                lo, hi = int(m.group(1)), int(m.group(2))
-                step = abs(int(m.group(3) or 1)) or 1
-                n *= max(1, (abs(hi - lo) // step) + 1)
+            numeric_values = numeric_ranges.inline_values(ref)
+            if numeric_values is not None:
+                n *= len(numeric_values)
             else:
                 n *= max(1, len(list_values.get(ref, [])))
         total += n
@@ -730,6 +733,7 @@ def combo_cost(
     slot_lists: Dict[str, List[str]],
     extra_sentences: Optional[Dict[str, List[str]]] = None,
     ov: Optional["overrides.Overrides"] = None,
+    range_overrides: Optional["numeric_ranges.Selections"] = None,
 ) -> Dict[str, int]:
     """Grammar cost of one combo (optionally narrowed to a single domain), as
     ``{"sentences": n_templates, "phrases": n_utterances}``."""
@@ -743,6 +747,7 @@ def combo_cost(
         slot_lists,
         extra_sentences=extra_sentences,
         ov=ov,
+        range_overrides=range_overrides,
     )
     return {
         "sentences": len(templates),

@@ -6,5 +6,5 @@ pyyaml
 numpy
 soundfile
 hassil
-home-assistant-intents>=2026.8.25
+home-assistant-intents>=2026.8.28
 wyoming[zeroconf]

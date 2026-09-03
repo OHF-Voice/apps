@@ -14,3 +14,9 @@ lib/*.egg-info/
 
 .python-version
 run-demo.sh
+
+# Local backend and model-training experiments are not part of the app release.
+lib/speech_to_phrase/backends/zipformer.py
+tools/requirements-zipformer.txt
+tools/zipformer_test.py
+training/

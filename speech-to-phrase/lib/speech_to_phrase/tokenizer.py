@@ -11,6 +11,7 @@ output dimension is ``num_tokens + 1``.
 """
 
 import json
+import re
 import unicodedata
 from pathlib import Path
 from typing import Dict, List, Optional, Protocol, Sequence, Tuple, runtime_checkable
@@ -61,6 +62,7 @@ def _read_alphabet(path: Path) -> List[str]:
 # Apostrophe-like codepoints that orthographies use interchangeably; folded to
 # whichever variant a model's alphabet actually contains.
 _APOSTROPHES = "'’ʼʹ‘′´`"
+_APOSTROPHE_SPACE_RE = re.compile(rf"([{re.escape(_APOSTROPHES)}])\s+")
 
 
 class CharTokenizer:
@@ -274,4 +276,5 @@ class SubwordTokenizer:
             for i in ids
             if (i != self.blank_id) and (i in self._id2piece)
         ]
-        return "".join(pieces).replace(SPM_SPACE, " ").strip()
+        text = "".join(pieces).replace(SPM_SPACE, " ").strip()
+        return _APOSTROPHE_SPACE_RE.sub(r"\1", text)

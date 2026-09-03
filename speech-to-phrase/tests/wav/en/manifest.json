@@ -1,0 +1,492 @@
+[
+  {
+    "language": "en",
+    "intent": "HassCancelTimer",
+    "combo": "default",
+    "text": "cancel the timer",
+    "expected_intent": "HassCancelTimer",
+    "expected_slots": {},
+    "wav": "HassCancelTimer__default.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassClimateGetTemperature",
+    "combo": "area_only",
+    "text": "what is the temperature in the Kitchen",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "area": "Kitchen"
+    },
+    "wav": "HassClimateGetTemperature__area_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassClimateGetTemperature",
+    "combo": "default",
+    "text": "what is the temp",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {},
+    "wav": "HassClimateGetTemperature__default.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassClimateGetTemperature",
+    "combo": "name_only",
+    "text": "what is the temperature of the Living Room Thermostat",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "name": "Living Room Thermostat"
+    },
+    "wav": "HassClimateGetTemperature__name_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassDecreaseTimer",
+    "combo": "hours_only",
+    "text": "remove 2 hours from the timer",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassDecreaseTimer__hours_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassDecreaseTimer",
+    "combo": "minutes_only",
+    "text": "remove 5 minutes from the timer",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassDecreaseTimer__minutes_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassDecreaseTimer",
+    "combo": "seconds_only",
+    "text": "remove 30 seconds from the timer",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassDecreaseTimer__seconds_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassFanSetSpeed",
+    "combo": "default",
+    "text": "set fans speed to 50 percent",
+    "expected_intent": "HassFanSetSpeed",
+    "expected_slots": {
+      "percentage": 50.0
+    },
+    "wav": "HassFanSetSpeed__default.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassFanSetSpeed",
+    "combo": "name_only",
+    "text": "set the Attic Fan speed to 50 percent",
+    "expected_intent": "HassFanSetSpeed",
+    "expected_slots": {
+      "name": "Attic Fan",
+      "percentage": 50.0
+    },
+    "wav": "HassFanSetSpeed__name_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassGetCurrentDate",
+    "combo": "default",
+    "text": "what's todays date",
+    "expected_intent": "HassGetCurrentDate",
+    "expected_slots": {},
+    "wav": "HassGetCurrentDate__default.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassGetCurrentTime",
+    "combo": "default",
+    "text": "what's the current time",
+    "expected_intent": "HassGetCurrentTime",
+    "expected_slots": {},
+    "wav": "HassGetCurrentTime__default.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassGetState",
+    "combo": "name_only",
+    "text": "what is the Outside Temperature",
+    "expected_intent": "HassGetState",
+    "expected_slots": {
+      "name": "Outside Temperature"
+    },
+    "wav": "HassGetState__name_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassGetState",
+    "combo": "name_state",
+    "text": "is the Attic Fan on",
+    "expected_intent": "HassGetState",
+    "expected_slots": {
+      "name": "Attic Fan",
+      "state": "on"
+    },
+    "wav": "HassGetState__name_state.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassGetWeather",
+    "combo": "default",
+    "text": "what's the weather like",
+    "expected_intent": "HassGetWeather",
+    "expected_slots": {},
+    "wav": "HassGetWeather__default.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassIncreaseTimer",
+    "combo": "hours_only",
+    "text": "add 2 hours to the timer",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassIncreaseTimer__hours_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassIncreaseTimer",
+    "combo": "minutes_only",
+    "text": "add 5 minutes to the timer",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassIncreaseTimer__minutes_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassIncreaseTimer",
+    "combo": "seconds_only",
+    "text": "add 30 seconds to the timer",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassIncreaseTimer__seconds_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassLightSet",
+    "combo": "area_brightness",
+    "text": "set the Kitchen brightness to 50 percent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "area": "Kitchen",
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__area_brightness.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassLightSet",
+    "combo": "brightness_only",
+    "text": "set the brightness to 50 percent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__brightness_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassLightSet",
+    "combo": "floor_brightness",
+    "text": "set the First Floor brightness to 50 percent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "floor": "First Floor",
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__floor_brightness.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassLightSet",
+    "combo": "name_brightness",
+    "text": "set the Bedroom Lamp brightness to 50 percent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "name": "Bedroom Lamp",
+      "brightness": 50.0
+    },
+    "wav": "HassLightSet__name_brightness.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassMediaNext",
+    "combo": "default",
+    "text": "next song",
+    "expected_intent": "HassMediaNext",
+    "expected_slots": {},
+    "wav": "HassMediaNext__default.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassMediaPause",
+    "combo": "default",
+    "text": "pause the music",
+    "expected_intent": "HassMediaPause",
+    "expected_slots": {},
+    "wav": "HassMediaPause__default.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassMediaPlayerMute",
+    "combo": "default",
+    "text": "mute the music",
+    "expected_intent": "HassMediaPlayerMute",
+    "expected_slots": {},
+    "wav": "HassMediaPlayerMute__default.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassMediaPlayerUnmute",
+    "combo": "default",
+    "text": "unmute the music",
+    "expected_intent": "HassMediaPlayerUnmute",
+    "expected_slots": {},
+    "wav": "HassMediaPlayerUnmute__default.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassMediaPrevious",
+    "combo": "default",
+    "text": "previous song",
+    "expected_intent": "HassMediaPrevious",
+    "expected_slots": {},
+    "wav": "HassMediaPrevious__default.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassMediaUnpause",
+    "combo": "default",
+    "text": "unpause the music",
+    "expected_intent": "HassMediaUnpause",
+    "expected_slots": {},
+    "wav": "HassMediaUnpause__default.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassNevermind",
+    "combo": "default",
+    "text": "nevermind",
+    "expected_intent": "HassNevermind",
+    "expected_slots": {},
+    "wav": "HassNevermind__default.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassPauseTimer",
+    "combo": "default",
+    "text": "pause the timer",
+    "expected_intent": "HassPauseTimer",
+    "expected_slots": {},
+    "wav": "HassPauseTimer__default.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassSetPosition",
+    "combo": "name_only",
+    "text": "set the Bedroom Curtain position to 50 percent",
+    "expected_intent": "HassSetPosition",
+    "expected_slots": {
+      "name": "Bedroom Curtain",
+      "position": 50.0
+    },
+    "wav": "HassSetPosition__name_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassSetVolume",
+    "combo": "default",
+    "text": "set volume to 50 %",
+    "expected_intent": "HassSetVolume",
+    "expected_slots": {
+      "volume_level": 50.0
+    },
+    "wav": "HassSetVolume__default.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassSetVolumeRelative",
+    "combo": "default",
+    "text": "turn the volume up",
+    "expected_intent": "HassSetVolumeRelative",
+    "expected_slots": {
+      "volume_step": "up"
+    },
+    "wav": "HassSetVolumeRelative__default.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassStartTimer",
+    "combo": "hours_only",
+    "text": "set a timer for 2 hours",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassStartTimer__hours_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassStartTimer",
+    "combo": "minutes_only",
+    "text": "set a timer for 5 minutes",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassStartTimer__minutes_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassStartTimer",
+    "combo": "seconds_only",
+    "text": "set a timer for 30 seconds",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassStartTimer__seconds_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassTimerStatus",
+    "combo": "default",
+    "text": "timers status",
+    "expected_intent": "HassTimerStatus",
+    "expected_slots": {},
+    "wav": "HassTimerStatus__default.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassTurnOff",
+    "combo": "area_domain",
+    "text": "turn off the lights in the Kitchen",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "area": "Kitchen",
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__area_domain.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassTurnOff",
+    "combo": "domain_only",
+    "text": "turn off the lights",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__domain_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassTurnOff",
+    "combo": "floor_domain",
+    "text": "turn off the lights on the First Floor",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "floor": "First Floor",
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__floor_domain.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassTurnOff",
+    "combo": "name_only",
+    "text": "turn off the Attic Fan",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "name": "Attic Fan"
+    },
+    "wav": "HassTurnOff__name_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassTurnOn",
+    "combo": "area_domain",
+    "text": "turn on the lights in the Kitchen",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "area": "Kitchen",
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__area_domain.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassTurnOn",
+    "combo": "domain_only",
+    "text": "turn on the lights",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__domain_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassTurnOn",
+    "combo": "floor_domain",
+    "text": "turn on the lights on the First Floor",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "floor": "First Floor",
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__floor_domain.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassTurnOn",
+    "combo": "name_area",
+    "text": "turn on the Attic Fan in the Kitchen",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "Attic Fan",
+      "area": "Kitchen"
+    },
+    "wav": "HassTurnOn__name_area.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassTurnOn",
+    "combo": "name_only",
+    "text": "turn on the Attic Fan",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "Attic Fan"
+    },
+    "wav": "HassTurnOn__name_only.flac"
+  },
+  {
+    "language": "en",
+    "intent": "HassUnpauseTimer",
+    "combo": "default",
+    "text": "continue the timer",
+    "expected_intent": "HassUnpauseTimer",
+    "expected_slots": {},
+    "wav": "HassUnpauseTimer__default.flac"
+  }
+]

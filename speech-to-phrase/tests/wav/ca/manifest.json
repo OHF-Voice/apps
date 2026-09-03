@@ -1,0 +1,492 @@
+[
+  {
+    "language": "ca",
+    "intent": "HassCancelTimer",
+    "combo": "default",
+    "text": "atura el temporitzador",
+    "expected_intent": "HassCancelTimer",
+    "expected_slots": {},
+    "wav": "HassCancelTimer__default.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassClimateGetTemperature",
+    "combo": "area_only",
+    "text": "quina és la temperatura a el Cuina",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "area": "Cuina"
+    },
+    "wav": "HassClimateGetTemperature__area_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassClimateGetTemperature",
+    "combo": "default",
+    "text": "quina és la temperatura",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {},
+    "wav": "HassClimateGetTemperature__default.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassClimateGetTemperature",
+    "combo": "name_only",
+    "text": "quina és la temperatura del Termòstat",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "name": "Termòstat"
+    },
+    "wav": "HassClimateGetTemperature__name_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassDecreaseTimer",
+    "combo": "hours_only",
+    "text": "treu 2 hora del temporitzador",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassDecreaseTimer__hours_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassDecreaseTimer",
+    "combo": "minutes_only",
+    "text": "treu 5 minuts del temporitzador",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassDecreaseTimer__minutes_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassDecreaseTimer",
+    "combo": "seconds_only",
+    "text": "treu 30 segons del temporitzador",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassDecreaseTimer__seconds_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassFanSetSpeed",
+    "combo": "default",
+    "text": "configura la velocitat del ventilador al 50 per cent",
+    "expected_intent": "HassFanSetSpeed",
+    "expected_slots": {
+      "percentage": 50.0
+    },
+    "wav": "HassFanSetSpeed__default.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassFanSetSpeed",
+    "combo": "name_only",
+    "text": "configura la velocitat del Ventilador A al 50 per cent",
+    "expected_intent": "HassFanSetSpeed",
+    "expected_slots": {
+      "name": "Ventilador A",
+      "percentage": 50.0
+    },
+    "wav": "HassFanSetSpeed__name_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassGetCurrentDate",
+    "combo": "default",
+    "text": "quin dia és avui",
+    "expected_intent": "HassGetCurrentDate",
+    "expected_slots": {},
+    "wav": "HassGetCurrentDate__default.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassGetCurrentTime",
+    "combo": "default",
+    "text": "quina hora és",
+    "expected_intent": "HassGetCurrentTime",
+    "expected_slots": {},
+    "wav": "HassGetCurrentTime__default.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassGetState",
+    "combo": "name_only",
+    "text": "quin és el valor del Temperatura exterior",
+    "expected_intent": "HassGetState",
+    "expected_slots": {
+      "name": "Temperatura exterior"
+    },
+    "wav": "HassGetState__name_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassGetState",
+    "combo": "name_state",
+    "text": "està el Interruptor A engegat",
+    "expected_intent": "HassGetState",
+    "expected_slots": {
+      "name": "Interruptor A",
+      "state": "on"
+    },
+    "wav": "HassGetState__name_state.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassGetWeather",
+    "combo": "default",
+    "text": "quin temps fa",
+    "expected_intent": "HassGetWeather",
+    "expected_slots": {},
+    "wav": "HassGetWeather__default.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassIncreaseTimer",
+    "combo": "hours_only",
+    "text": "afegeix 2 hora al temporitzador",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassIncreaseTimer__hours_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassIncreaseTimer",
+    "combo": "minutes_only",
+    "text": "afegeix 5 minuts al temporitzador",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassIncreaseTimer__minutes_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassIncreaseTimer",
+    "combo": "seconds_only",
+    "text": "afegeix 30 segons al temporitzador",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassIncreaseTimer__seconds_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassLightSet",
+    "combo": "area_brightness",
+    "text": "configura la brillantor a el Cuina al 50 per cent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "area": "Cuina",
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__area_brightness.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassLightSet",
+    "combo": "brightness_only",
+    "text": "configura la brillantor al 50 per cent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__brightness_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassLightSet",
+    "combo": "floor_brightness",
+    "text": "configura la brillantor de la planta Planta baixa al 50 per cent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "floor": "Planta baixa",
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__floor_brightness.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassLightSet",
+    "combo": "name_brightness",
+    "text": "configura la brillantor del Llum al 50 per cent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "name": "Llum",
+      "brightness": 50.0
+    },
+    "wav": "HassLightSet__name_brightness.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassMediaNext",
+    "combo": "default",
+    "text": "següent cançó",
+    "expected_intent": "HassMediaNext",
+    "expected_slots": {},
+    "wav": "HassMediaNext__default.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassMediaPause",
+    "combo": "default",
+    "text": "pausa la música",
+    "expected_intent": "HassMediaPause",
+    "expected_slots": {},
+    "wav": "HassMediaPause__default.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassMediaPlayerMute",
+    "combo": "default",
+    "text": "silencia la música",
+    "expected_intent": "HassMediaPlayerMute",
+    "expected_slots": {},
+    "wav": "HassMediaPlayerMute__default.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassMediaPlayerUnmute",
+    "combo": "default",
+    "text": "activa el so",
+    "expected_intent": "HassMediaPlayerUnmute",
+    "expected_slots": {},
+    "wav": "HassMediaPlayerUnmute__default.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassMediaPrevious",
+    "combo": "default",
+    "text": "posa la cançó anterior",
+    "expected_intent": "HassMediaPrevious",
+    "expected_slots": {},
+    "wav": "HassMediaPrevious__default.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassMediaUnpause",
+    "combo": "default",
+    "text": "continua la música",
+    "expected_intent": "HassMediaUnpause",
+    "expected_slots": {},
+    "wav": "HassMediaUnpause__default.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassNevermind",
+    "combo": "default",
+    "text": "deixa-ho",
+    "expected_intent": "HassNevermind",
+    "expected_slots": {},
+    "wav": "HassNevermind__default.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassPauseTimer",
+    "combo": "default",
+    "text": "pausa el temporitzador",
+    "expected_intent": "HassPauseTimer",
+    "expected_slots": {},
+    "wav": "HassPauseTimer__default.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassSetPosition",
+    "combo": "name_only",
+    "text": "configura la posició del Finestra cuina al 50 per cent",
+    "expected_intent": "HassSetPosition",
+    "expected_slots": {
+      "name": "Finestra cuina",
+      "position": 50.0
+    },
+    "wav": "HassSetPosition__name_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassSetVolume",
+    "combo": "default",
+    "text": "configura el volum al 50 per cent",
+    "expected_intent": "HassSetVolume",
+    "expected_slots": {
+      "volume_level": 50.0
+    },
+    "wav": "HassSetVolume__default.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassSetVolumeRelative",
+    "combo": "default",
+    "text": "volum puja",
+    "expected_intent": "HassSetVolumeRelative",
+    "expected_slots": {
+      "volume_step": "up"
+    },
+    "wav": "HassSetVolumeRelative__default.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassStartTimer",
+    "combo": "hours_only",
+    "text": "posa un temporitzador de 2 hora",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassStartTimer__hours_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassStartTimer",
+    "combo": "minutes_only",
+    "text": "posa un temporitzador de 5 minuts",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassStartTimer__minutes_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassStartTimer",
+    "combo": "seconds_only",
+    "text": "posa un temporitzador de 30 segons",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassStartTimer__seconds_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassTimerStatus",
+    "combo": "default",
+    "text": "estat del temporitzador",
+    "expected_intent": "HassTimerStatus",
+    "expected_slots": {},
+    "wav": "HassTimerStatus__default.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassTurnOff",
+    "combo": "area_domain",
+    "text": "apaga els llums a el Cuina",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "area": "Cuina",
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__area_domain.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassTurnOff",
+    "combo": "domain_only",
+    "text": "apaga els llums",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__domain_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassTurnOff",
+    "combo": "floor_domain",
+    "text": "apaga els llums a la Planta baixa",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "floor": "Planta baixa",
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__floor_domain.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassTurnOff",
+    "combo": "name_only",
+    "text": "apaga el Interruptor A",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "name": "Interruptor A"
+    },
+    "wav": "HassTurnOff__name_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassTurnOn",
+    "combo": "area_domain",
+    "text": "engega els llums a el Cuina",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "area": "Cuina",
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__area_domain.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassTurnOn",
+    "combo": "domain_only",
+    "text": "engega els llums",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__domain_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassTurnOn",
+    "combo": "floor_domain",
+    "text": "engega els llums a la Planta baixa",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "floor": "Planta baixa",
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__floor_domain.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassTurnOn",
+    "combo": "name_area",
+    "text": "engega el Interruptor A a el Cuina",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "Interruptor A",
+      "area": "Cuina"
+    },
+    "wav": "HassTurnOn__name_area.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassTurnOn",
+    "combo": "name_only",
+    "text": "engega el Interruptor A",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "Interruptor A"
+    },
+    "wav": "HassTurnOn__name_only.flac"
+  },
+  {
+    "language": "ca",
+    "intent": "HassUnpauseTimer",
+    "combo": "default",
+    "text": "continua el temporitzador",
+    "expected_intent": "HassUnpauseTimer",
+    "expected_slots": {},
+    "wav": "HassUnpauseTimer__default.flac"
+  }
+]

@@ -1,0 +1,468 @@
+[
+  {
+    "language": "es",
+    "intent": "HassCancelTimer",
+    "combo": "default",
+    "text": "cancela el temporizador",
+    "expected_intent": "HassCancelTimer",
+    "expected_slots": {},
+    "wav": "HassCancelTimer__default.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassClimateGetTemperature",
+    "combo": "area_only",
+    "text": "cuál es la temperatura en el Cocina",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "area": "Cocina"
+    },
+    "wav": "HassClimateGetTemperature__area_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassClimateGetTemperature",
+    "combo": "default",
+    "text": "cuál es la temperatura",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {},
+    "wav": "HassClimateGetTemperature__default.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassClimateGetTemperature",
+    "combo": "name_only",
+    "text": "cuál es la temperatura del Aire acondicionado",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "name": "Aire acondicionado"
+    },
+    "wav": "HassClimateGetTemperature__name_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassDecreaseTimer",
+    "combo": "hours_only",
+    "text": "quita 2 hora al temporizador",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassDecreaseTimer__hours_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassDecreaseTimer",
+    "combo": "minutes_only",
+    "text": "quita 5 minuto al temporizador",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassDecreaseTimer__minutes_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassDecreaseTimer",
+    "combo": "seconds_only",
+    "text": "quita 30 segundo al temporizador",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassDecreaseTimer__seconds_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassFanSetSpeed",
+    "combo": "default",
+    "text": "pon la velocidad del ventilador al 50 por ciento",
+    "expected_intent": "HassFanSetSpeed",
+    "expected_slots": {
+      "percentage": 50.0
+    },
+    "wav": "HassFanSetSpeed__default.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassFanSetSpeed",
+    "combo": "name_only",
+    "text": "pon la velocidad del Campana Extractora al 50 por ciento",
+    "expected_intent": "HassFanSetSpeed",
+    "expected_slots": {
+      "name": "Campana Extractora",
+      "percentage": 50.0
+    },
+    "wav": "HassFanSetSpeed__name_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassGetCurrentDate",
+    "combo": "default",
+    "text": "qué día es hoy",
+    "expected_intent": "HassGetCurrentDate",
+    "expected_slots": {},
+    "wav": "HassGetCurrentDate__default.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassGetCurrentTime",
+    "combo": "default",
+    "text": "qué hora es",
+    "expected_intent": "HassGetCurrentTime",
+    "expected_slots": {},
+    "wav": "HassGetCurrentTime__default.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassGetState",
+    "combo": "name_only",
+    "text": "cuál es el valor de Temperatura Exterior",
+    "expected_intent": "HassGetState",
+    "expected_slots": {
+      "name": "Temperatura Exterior"
+    },
+    "wav": "HassGetState__name_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassGetState",
+    "combo": "name_state",
+    "text": "está el Campana Extractora encendidos",
+    "expected_intent": "HassGetState",
+    "expected_slots": {
+      "name": "Campana Extractora",
+      "state": "on"
+    },
+    "wav": "HassGetState__name_state.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassGetWeather",
+    "combo": "default",
+    "text": "qué tiempo hace",
+    "expected_intent": "HassGetWeather",
+    "expected_slots": {},
+    "wav": "HassGetWeather__default.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassIncreaseTimer",
+    "combo": "hours_only",
+    "text": "añade 2 hora al temporizador",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassIncreaseTimer__hours_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassIncreaseTimer",
+    "combo": "minutes_only",
+    "text": "añade 5 minuto al temporizador",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassIncreaseTimer__minutes_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassIncreaseTimer",
+    "combo": "seconds_only",
+    "text": "añade 30 segundo al temporizador",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassIncreaseTimer__seconds_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassLightSet",
+    "combo": "area_brightness",
+    "text": "pon el brillo en el Cocina al 50 por ciento",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "area": "Cocina",
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__area_brightness.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassLightSet",
+    "combo": "brightness_only",
+    "text": "pon el brillo al 50 por ciento",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__brightness_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassLightSet",
+    "combo": "floor_brightness",
+    "text": "pon el brillo en la planta Primera planta al 50 por ciento",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "floor": "Primera Planta",
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__floor_brightness.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassLightSet",
+    "combo": "name_brightness",
+    "text": "pon el brillo de el Luz A al 50 por ciento",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "name": "Luz A",
+      "brightness": 50.0
+    },
+    "wav": "HassLightSet__name_brightness.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassMediaNext",
+    "combo": "default",
+    "text": "siguiente canción",
+    "expected_intent": "HassMediaNext",
+    "expected_slots": {},
+    "wav": "HassMediaNext__default.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassMediaPause",
+    "combo": "default",
+    "text": "pausa la música",
+    "expected_intent": "HassMediaPause",
+    "expected_slots": {},
+    "wav": "HassMediaPause__default.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassMediaPlayerMute",
+    "combo": "default",
+    "text": "silencia la música",
+    "expected_intent": "HassMediaPlayerMute",
+    "expected_slots": {},
+    "wav": "HassMediaPlayerMute__default.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassMediaPlayerUnmute",
+    "combo": "default",
+    "text": "quita el silencio",
+    "expected_intent": "HassMediaPlayerUnmute",
+    "expected_slots": {},
+    "wav": "HassMediaPlayerUnmute__default.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassMediaPrevious",
+    "combo": "default",
+    "text": "la canción anterior",
+    "expected_intent": "HassMediaPrevious",
+    "expected_slots": {},
+    "wav": "HassMediaPrevious__default.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassMediaUnpause",
+    "combo": "default",
+    "text": "continúa la música",
+    "expected_intent": "HassMediaUnpause",
+    "expected_slots": {},
+    "wav": "HassMediaUnpause__default.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassNevermind",
+    "combo": "default",
+    "text": "da igual",
+    "expected_intent": "HassNevermind",
+    "expected_slots": {},
+    "wav": "HassNevermind__default.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassPauseTimer",
+    "combo": "default",
+    "text": "pausa el temporizador",
+    "expected_intent": "HassPauseTimer",
+    "expected_slots": {},
+    "wav": "HassPauseTimer__default.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassSetPosition",
+    "combo": "name_only",
+    "text": "pon la posición del Cortina dormitorio al 50 por ciento",
+    "expected_intent": "HassSetPosition",
+    "expected_slots": {
+      "name": "Cortina dormitorio",
+      "position": 50.0
+    },
+    "wav": "HassSetPosition__name_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassSetVolume",
+    "combo": "default",
+    "text": "pon el volumen al 50 por ciento",
+    "expected_intent": "HassSetVolume",
+    "expected_slots": {
+      "volume_level": 50.0
+    },
+    "wav": "HassSetVolume__default.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassSetVolumeRelative",
+    "combo": "default",
+    "text": "sube el volumen",
+    "expected_intent": "HassSetVolumeRelative",
+    "expected_slots": {
+      "volume_step": "up"
+    },
+    "wav": "HassSetVolumeRelative__default.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassStartTimer",
+    "combo": "hours_only",
+    "text": "pon un temporizador de 2 hora",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassStartTimer__hours_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassStartTimer",
+    "combo": "minutes_only",
+    "text": "pon un temporizador de 5 minuto",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassStartTimer__minutes_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassStartTimer",
+    "combo": "seconds_only",
+    "text": "pon un temporizador de 30 segundo",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassStartTimer__seconds_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassTimerStatus",
+    "combo": "default",
+    "text": "cuánto tiempo queda para el temporizador",
+    "expected_intent": "HassTimerStatus",
+    "expected_slots": {},
+    "wav": "HassTimerStatus__default.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassTurnOff",
+    "combo": "area_domain",
+    "text": "apaga las luces en el Cocina",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "area": "Cocina",
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__area_domain.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassTurnOff",
+    "combo": "domain_only",
+    "text": "apaga las luces",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__domain_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassTurnOff",
+    "combo": "name_only",
+    "text": "apaga el Campana Extractora",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "name": "Campana Extractora"
+    },
+    "wav": "HassTurnOff__name_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassTurnOn",
+    "combo": "area_domain",
+    "text": "enciende las luces en el Cocina",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "area": "Cocina",
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__area_domain.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassTurnOn",
+    "combo": "domain_only",
+    "text": "enciende las luces",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__domain_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassTurnOn",
+    "combo": "name_area",
+    "text": "enciende el Campana Extractora en el Cocina",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "Campana Extractora",
+      "area": "Cocina"
+    },
+    "wav": "HassTurnOn__name_area.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassTurnOn",
+    "combo": "name_only",
+    "text": "enciende el Campana Extractora",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "Campana Extractora"
+    },
+    "wav": "HassTurnOn__name_only.flac"
+  },
+  {
+    "language": "es",
+    "intent": "HassUnpauseTimer",
+    "combo": "default",
+    "text": "continúa el temporizador",
+    "expected_intent": "HassUnpauseTimer",
+    "expected_slots": {},
+    "wav": "HassUnpauseTimer__default.flac"
+  }
+]

@@ -11,6 +11,10 @@ web-UI override for one language:
   * ``sentence_triggers`` / ``question_answers`` -- whether to pull the phrases
     Home Assistant is already listening for into the grammar (see
     ``hass_sentences.py``). These *are* the grammar, so changing one retrains.
+  * ``numeric_ranges`` -- canonical choices for package numeric lists. Omitted
+    lists use their Recommended values; ``null`` explicitly means Full range.
+    These narrow both the acoustic grammar and the intent matcher's accepted
+    values, and therefore also retrain.
 
 Debug mode is deliberately *not* here: it stops the add-on answering Home
 Assistant, so it must not outlive the session that turned it on (see
@@ -20,7 +24,7 @@ Assistant, so it must not outlive the session that turned it on (see
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Iterable, Mapping, Optional, Union
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,6 +51,22 @@ def _read(p: Path) -> Dict[str, Any]:
 
 def load(data_dir: Union[str, Path], lang: str) -> Dict[str, Any]:
     return _read(path(data_dir, lang))
+
+
+def update(
+    data_dir: Union[str, Path],
+    lang: str,
+    values: Mapping[str, Any],
+    remove: Iterable[str] = (),
+) -> None:
+    """Atomically update several settings in one file write."""
+    p = path(data_dir, lang)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    data = _read(p)
+    data.update(values)
+    for key in remove:
+        data.pop(key, None)
+    p.write_text(json.dumps(data, indent=2))
 
 
 def _coerce_max_score(value: Any, default: float) -> float:
@@ -87,11 +107,7 @@ def set_bool(
     if not isinstance(value, bool):
         _LOGGER.warning("Ignoring non-boolean %s=%r for '%s'", key, value, lang)
         return None
-    p = path(data_dir, lang)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    data = _read(p)
-    data[key] = value
-    p.write_text(json.dumps(data, indent=2))
+    update(data_dir, lang, {key: value})
     return value
 
 
@@ -107,9 +123,6 @@ def set_max_score(data_dir: Union[str, Path], lang: str, value: Any) -> Optional
     except (TypeError, ValueError):
         _LOGGER.warning("Ignoring unparseable max_score %r for '%s'", value, lang)
         return None
-    p = path(data_dir, lang)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    data = _read(p)
-    data["max_score"] = stored = min(MAX_MAX_SCORE, max(MIN_MAX_SCORE, parsed))
-    p.write_text(json.dumps(data, indent=2))
+    stored = min(MAX_MAX_SCORE, max(MIN_MAX_SCORE, parsed))
+    update(data_dir, lang, {"max_score": stored})
     return stored

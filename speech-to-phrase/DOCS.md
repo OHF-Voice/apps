@@ -44,9 +44,13 @@ the one the recognizer is running. Change it there and reload the page.
   Assistant as text. Supports `{name}`, `{area}`, `{floor}`, `[optional]`,
   `(a|b)` and `{0..100:slot}`; a sentence using `{name}` also picks which
   device types that slot may match.
-- **Devices & Lists** — the entity, area and floor names pulled from your
-  registry. Switching one off removes it from *every* command, which is the
-  main way to shrink a grammar cluttered with devices you never speak to.
+- **Devices & Lists** — numeric package lists plus the entity, area and floor
+  names pulled from your registry. Numeric lists can use their full package
+  range, common multiples of 5 or 10, or an inclusive custom expression such as
+  `3, 5, 8, 10-100/10`; values outside the package's minimum, maximum or base
+  step are rejected. **Recommended** is the default, and the active ranges are
+  always shown below the selector so you know which values can be said.
+  Switching a name off removes it from *every* command.
 - **Settings** — **Max score**, the confidence gate: a decode is accepted only
   when its score is at or below this, and anything above is handed back to Home
   Assistant as nothing so it can fall back to cloud speech-to-text. Lower is
@@ -58,6 +62,22 @@ the one the recognizer is running. Change it there and reload the page.
   recognized — a phrase with no spoken form, or one using a list
   Speech-to-Phrase can't fill in. Those phrases are part of the grammar, so
   they're counted in the Commands meter's total.
+
+Recommended numeric values favor common voice commands while avoiding hundreds
+of near-duplicate grammar paths:
+
+| List | Recommended values |
+|---|---|
+| Brightness, fan speed, absolute volume | `10-100/10` |
+| Cover position | `0-100/10` |
+| Relative volume change | `5-50/5` |
+| Timer seconds and minutes | `1-10, 15-100/5` |
+| Timer hours | `1-12, 24-96/24` |
+| Temperature | `5-35` |
+| Color temperature | `1000-10000/500` |
+
+Czech timer ranges extend seconds and minutes through `120`; their hours use
+`1-12, 24`, matching the package's `24`-hour maximum.
 
 ## Debug mode
 
@@ -109,4 +129,3 @@ The rest is chosen for you:
   volume, mute, fan speed, cover position and "is the door open" start off, one
   click away in **Commands**.
 - Both **Home Assistant sentence sources** are on, switchable in **Settings**.
-

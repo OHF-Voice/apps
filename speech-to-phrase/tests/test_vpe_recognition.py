@@ -14,34 +14,38 @@ from pathlib import Path
 
 import numpy as np
 import soundfile as sf
+import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
+from speech_to_phrase import load_recognizer  # noqa: E402
+
+import training  # noqa: E402
 from audio_frontend import prepare_audio  # noqa: E402
 from intent_matcher import build_matcher  # noqa: E402
 from models import default_max_score  # noqa: E402
 from overrides import Overrides  # noqa: E402
-import training  # noqa: E402
 from wyoming_server import build_info  # noqa: E402
-
-from speech_to_phrase import load_recognizer  # noqa: E402
 
 MODEL = ROOT / "local/models/stt_en_citrinet_512"
 ENABLED = ROOT / "local/data/en/enabled.json"
 WAV_ROOT = ROOT / "tests/wav/mike"
 OOV_ROOT = ROOT / "tests/wav/oov"
+NOISE_ROOT = ROOT / "tests/wav/noise"
 
-# Canonical Home Assistant registry names represented by the recordings.
-ENTITIES = {
-    "basement lights": "light",
-    "office lamp": "light",
-    "overhead light": "light",
-    "standing light": "light",
+FIXTURES = yaml.safe_load((WAV_ROOT / "fixtures.yaml").read_text())
+ENTITIES = {name: "light" for name in FIXTURES["entities"]}
+SLOT_LISTS = {
+    **training.DEV_SLOT_LISTS,
+    "area": FIXTURES["areas"],
 }
-CUSTOM_COMMANDS = [{"sentences": ["start oliver workout"], "mode": "stt"}]
+CUSTOM_COMMANDS = [
+    {"sentences": [sentence], "mode": "stt"}
+    for sentence in FIXTURES["custom_sentences"]
+]
 
-CONTRACTIONS = {"whats": "what's"}
+CONTRACTIONS = {"mikes": "mike's", "whats": "what's"}
 
 
 def expected_transcript(path: Path) -> str:
@@ -70,7 +74,9 @@ def main() -> int:
 
     def check(label: str, condition: bool, detail: str = "") -> None:
         nonlocal ok
-        print(f"{'ok  ' if condition else 'FAIL'} {label}{(': ' + detail) if detail else ''}")
+        print(
+            f"{'ok  ' if condition else 'FAIL'} {label}{(': ' + detail) if detail else ''}"
+        )
         ok &= condition
 
     # A generated inflection maps back to the canonical HA entity. It must not be
@@ -115,18 +121,16 @@ def main() -> int:
         enabled,
         CUSTOM_COMMANDS,
         ENTITIES,
-        training.DEV_SLOT_LISTS,
+        SLOT_LISTS,
     )
-    recognizer = load_recognizer(
-        "citrinet", MODEL, language="en", token_bonus=2.0
-    )
+    recognizer = load_recognizer("citrinet", MODEL, language="en", token_bonus=2.0)
     recognizer.train(templates, list_values)
     matcher = build_matcher(
         ROOT,
         "en",
         enabled,
         ENTITIES,
-        training.DEV_SLOT_LISTS,
+        SLOT_LISTS,
         custom_commands=CUSTOM_COMMANDS,
     )
     assert matcher is not None
@@ -139,12 +143,9 @@ def main() -> int:
         result = recognizer.transcribe(prepare_audio(samples))
         expected = expected_transcript(wav)
         expected_command = command_key(matcher, expected)
-        same_command = (
-            result.text == expected
-            or (
-                expected_command is not None
-                and command_key(matcher, result.text) == expected_command
-            )
+        same_command = result.text == expected or (
+            expected_command is not None
+            and command_key(matcher, result.text) == expected_command
         )
         passed = same_command and result.score <= gate
         recognized += int(passed)
@@ -170,6 +171,21 @@ def main() -> int:
         f"\nVPE command-correct+accepted: {recognized}/{len(wavs)}; "
         f"OOV rejected: {rejected}/{len(oov_wavs)}"
     )
+
+    noise_rejected = 0
+    noise_wavs = sorted(NOISE_ROOT.glob("*.wav"))
+    for wav in noise_wavs:
+        samples, sample_rate = sf.read(wav, dtype="float32", always_2d=False)
+        check(f"noise {wav.name} sample rate", sample_rate == 16000)
+        result = recognizer.transcribe(prepare_audio(samples))
+        noise_rejected += int(result.score > gate)
+        check(
+            f"noise {wav.name}",
+            result.score > gate,
+            f"got={result.text!r}, score={result.score:.3f}",
+        )
+
+    print(f"Noise rejected: {noise_rejected}/{len(noise_wavs)}")
     return 0 if ok else 1
 
 

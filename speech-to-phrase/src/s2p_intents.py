@@ -45,6 +45,8 @@ from home_assistant_intents import (
     get_speech_to_phrase_languages,
 )
 
+import numeric_ranges as nr
+
 _LOGGER = logging.getLogger("speech-to-phrase.s2p_intents")
 
 _REF_RE = re.compile(r"\{([^{}]+)\}")
@@ -359,6 +361,23 @@ def _list_defs(
     return ranges, texts
 
 
+def range_list_definitions(lang: str) -> Dict[str, Tuple[int, int, int]]:
+    """Package numeric lists as ``name -> (minimum, maximum, base step)``."""
+    ranges, _texts = _list_defs(lang)
+    return dict(ranges)
+
+
+def range_list_multipliers(lang: str) -> Dict[str, float]:
+    """Package numeric-list output multipliers, keyed by list name."""
+    out = {}
+    for name, spec in list_defs_dict(lang).items():
+        range_spec = spec.get("range") if isinstance(spec, dict) else None
+        if not isinstance(range_spec, dict) or range_spec.get("multiplier") is None:
+            continue
+        out[name] = float(range_spec["multiplier"])
+    return out
+
+
 # --- speakability -----------------------------------------------------------
 #
 # Package templates and list values are authored for hassil's *text* matcher, so
@@ -598,14 +617,19 @@ def _rewrite_ref(
     range_lists: Dict[str, Tuple[int, int, int]],
     text_lists: Mapping[str, Sequence[str]],
     referenced: Set[str],
+    range_overrides: nr.Selections,
 ) -> str:
     content = content.strip()
     if _INLINE_RANGE_RE.match(content):
         return "{" + content + "}"  # already an inline range
     name = content.split(":", 1)[0].strip()
     if name in range_lists:
-        lo, hi, step = range_lists[name]
-        body = f"{lo}..{hi}" if step in (1, 0, None) else f"{lo}..{hi},{step}"
+        selection = range_overrides.get(name)
+        if selection is not None:
+            body = selection.grammar
+        else:
+            lo, hi, step = range_lists[name]
+            body = f"{lo}..{hi}" if step in (1, 0, None) else f"{lo}..{hi},{step}"
         return "{" + body + "}"
     if name in text_lists or name in ("name", "area", "floor"):
         referenced.add(name)
@@ -614,7 +638,9 @@ def _rewrite_ref(
 
 
 def grammar_templates(
-    sentences: Sequence[str], lang: str
+    sentences: Sequence[str],
+    lang: str,
+    range_overrides: Optional[nr.Selections] = None,
 ) -> Tuple[List[str], Set[str]]:
     """Flat, lib-dialect templates for a block's hassil sentences.
 
@@ -630,6 +656,7 @@ def grammar_templates(
     """
     rules = expansion_rules(lang)
     range_lists, text_lists = _list_defs(lang)
+    selected_ranges = range_overrides or {}
     intents = Intents.from_dict(
         {
             "language": lang,
@@ -653,7 +680,11 @@ def grammar_templates(
                 flat = normalize_whitespace(text).strip()
                 rewritten = _REF_RE.sub(
                     lambda m: _rewrite_ref(
-                        m.group(1), range_lists, text_lists, referenced
+                        m.group(1),
+                        range_lists,
+                        text_lists,
+                        referenced,
+                        selected_ranges,
                     ),
                     flat,
                 )
@@ -677,3 +708,42 @@ def grammar_templates(
                     sentence.text,
                 )
     return list(dict.fromkeys(out)), referenced
+
+
+def referenced_range_lists(sentences: Sequence[str], lang: str) -> Set[str]:
+    """Numeric package lists reached by sentences, including through rules."""
+    ranges, _texts = _list_defs(lang)
+    intents = Intents.from_dict(
+        {
+            "language": lang,
+            "intents": {"_G": {"data": [{"sentences": list(sentences)}]}},
+            "expansion_rules": expansion_rules(lang),
+        }
+    )
+    referenced: Set[str] = set()
+    parsed_rules = intents.expansion_rules
+    for intent_data in intents.intents["_G"].data:
+        for sentence in intent_data.sentences:
+            for text in sample_sentence(
+                sentence,
+                slot_lists=None,
+                expansion_rules=parsed_rules,
+                expand_lists=False,
+                expand_ranges=False,
+            ):
+                for match in _REF_RE.finditer(text):
+                    name = match.group(1).split(":", 1)[0].strip()
+                    if name in ranges:
+                        referenced.add(name)
+    return referenced
+
+
+@lru_cache(maxsize=None)
+def combo_range_lists(lang: str, intent: str, combo: str) -> Tuple[str, ...]:
+    """Numeric lists reached by one Speech-to-Phrase command."""
+    sentences = [
+        sentence
+        for block in combo_blocks(lang, intent, combo)
+        for sentence in block.get("sentences", [])
+    ]
+    return tuple(sorted(referenced_range_lists(sentences, lang)))

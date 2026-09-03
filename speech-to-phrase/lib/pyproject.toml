@@ -1,0 +1,33 @@
+[build-system]
+requires = ["scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name        = "speech_to_phrase"
+version     = "2.0.0"
+license     = {text = "Apache-2.0"}
+description = "Constrained CTC speech-to-text over sentence templates (Citrinet/Coqui + OpenFST)"
+authors     = [
+    {name = "The Home Assistant Authors", email = "hello@home-assistant.io"}
+]
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "onnxruntime",
+    "sentencepiece",
+    "soundfile",
+    "scipy",
+    "soxr",
+    "icu-rbnf",
+]
+
+[tool.scikit-build]
+wheel.py-api = "cp311"
+minimum-version = "build-system.requires"
+build-dir = "build/{wheel_tag}"
+
+wheel.packages = ["speech_to_phrase"]
+wheel.exclude = ["**/*.cc"]
+
+[tool.scikit-build.cmake]
+version = ">=3.26"

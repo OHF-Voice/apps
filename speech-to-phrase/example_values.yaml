@@ -1,0 +1,15 @@
+# Representative values shown in the web UI's example sentences.
+#
+# These affect ONLY the examples rendered in the UI -- not what Speech-to-Phrase
+# trains on or can recognize (the grammar always covers each slot's full range).
+# Keyed by slot name; edit any value to taste. Slots not listed fall back to the
+# built-in defaults in src/presets.py (_NUM_SAMPLE).
+example_values:
+  hours: 2
+  minutes: 5
+  seconds: 30
+  brightness: 50
+  volume_level: 50
+  position: 50
+  percentage: 50
+  temperature: 70

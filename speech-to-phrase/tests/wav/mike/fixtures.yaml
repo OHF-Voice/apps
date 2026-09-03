@@ -1,0 +1,16 @@
+areas:
+  - basement
+  - kitchen
+  - mike's bedroom
+  - office
+  - living room
+
+entities:
+  - overhead light
+  - home assistant light
+  - office lamp
+  - basement light
+  - standing light
+
+custom_sentences:
+  - start oliver workout

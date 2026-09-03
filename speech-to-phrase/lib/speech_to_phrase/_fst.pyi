@@ -1,0 +1,13 @@
+"""Type stub for the native OpenFST extension (built from _fst/fstmodule.cc).
+
+The compiled module carries no runtime type info; this just declares which
+members exist so mypy doesn't report them as missing. Precise call/return types
+live on the Python wrappers in ``grammar.py``.
+"""
+
+from typing import Any
+
+def build_grammar(num_tokens: int, blank_id: int, arcs: Any, finals: Any) -> Any: ...
+def save_grammar(capsule: Any, path: str) -> None: ...
+def load_grammar(path: str) -> Any: ...
+def decode(*args: Any) -> Any: ...

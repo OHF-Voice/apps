@@ -1,0 +1,21 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Start Speech-to-Phrase: the Wyoming STT server (tcp://0.0.0.0:10300) and the
+# configuration web UI (Home Assistant ingress, :8099) run in a single process.
+# ==============================================================================
+flags=()
+bashio::config.true 'debug_logging' && flags+=('--debug')
+
+cd /usr/src || exit 1
+
+exec python3 src/app.py \
+    --data /data \
+    --models-dir '/data/models' \
+    --language "$(bashio::config 'language')" \
+    --wyoming-uri 'tcp://0.0.0.0:10300' \
+    --hass-api 'http://supervisor/core/api' \
+    --hass-token "${SUPERVISOR_TOKEN}" \
+    --host '0.0.0.0' \
+    --port 8099 \
+    "${flags[@]}"

@@ -1,0 +1,35 @@
+---
+version: 2.0.0
+slug: speech-to-phrase
+name: Speech-to-Phrase
+description: Constrained Wyoming speech-to-text for Home Assistant
+url: https://github.com/OHF-Voice/apps/tree/main/speech-to-phrase
+arch:
+  - amd64
+  - aarch64
+init: false
+discovery:
+  - wyoming
+homeassistant_api: true
+ingress: true
+ingress_port: 8099
+ports:
+  "10300/tcp": null
+# Two options, deliberately. Everything else that used to live here -- which
+# commands are on, the score gate, whether to pull in Home Assistant's own
+# trigger phrases -- belongs to a language and is edited in the web UI, where the
+# effect of a change is visible next to it. An add-on option is a bad home for a
+# per-language setting: it applies to all of them at once, and the Supervisor
+# page cannot show you what it costs.
+options:
+  language: "en"
+  debug_logging: false
+schema:
+  # The languages home-assistant-intents ships Speech-to-Phrase templates for.
+  # A dropdown, not free text: a language with no templates has nothing to
+  # recognize, and typing one produced an add-on that refused to start. Keep in
+  # step with the package -- the add-on re-checks this at startup and logs the
+  # real list if it has moved on.
+  language: "list(ca|cs|de|en|es|fr|it|nl)"
+  debug_logging: bool
+homeassistant: 2026.3.0

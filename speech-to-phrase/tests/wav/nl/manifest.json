@@ -1,0 +1,468 @@
+[
+  {
+    "language": "nl",
+    "intent": "HassCancelTimer",
+    "combo": "default",
+    "text": "stop de timer",
+    "expected_intent": "HassCancelTimer",
+    "expected_slots": {},
+    "wav": "HassCancelTimer__default.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassClimateGetTemperature",
+    "combo": "area_only",
+    "text": "Wat is de temperatuur in de Keuken",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "area": "Keuken"
+    },
+    "wav": "HassClimateGetTemperature__area_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassClimateGetTemperature",
+    "combo": "default",
+    "text": "wat is de temperatuur",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {},
+    "wav": "HassClimateGetTemperature__default.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassClimateGetTemperature",
+    "combo": "name_only",
+    "text": "Wat is de temperatuur van de Thermostaat",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "name": "Thermostaat"
+    },
+    "wav": "HassClimateGetTemperature__name_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassDecreaseTimer",
+    "combo": "hours_only",
+    "text": "verkort de timer met 2 uur",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassDecreaseTimer__hours_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassDecreaseTimer",
+    "combo": "minutes_only",
+    "text": "verkort de timer met 5 minuut",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassDecreaseTimer__minutes_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassDecreaseTimer",
+    "combo": "seconds_only",
+    "text": "verkort de timer met 30 secondes",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassDecreaseTimer__seconds_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassFanSetSpeed",
+    "combo": "default",
+    "text": "zet de snelheid van de ventilator op 50 procent",
+    "expected_intent": "HassFanSetSpeed",
+    "expected_slots": {
+      "percentage": 50.0
+    },
+    "wav": "HassFanSetSpeed__default.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassFanSetSpeed",
+    "combo": "name_only",
+    "text": "zet de snelheid van de Afzuigkap op 50 procent",
+    "expected_intent": "HassFanSetSpeed",
+    "expected_slots": {
+      "name": "Afzuigkap",
+      "percentage": 50.0
+    },
+    "wav": "HassFanSetSpeed__name_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassGetCurrentDate",
+    "combo": "default",
+    "text": "welke datum is het vandaag",
+    "expected_intent": "HassGetCurrentDate",
+    "expected_slots": {},
+    "wav": "HassGetCurrentDate__default.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassGetCurrentTime",
+    "combo": "default",
+    "text": "hoe laat is het",
+    "expected_intent": "HassGetCurrentTime",
+    "expected_slots": {},
+    "wav": "HassGetCurrentTime__default.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassGetState",
+    "combo": "name_only",
+    "text": "wat is de waarde van de Buitentemperatuur",
+    "expected_intent": "HassGetState",
+    "expected_slots": {
+      "name": "Buitentemperatuur"
+    },
+    "wav": "HassGetState__name_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassGetState",
+    "combo": "name_state",
+    "text": "is de Aanrecht schakelaar aan",
+    "expected_intent": "HassGetState",
+    "expected_slots": {
+      "name": "Aanrecht schakelaar",
+      "state": "on"
+    },
+    "wav": "HassGetState__name_state.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassGetWeather",
+    "combo": "default",
+    "text": "wat voor weer is het",
+    "expected_intent": "HassGetWeather",
+    "expected_slots": {},
+    "wav": "HassGetWeather__default.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassIncreaseTimer",
+    "combo": "hours_only",
+    "text": "verleng de timer met 2 uur",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassIncreaseTimer__hours_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassIncreaseTimer",
+    "combo": "minutes_only",
+    "text": "verleng de timer met 5 minuut",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassIncreaseTimer__minutes_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassIncreaseTimer",
+    "combo": "seconds_only",
+    "text": "verleng de timer met 30 secondes",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassIncreaseTimer__seconds_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassLightSet",
+    "combo": "area_brightness",
+    "text": "zet de helderheid in de Keuken op 50 procent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "area": "Keuken",
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__area_brightness.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassLightSet",
+    "combo": "brightness_only",
+    "text": "zet de helderheid op 50 procent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__brightness_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassLightSet",
+    "combo": "floor_brightness",
+    "text": "zet de helderheid in de Eerste Verdieping op 50 procent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "floor": "Eerste Verdieping",
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__floor_brightness.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassLightSet",
+    "combo": "name_brightness",
+    "text": "zet de helderheid van de Bovenlamp op 50 procent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "name": "Bovenlamp",
+      "brightness": 50.0
+    },
+    "wav": "HassLightSet__name_brightness.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassMediaNext",
+    "combo": "default",
+    "text": "het volgende nummer",
+    "expected_intent": "HassMediaNext",
+    "expected_slots": {},
+    "wav": "HassMediaNext__default.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassMediaPause",
+    "combo": "default",
+    "text": "pauzeer de muziek",
+    "expected_intent": "HassMediaPause",
+    "expected_slots": {},
+    "wav": "HassMediaPause__default.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassMediaPlayerMute",
+    "combo": "default",
+    "text": "zet het geluid uit",
+    "expected_intent": "HassMediaPlayerMute",
+    "expected_slots": {},
+    "wav": "HassMediaPlayerMute__default.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassMediaPlayerUnmute",
+    "combo": "default",
+    "text": "zet het geluid aan",
+    "expected_intent": "HassMediaPlayerUnmute",
+    "expected_slots": {},
+    "wav": "HassMediaPlayerUnmute__default.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassMediaPrevious",
+    "combo": "default",
+    "text": "het vorige nummer",
+    "expected_intent": "HassMediaPrevious",
+    "expected_slots": {},
+    "wav": "HassMediaPrevious__default.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassMediaUnpause",
+    "combo": "default",
+    "text": "hervat de muziek",
+    "expected_intent": "HassMediaUnpause",
+    "expected_slots": {},
+    "wav": "HassMediaUnpause__default.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassNevermind",
+    "combo": "default",
+    "text": "laat maar zitten",
+    "expected_intent": "HassNevermind",
+    "expected_slots": {},
+    "wav": "HassNevermind__default.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassPauseTimer",
+    "combo": "default",
+    "text": "pauzeer de timer",
+    "expected_intent": "HassPauseTimer",
+    "expected_slots": {},
+    "wav": "HassPauseTimer__default.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassSetPosition",
+    "combo": "name_only",
+    "text": "zet de positie van de Babykamerraam op 50 procent",
+    "expected_intent": "HassSetPosition",
+    "expected_slots": {
+      "name": "Babykamerraam",
+      "position": 50.0
+    },
+    "wav": "HassSetPosition__name_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassSetVolume",
+    "combo": "default",
+    "text": "zet het volume op 50 procent",
+    "expected_intent": "HassSetVolume",
+    "expected_slots": {
+      "volume_level": 50.0
+    },
+    "wav": "HassSetVolume__default.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassSetVolumeRelative",
+    "combo": "default",
+    "text": "volume hoger",
+    "expected_intent": "HassSetVolumeRelative",
+    "expected_slots": {
+      "volume_step": "up"
+    },
+    "wav": "HassSetVolumeRelative__default.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassStartTimer",
+    "combo": "hours_only",
+    "text": "zet een timer van 2 uur",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassStartTimer__hours_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassStartTimer",
+    "combo": "minutes_only",
+    "text": "zet een timer van 5 minuut",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassStartTimer__minutes_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassStartTimer",
+    "combo": "seconds_only",
+    "text": "zet een timer van 30 secondes",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassStartTimer__seconds_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassTimerStatus",
+    "combo": "default",
+    "text": "hoe lang is de timer nog",
+    "expected_intent": "HassTimerStatus",
+    "expected_slots": {},
+    "wav": "HassTimerStatus__default.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassTurnOff",
+    "combo": "area_domain",
+    "text": "doe de lichten uit in de Keuken",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "area": "Keuken",
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__area_domain.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassTurnOff",
+    "combo": "domain_only",
+    "text": "doe de lichten uit",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__domain_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassTurnOff",
+    "combo": "name_only",
+    "text": "doe het Slaapkamerlampje uit",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "name": "Slaapkamerlampje"
+    },
+    "wav": "HassTurnOff__name_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassTurnOn",
+    "combo": "area_domain",
+    "text": "doe de lichten aan in de Keuken",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "area": "Keuken",
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__area_domain.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassTurnOn",
+    "combo": "domain_only",
+    "text": "doe de lichten aan",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__domain_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassTurnOn",
+    "combo": "name_area",
+    "text": "doe de Aanrecht schakelaar in de Keuken aan",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "Aanrecht schakelaar",
+      "area": "Keuken"
+    },
+    "wav": "HassTurnOn__name_area.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassTurnOn",
+    "combo": "name_only",
+    "text": "doe de Aanrecht schakelaar aan",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "Aanrecht schakelaar"
+    },
+    "wav": "HassTurnOn__name_only.flac"
+  },
+  {
+    "language": "nl",
+    "intent": "HassUnpauseTimer",
+    "combo": "default",
+    "text": "hervat de timer",
+    "expected_intent": "HassUnpauseTimer",
+    "expected_slots": {},
+    "wav": "HassUnpauseTimer__default.flac"
+  }
+]

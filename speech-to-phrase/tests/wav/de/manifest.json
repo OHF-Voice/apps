@@ -1,0 +1,492 @@
+[
+  {
+    "language": "de",
+    "intent": "HassCancelTimer",
+    "combo": "default",
+    "text": "stoppe den Timer",
+    "expected_intent": "HassCancelTimer",
+    "expected_slots": {},
+    "wav": "HassCancelTimer__default.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassClimateGetTemperature",
+    "combo": "area_only",
+    "text": "Wie ist die Temperatur im Wohnzimmer",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "area": "Wohnzimmer"
+    },
+    "wav": "HassClimateGetTemperature__area_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassClimateGetTemperature",
+    "combo": "default",
+    "text": "Wie ist die Temperatur",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {},
+    "wav": "HassClimateGetTemperature__default.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassClimateGetTemperature",
+    "combo": "name_only",
+    "text": "Wie ist die Temperatur vom EcoBee",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "name": "EcoBee"
+    },
+    "wav": "HassClimateGetTemperature__name_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassDecreaseTimer",
+    "combo": "hours_only",
+    "text": "verkürze den Timer um 2 Stunden",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassDecreaseTimer__hours_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassDecreaseTimer",
+    "combo": "minutes_only",
+    "text": "verkürze den Timer um 5 Minuten",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassDecreaseTimer__minutes_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassDecreaseTimer",
+    "combo": "seconds_only",
+    "text": "verkürze den Timer um 30 Sekunden",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassDecreaseTimer__seconds_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassFanSetSpeed",
+    "combo": "default",
+    "text": "setze die Geschwindigkeit des Ventilators auf 50 Prozent",
+    "expected_intent": "HassFanSetSpeed",
+    "expected_slots": {
+      "percentage": 50.0
+    },
+    "wav": "HassFanSetSpeed__default.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassFanSetSpeed",
+    "combo": "name_only",
+    "text": "setze die Geschwindigkeit vom Badventilator auf 50 Prozent",
+    "expected_intent": "HassFanSetSpeed",
+    "expected_slots": {
+      "name": "Badventilator",
+      "percentage": 50.0
+    },
+    "wav": "HassFanSetSpeed__name_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassGetCurrentDate",
+    "combo": "default",
+    "text": "welcher tag ist heute",
+    "expected_intent": "HassGetCurrentDate",
+    "expected_slots": {},
+    "wav": "HassGetCurrentDate__default.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassGetCurrentTime",
+    "combo": "default",
+    "text": "wie spät ist es",
+    "expected_intent": "HassGetCurrentTime",
+    "expected_slots": {},
+    "wav": "HassGetCurrentTime__default.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassGetState",
+    "combo": "name_only",
+    "text": "was ist der Wert vom Außentemperatur",
+    "expected_intent": "HassGetState",
+    "expected_slots": {
+      "name": "Außentemperatur"
+    },
+    "wav": "HassGetState__name_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassGetState",
+    "combo": "name_state",
+    "text": "ist der Badventilator angeschaltet",
+    "expected_intent": "HassGetState",
+    "expected_slots": {
+      "name": "Badventilator",
+      "state": "on"
+    },
+    "wav": "HassGetState__name_state.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassGetWeather",
+    "combo": "default",
+    "text": "wie ist das Wetter",
+    "expected_intent": "HassGetWeather",
+    "expected_slots": {},
+    "wav": "HassGetWeather__default.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassIncreaseTimer",
+    "combo": "hours_only",
+    "text": "verlängere den Timer um 2 Stunden",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassIncreaseTimer__hours_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassIncreaseTimer",
+    "combo": "minutes_only",
+    "text": "verlängere den Timer um 5 Minuten",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassIncreaseTimer__minutes_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassIncreaseTimer",
+    "combo": "seconds_only",
+    "text": "verlängere den Timer um 30 Sekunden",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassIncreaseTimer__seconds_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassLightSet",
+    "combo": "area_brightness",
+    "text": "setze die Helligkeit im Wohnzimmer auf 50 Prozent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "area": "Wohnzimmer",
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__area_brightness.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassLightSet",
+    "combo": "brightness_only",
+    "text": "setze die Helligkeit auf 50 Prozent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__brightness_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassLightSet",
+    "combo": "floor_brightness",
+    "text": "setze die Helligkeit im Erdgeschoss auf 50 Prozent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "floor": "Erdgeschoss",
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__floor_brightness.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassLightSet",
+    "combo": "name_brightness",
+    "text": "setze die Helligkeit vom Flurlampe auf 50 Prozent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "name": "Flurlampe",
+      "brightness": 50.0
+    },
+    "wav": "HassLightSet__name_brightness.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassMediaNext",
+    "combo": "default",
+    "text": "nächstes Lied",
+    "expected_intent": "HassMediaNext",
+    "expected_slots": {},
+    "wav": "HassMediaNext__default.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassMediaPause",
+    "combo": "default",
+    "text": "pausiere die musik",
+    "expected_intent": "HassMediaPause",
+    "expected_slots": {},
+    "wav": "HassMediaPause__default.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassMediaPlayerMute",
+    "combo": "default",
+    "text": "Stumm schalten",
+    "expected_intent": "HassMediaPlayerMute",
+    "expected_slots": {},
+    "wav": "HassMediaPlayerMute__default.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassMediaPlayerUnmute",
+    "combo": "default",
+    "text": "ton an",
+    "expected_intent": "HassMediaPlayerUnmute",
+    "expected_slots": {},
+    "wav": "HassMediaPlayerUnmute__default.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassMediaPrevious",
+    "combo": "default",
+    "text": "letztes Lied",
+    "expected_intent": "HassMediaPrevious",
+    "expected_slots": {},
+    "wav": "HassMediaPrevious__default.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassMediaUnpause",
+    "combo": "default",
+    "text": "die musik fortsetzen",
+    "expected_intent": "HassMediaUnpause",
+    "expected_slots": {},
+    "wav": "HassMediaUnpause__default.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassNevermind",
+    "combo": "default",
+    "text": "vergiss es",
+    "expected_intent": "HassNevermind",
+    "expected_slots": {},
+    "wav": "HassNevermind__default.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassPauseTimer",
+    "combo": "default",
+    "text": "pausiere den Timer",
+    "expected_intent": "HassPauseTimer",
+    "expected_slots": {},
+    "wav": "HassPauseTimer__default.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassSetPosition",
+    "combo": "name_only",
+    "text": "setze der Dielenfenster auf 50 Prozent",
+    "expected_intent": "HassSetPosition",
+    "expected_slots": {
+      "name": "Dielenfenster",
+      "position": 50.0
+    },
+    "wav": "HassSetPosition__name_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassSetVolume",
+    "combo": "default",
+    "text": "setze die Lautstärke auf 50 Prozent",
+    "expected_intent": "HassSetVolume",
+    "expected_slots": {
+      "volume_level": 50.0
+    },
+    "wav": "HassSetVolume__default.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassSetVolumeRelative",
+    "combo": "default",
+    "text": "die lautstärke lauter",
+    "expected_intent": "HassSetVolumeRelative",
+    "expected_slots": {
+      "volume_step": "up"
+    },
+    "wav": "HassSetVolumeRelative__default.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassStartTimer",
+    "combo": "hours_only",
+    "text": "stelle einen Timer für 2 Stunden",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassStartTimer__hours_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassStartTimer",
+    "combo": "minutes_only",
+    "text": "stelle einen Timer für 5 Minuten",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassStartTimer__minutes_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassStartTimer",
+    "combo": "seconds_only",
+    "text": "stelle einen Timer für 30 Sekunden",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassStartTimer__seconds_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassTimerStatus",
+    "combo": "default",
+    "text": "wie lange läuft der Timer noch",
+    "expected_intent": "HassTimerStatus",
+    "expected_slots": {},
+    "wav": "HassTimerStatus__default.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassTurnOff",
+    "combo": "area_domain",
+    "text": "schalte das Licht im Wohnzimmer aus",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "area": "Wohnzimmer",
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__area_domain.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassTurnOff",
+    "combo": "domain_only",
+    "text": "schalte das Licht aus",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__domain_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassTurnOff",
+    "combo": "floor_domain",
+    "text": "schalte das Licht im Erdgeschoss aus",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "floor": "Erdgeschoss",
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__floor_domain.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassTurnOff",
+    "combo": "name_only",
+    "text": "schalte der Badventilator aus",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "name": "Badventilator"
+    },
+    "wav": "HassTurnOff__name_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassTurnOn",
+    "combo": "area_domain",
+    "text": "schalte das Licht im Wohnzimmer an",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "area": "Wohnzimmer",
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__area_domain.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassTurnOn",
+    "combo": "domain_only",
+    "text": "schalte das Licht an",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__domain_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassTurnOn",
+    "combo": "floor_domain",
+    "text": "schalte das Licht im Erdgeschoss an",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "floor": "Erdgeschoss",
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__floor_domain.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassTurnOn",
+    "combo": "name_area",
+    "text": "schalte der Badventilator im Wohnzimmer an",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "Badventilator",
+      "area": "Wohnzimmer"
+    },
+    "wav": "HassTurnOn__name_area.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassTurnOn",
+    "combo": "name_only",
+    "text": "schalte der Badventilator an",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "Badventilator"
+    },
+    "wav": "HassTurnOn__name_only.flac"
+  },
+  {
+    "language": "de",
+    "intent": "HassUnpauseTimer",
+    "combo": "default",
+    "text": "setze den Timer fort",
+    "expected_intent": "HassUnpauseTimer",
+    "expected_slots": {},
+    "wav": "HassUnpauseTimer__default.flac"
+  }
+]

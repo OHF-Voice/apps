@@ -1,0 +1,10 @@
+./lib
+
+flask
+aiohttp
+pyyaml
+numpy
+soundfile
+hassil
+home-assistant-intents>=2026.8.28
+wyoming[zeroconf]

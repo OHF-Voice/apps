@@ -1,0 +1,1120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Speech-to-Phrase</title>
+<!-- Relative, like the fetch() calls below: ingress serves this page under a
+     prefix, which a leading slash would escape. One file covers both themes --
+     the mark is cyan with a light ear, legible on either. -->
+<link rel="icon" type="image/png" href="static/icon.png" />
+<style>
+  :root { --b:#2563eb; --bg:#f5f7fb; --card:#fff; --line:#e5e7eb; --mut:#6b7280; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background: var(--bg); margin: 0; color:#111; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 16px 64px; }
+  header { position: sticky; top:0; z-index:5; background:var(--bg);
+           border-bottom:1px solid var(--line); padding:14px 0; margin-bottom:14px; }
+  header .bar { max-width:960px; margin:0 auto; padding:0 16px; display:flex;
+                align-items:center; gap:12px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:20px; flex:0 0 auto; }
+  /* The active language: shown, not chosen (see the header markup). */
+  .lang-badge { font-weight:600; border:1px solid var(--line); border-radius:8px;
+                background:#fff; padding:5px 10px; }
+  .grow { flex:1; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+          padding: 16px 18px; margin-bottom: 16px; }
+  h2 { margin:0 0 4px; font-size:16px; } h3 { margin:0 0 6px; font-size:14px; }
+  .muted, .sub { color: var(--mut); } .sub { margin:2px 0 14px; font-size:13px; }
+  select, textarea, input[type=text] { font: inherit; }
+  select, input[type=text], input[type=number] { padding:6px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  textarea { width:100%; box-sizing:border-box; font-family:ui-monospace,monospace;
+             border:1px solid var(--line); border-radius:10px; padding:8px; font-size:13px; }
+  button { background:var(--b); color:#fff; border:0; border-radius:10px;
+           padding:9px 16px; font:inherit; cursor:pointer; }
+  button.ghost { background:#eef2ff; color:#1e3a8a; border:1px solid #dbe3ff; }
+  button.mini { padding:4px 10px; font-size:13px; }
+  button:disabled { opacity:.6; cursor:default; }
+  nav.tabs { display:flex; gap:4px; margin-bottom:16px; }
+  nav.tabs button { background:transparent; color:var(--mut); border-radius:10px 10px 0 0;
+                    border-bottom:2px solid transparent; }
+  nav.tabs button.active { color:var(--b); border-bottom-color:var(--b); background:#fff; }
+  #status { font-size:14px; } .ok{color:#16a34a} .err{color:#dc2626}
+  #dirty { color:#b45309; font-size:13px; }
+  code { background:#f1f5f9; padding:1px 5px; border-radius:5px; }
+  /* Highlighted slot values in example sentences (matches intent-sentences site). */
+  .slot { font-style:normal; padding:0 3px; border-radius:3px; border-bottom:2px solid transparent; }
+  .slot-name   { background:#d8f3df; border-color:#1b9e3e; }
+  .slot-area   { background:#d7e9fb; border-color:#2f7fd1; }
+  .slot-floor  { background:#dfdcf7; border-color:#5b4fc4; }
+  .slot-number { background:#fbeccb; border-color:#d99e1a; }
+  .slot-color  { background:#fbd7e6; border-color:#d14a86; }
+  .slot-class  { background:#ece1f7; border-color:#8c4fc4; }
+  .slot-text   { background:#fbe2cf; border-color:#d97a2a; }
+  .slot-state  { background:#d4f1ee; border-color:#1aa39a; }
+  .slot-other  { background:#e8e8e8; border-color:#888; }
+  /* Enumerable slots render as a picklist of the actual (filtered) values.
+     Defined after the colour classes so the caret image doesn't reset their bg. */
+  .slot-select { appearance:none; -webkit-appearance:none; font:inherit; color:inherit;
+    cursor:pointer; max-width:200px; vertical-align:baseline; padding:0 16px 0 3px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 3.5 5 6.5 8 3.5' fill='none' stroke='%23555' stroke-width='1.4'/></svg>");
+    background-repeat:no-repeat; background-position:right 3px center; }
+  /* "N more ways to say this" expander, emitted by presets._example_full. */
+  .phrasings { margin-top:3px; }
+  .phrasings > summary { list-style:none; cursor:pointer; font-size:13px; color:#2f7fd1; }
+  .phrasings > summary::-webkit-details-marker { display:none; }
+  .phrasings > summary::before { content:"\25B8"; font-size:10px; margin-right:6px; }
+  .phrasings[open] > summary::before { content:"\25BE "; }
+  .ex-alt { font-size:13px; color:var(--mut); padding:2px 0 0 14px; }
+  .ex-alt.more { font-style:italic; }
+  .slot-legend { margin:0 0 12px; padding:0; list-style:none; display:flex;
+                 flex-wrap:wrap; gap:4px 8px; font-size:12px; }
+  .slot-legend li { margin:0; }
+  /* ---- command list (one row per command, grouped) ---- */
+  .cmdbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .cmdbar input[type=text] { flex:1; min-width:180px; }
+  .segs { display:inline-flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; background:#fff; }
+  .segs button { background:transparent; color:var(--mut); border-radius:0; padding:6px 12px; font-size:13px; }
+  .segs button.on { background:#eef2ff; color:#1e3a8a; }
+  .meter { display:flex; align-items:center; gap:10px; font-size:13px; color:var(--mut);
+           background:#f8fafc; border:1px solid var(--line); border-radius:10px;
+           padding:8px 12px; margin-bottom:12px; }
+  .meter .bar { flex:1; height:6px; border-radius:999px; background:#e5e7eb; overflow:hidden; min-width:80px; }
+  .meter .fill { height:100%; background:var(--b); transition:width .18s ease; }
+  .meter b { color:#111; font-weight:600; }
+  .grp { border-top:1px solid var(--line); }
+  .grp > summary { list-style:none; cursor:pointer; padding:9px 0; }
+  .grp > summary::-webkit-details-marker { display:none; }
+  .grp-head { display:flex; align-items:center; gap:9px; }
+  .grp-head::before { content:"\25B8"; color:var(--mut); font-size:11px; width:9px; }
+  .grp[open] > .grp-head::before, .grp[open] > summary .grp-head::before { content:"\25BE"; }
+  .grp-head h3 { margin:0; flex:0 0 auto; } .grp-head .gcount { font-size:12px; }
+  .cmd-row { display:flex; align-items:center; gap:11px; padding:7px 2px 7px 6px;
+             border-radius:10px; }
+  .cmd-row:hover { background:#f8fafc; }
+  .cmd-row.off .cmd-say { opacity:.5; }
+  .cmd-row.na { opacity:.55; } .cmd-row.na:hover { background:transparent; }
+  .cmd-row.na .cmd-say { font-style:italic; }
+  .cmd-main { flex:1; min-width:0; }
+  .cmd-say { font-size:14px; line-height:1.55; }
+  .cmd-sub { font-size:12px; color:var(--mut); margin-top:1px;
+             white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cmd-row .det { background:transparent; color:var(--mut); border:1px solid transparent;
+                  border-radius:8px; padding:3px 9px; font-size:12px; flex:0 0 auto; }
+  .cmd-row:hover .det { border-color:var(--line); color:var(--b); background:#fff; }
+  /* toggle switch */
+  .sw { flex:0 0 auto; display:inline-block; position:relative; width:34px; height:20px; cursor:pointer; }
+  .sw input { position:absolute; opacity:0; width:100%; height:100%; margin:0; cursor:pointer; }
+  .sw .track { position:absolute; inset:0; background:#cbd5e1; border-radius:999px; transition:background .15s; }
+  .sw .track::after { content:""; position:absolute; top:2px; left:2px; width:16px; height:16px;
+                      background:#fff; border-radius:50%; transition:transform .15s; }
+  .sw input:checked + .track { background:var(--b); }
+  .sw input:checked + .track::after { transform:translateX(14px); }
+  .sw input:focus-visible + .track { outline:2px solid var(--b); outline-offset:2px; }
+  .sw input:indeterminate + .track { background:#93b4fb; }
+  .sw input:indeterminate + .track::after { transform:translateX(7px); }
+  /* details dialog */
+  dialog { border:0; border-radius:14px; padding:0; max-width:620px; width:calc(100% - 32px); }
+  dialog::backdrop { background:rgba(15,23,42,.4); }
+  .dlg-head { display:flex; align-items:flex-start; gap:10px; padding:16px 18px 10px; }
+  .dlg-head .dlg-say { flex:1; font-size:16px; line-height:1.5; }
+  .dlg-body { padding:0 18px 18px; }
+  .dlg-x { background:transparent; color:var(--mut); padding:2px 8px; font-size:18px; }
+  .dlg-sec { border-top:1px solid var(--line); padding:11px 0 3px; }
+  .dlg-sec h4 { margin:0 0 6px; font-size:13px; }
+  /* device/area/floor rows */
+  .val-row { display:flex; align-items:center; gap:9px; padding:4px 0; }
+  .val-row .v-name { font-size:14px; }
+  .val.voice-off .v-name { text-decoration:line-through; color:var(--mut); }
+  .val.voice-off .v-src { opacity:.55; }
+  .v-count { font-size:12px; color:var(--mut); }
+  /* Where a name comes from: the entity ids behind it, and what it's an alias
+     of. Indented to sit under the name, clear of the toggle. */
+  .v-src { margin:0 0 5px; padding:0 0 0 52px; list-style:disc; }
+  .v-src li { font-size:12px; color:var(--mut); margin:1px 0; }
+  .v-src code { font-size:12px; }
+  .cmd { border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:12px; background:#fcfcfd; }
+  .field { margin:8px 0; } .field > label { font-weight:600; font-size:13px; display:block; margin-bottom:3px; }
+  .doms { display:flex; flex-wrap:wrap; gap:8px; }
+  .doms label { font-size:13px; display:inline-flex; gap:4px; align-items:center; }
+  .hide { display:none; }
+  .list-row { padding:8px 0; border-top:1px solid var(--line); }
+  .list-row:first-child { border-top:0; }
+  .usedby { color:var(--mut); font-size:12px; margin-top:3px; }
+  .usedby b { color:#374151; font-weight:600; }
+  .empty { color:var(--mut); font-style:italic; }
+  .range-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+                    margin-top:7px; }
+  .range-controls select { min-width:150px; }
+  .range-spec { flex:1; min-width:240px; font-family:ui-monospace,monospace; }
+  .range-spec.invalid { border-color:#dc2626; outline-color:#dc2626; }
+  .range-error { color:#dc2626; font-size:12px; margin-top:4px; }
+  /* ---- debug mode: live recognition feed ---- */
+  .warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e;
+          border-radius:10px; padding:8px 12px; font-size:13px; margin:10px 0 0; }
+  .feed { margin-top:12px; overflow-x:auto; }
+  .feed table { width:100%; border-collapse:collapse; font-size:13px; }
+  .feed th { text-align:left; font-weight:600; color:var(--mut); font-size:12px;
+             padding:4px 10px 5px 0; border-bottom:1px solid var(--line);
+             white-space:nowrap; }
+  .feed td { padding:6px 10px 6px 0; border-bottom:1px solid #f1f5f9;
+             vertical-align:top; }
+  .feed td.num { font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .feed .said { font-size:14px; }
+  .feed tr.rejected .said { color:var(--mut); }
+  .feed .verdict { font-size:12px; white-space:nowrap; }
+  .tag { display:inline-block; font-size:11px; border-radius:999px; padding:1px 8px;
+         background:#eef2ff; color:#1e3a8a; white-space:nowrap; }
+  .tag.trig { background:#d7e9fb; color:#14538c; }
+  .tag.ans  { background:#d4f1ee; color:#0d6b64; }
+  .tag.cust { background:#fbe2cf; color:#8a4310; }
+  .tag.none { background:#e8e8e8; color:#555; }
+  .feed .detail { font-size:12px; color:var(--mut); margin-top:1px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1>Speech-to-Phrase</h1>
+    <!-- Not a choice: one recognizer runs, for the language in the add-on
+         options (`language` / --language). Showing a picker invited editing one
+         language while speech-to-text served another. -->
+    <span class="muted">Language</span>
+    <span id="lang" class="lang-badge" title="Set by the add-on option “language”"></span>
+    <span id="trainflag" class="muted"></span>
+    <span class="grow"></span>
+    <span id="dirty"></span>
+    <button id="save">Save &amp; retrain</button>
+    <span id="status"></span>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="tabs">
+    <button data-tab="builtin" class="active">Commands</button>
+    <button data-tab="custom">Custom commands</button>
+    <button data-tab="names">Names</button>
+    <button data-tab="numbers">Numbers</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+
+  <!-- COMMANDS -------------------------------------------------------------- -->
+  <section id="tab-builtin">
+    <div class="card">
+      <h2>Commands</h2>
+      <p class="sub">Everything this device can recognize, written the way you'd say
+        it. Turn off what you don't use — a smaller set is recognized faster and more
+        accurately. Highlighted words are the parts you can change.</p>
+      <div class="cmdbar">
+        <input type="text" id="cmd-search" placeholder="Search commands, e.g. brightness">
+        <div class="segs" id="cmd-filter">
+          <button data-filter="all" class="on">All</button>
+          <button data-filter="on">On</button>
+          <button data-filter="off">Off</button>
+        </div>
+        <button id="cmd-reset" class="ghost mini">Reset to recommended</button>
+      </div>
+      <div class="meter">
+        <span><b id="m-count">0</b> of <span id="m-total">0</span> on</span>
+        <div class="bar"><div class="fill" id="m-fill" style="width:0%"></div></div>
+        <span>~<b id="m-phrases">0</b> phrases in the grammar<span id="m-extra"></span></span>
+      </div>
+      <div id="commands-list"></div>
+      <ul class="slot-legend" style="margin-top:14px">
+        <li><span class="slot slot-name">name</span></li>
+        <li><span class="slot slot-area">area</span></li>
+        <li><span class="slot slot-floor">floor</span></li>
+        <li><span class="slot slot-class">domain</span></li>
+        <li><span class="slot slot-number">number</span></li>
+        <li><span class="slot slot-color">color</span></li>
+        <li><span class="slot slot-state">state</span></li>
+        <li><span class="slot slot-other">other</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- COMMAND DETAILS (drill-down) ------------------------------------------ -->
+  <dialog id="detail">
+    <div class="dlg-head">
+      <div class="dlg-say" id="d-say"></div>
+      <button class="dlg-x" id="d-close" aria-label="Close">✕</button>
+    </div>
+    <div class="dlg-body" id="d-body"></div>
+  </dialog>
+
+  <!-- CUSTOM COMMANDS ----------------------------------------------------- -->
+  <section id="tab-custom" hidden>
+    <div class="card">
+      <h2>Custom commands</h2>
+      <p class="sub">Extra phrasings to recognize. They are added to the grammar and
+        passed to Home Assistant as text, exactly as spoken — Home Assistant decides
+        what they do. Use <code>{name}</code>, <code>{area}</code>,
+        <code>{floor}</code>, <code>[optional]</code>, <code>(a|b)</code>,
+        <code>{0..100}</code>.</p>
+      <div id="custom-list"></div>
+      <button id="add-cmd" class="ghost">+ Add command</button>
+    </div>
+  </section>
+
+  <!-- NAMES --------------------------------------------------------------- -->
+  <section id="tab-names" hidden>
+    <div class="card">
+      <h2>Names</h2>
+      <p class="sub">Names pulled from Home Assistant and baked into the grammar.
+        Switch one off to stop recognizing it by voice — it drops out of every
+        command, which makes the grammar smaller and the rest easier to tell
+        apart. A name shared by several entities, or standing in as an alias for
+        another, lists what's behind it.</p>
+      <div id="lists"></div>
+    </div>
+  </section>
+
+  <!-- NUMBERS ------------------------------------------------------------- -->
+  <section id="tab-numbers" hidden>
+    <div class="card">
+      <h2>Numbers</h2>
+      <p class="sub">Limit numeric values to make the grammar smaller and easier to
+        recognize. Recommended keeps common voice values without every possible
+        number. Package bounds remain authoritative. Ranges are inclusive; use
+        <code>3, 5, 8, 10-100/10</code> for individual values and stepped ranges.</p>
+      <div id="numeric-ranges"></div>
+    </div>
+  </section>
+
+  <!-- SETTINGS ------------------------------------------------------------ -->
+  <section id="tab-settings" hidden>
+    <div class="card">
+      <h2>Recognition</h2>
+      <p class="sub">Score gate for on-device speech-to-text (this language). A
+        decode is accepted only when its score is at or below this value
+        (<b>lower = more confident</b>). Raise it to recognize more commands, at
+        the risk of acting on misheard speech or noise; lower it to be stricter
+        and let Home Assistant fall back to cloud speech-to-text more often.</p>
+      <label style="display:inline-flex;align-items:center;gap:8px">
+        <span>Max score</span>
+        <input type="number" id="max-score" step="0.1" min="0.1" max="50" style="width:90px">
+      </label>
+      <span id="score-hint" class="muted" style="font-size:13px;margin-left:10px"></span>
+    </div>
+
+    <div class="card">
+      <h2>From Home Assistant</h2>
+      <p class="sub">Phrases Home Assistant is already listening for. They have to
+        be in the grammar to be transcribed at all — a sentence trigger that
+        isn't can never fire, and an answer that isn't can't be given. Switch a
+        source off to keep the grammar to what you configured here.</p>
+      <div id="hass-sentences"></div>
+    </div>
+
+    <div class="card">
+      <h2>Debug mode</h2>
+      <p class="sub">Watch what the recognizer hears: every utterance, the
+        command it matched and where that command came from, its score, and
+        whether the score gate accepted it. Use it to tune <b>Max score</b> —
+        rejections show you what the gate is turning away.</p>
+      <div class="val-row">
+        <label class="sw">
+          <input type="checkbox" id="debug-mode"><span class="track"></span>
+        </label>
+        <span class="v-name">Debug mode</span>
+        <span id="debug-count" class="v-count"></span>
+      </div>
+      <p class="usedby">Applies immediately — no save or retrain needed — and
+        switches itself off if the add-on restarts.</p>
+      <div id="debug-warn"></div>
+      <div id="debug-feed"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let S = {};                 // server state for the active language
+let dirty = false;
+
+const COMMON_DOMAINS = ["light","switch","fan","cover","lock","media_player",
+                        "input_boolean","climate","vacuum","valve","scene","script"];
+
+function markDirty(){ dirty = true; $("dirty").textContent = "● unsaved changes"; }
+function clearDirty(){ dirty = false; $("dirty").textContent = ""; }
+
+function escapeHtml(s){ return s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+async function loadState() {
+  // No lang parameter: the server serves the configured language and tells us
+  // which one it is. There is nothing to pick, so nothing to get out of sync.
+  S = await (await fetch("api/state")).json();
+  $("lang").textContent = S.lang;
+  $("trainflag").textContent = S.trainable ? "" : "(no model — saves persist, grammar not retrained)";
+  hassKnown = Object.fromEntries(
+    HASS_SOURCES.map(([key]) => [key, !!hassSource(key).enabled]));
+  renderSettings();
+  renderHassSentences();
+  renderCustom();
+  renderCombos();
+  renderNumericRanges();
+  renderLists();
+  // Reloading state means the page is starting over; so does the feed.
+  debugSince = 0; debugRows = [];
+  renderDebug();
+  setDebugPolling(!!S.debug_mode);
+  clearDirty();
+}
+
+/* ---- recognition settings ---- */
+function renderSettings() {
+  if (S.max_score != null) $("max-score").value = S.max_score;
+  const def = S.max_score_default;
+  $("score-hint").textContent = def != null ? `default ${def}` : "";
+}
+
+/* ---- sentences pulled from Home Assistant ----
+   Two switches, each with the phrases it currently puts in the grammar and what
+   they cost. A switched-off source has no phrases to show: the server doesn't go
+   asking Home Assistant for what the user said not to use. */
+const HASS_SOURCES = [
+  ["sentence_triggers", "Sentence triggers",
+   "The <code>conversation:</code> trigger phrases of your automations."],
+  ["question_answers", "Question answers",
+   "The <code>answers:</code> of your <code>assist_satellite.ask_question</code> actions."],
+];
+
+/* Which sources the server had already fetched when this state loaded. Turning
+   one on shows no phrase count until a save fetches them, and saying "0" would
+   read as "there are none". */
+let hassKnown = {};
+
+function hassSource(key) {
+  return ((S.hass_sentences || {}).sources || {})[key] || {};
+}
+
+function hassRow(key, title, sub) {
+  const src = hassSource(key);
+  const on = !!src.enabled;
+  const list = src.sentences || [];
+  const def = src.default ? "on" : "off";
+  // With no Home Assistant to ask, nothing about this source is knowable, so
+  // the switch still works but says nothing about phrases -- "0" would read as
+  // "you have none".
+  const known = hassKnown[key] && (S.hass_sentences || {}).available !== false;
+  const count = !on ? "off"
+    : (S.hass_sentences || {}).available === false ? ""
+    : !hassKnown[key] ? "counted after saving"
+    : `${list.length} sentence${list.length === 1 ? "" : "s"} · ~${fmt(src.phrases || 0)} phrases`;
+  const line = (s) => `<div class="ex-alt">${escapeHtml(s.text)} —
+    ${s.phrases
+      ? `<span class="muted">~${fmt(s.phrases)} phrase${s.phrases === 1 ? "" : "s"}</span>`
+      : `<span class="err" title="Every phrasing of this is written-only, or it uses a list Speech-to-Phrase cannot fill in">not recognizable</span>`}
+    </div>`;
+  return `<div class="list-row">
+    <div class="val-row">
+      <label class="sw">
+        <input type="checkbox" class="hs-cb" data-key="${key}" ${on ? "checked" : ""}>
+        <span class="track"></span>
+      </label>
+      <span class="v-name">${title}</span>
+      <span class="v-count">${count}</span>
+    </div>
+    <div class="usedby">${sub} <span class="muted">Add-on default: ${def}.</span></div>
+    ${on && known ? (list.length
+      ? `<details class="phrasings"><summary>What this adds to the grammar</summary>
+           ${list.map(line).join("")}</details>`
+      : `<div class="usedby empty">Home Assistant has none.</div>`) : ""}
+  </div>`;
+}
+
+function renderHassSentences() {
+  const host = $("hass-sentences");
+  host.innerHTML =
+    ((S.hass_sentences || {}).available === false
+      ? '<p class="empty">Not connected to Home Assistant — nothing to pull in.</p>'
+      : "") +
+    HASS_SOURCES.map(args => hassRow(...args)).join("");
+  host.querySelectorAll(".hs-cb").forEach(cb => cb.addEventListener("change", () => {
+    hassSource(cb.dataset.key).enabled = cb.checked;
+    renderHassSentences();
+    updateMeter(cards());
+    markDirty();
+  }));
+}
+
+/* ---- debug mode ------------------------------------------------------------
+   A live view of what the recognizer heard. While it's on the STT server hands
+   Home Assistant an empty transcript, so tuning the gate against commands that
+   *should* be rejected can't fire the ones that pass. Polled rather than pushed:
+   an utterance every few seconds doesn't justify a websocket. */
+const FEED_ROWS = 50;
+let debugTimer = null, debugSince = 0, debugRows = [];
+
+/* Source label -> (what to call it, tag colour, extra detail). */
+function originLabel(origin) {
+  if (!origin) return ["Not in the grammar", "none", ""];
+  const [kind, ...rest] = origin.source.split(":");
+  const detail = rest.join(":");
+  if (kind === "builtin") return ["Built-in command", "", detail];
+  if (kind === "custom") return ["Custom command", "cust", ""];
+  if (kind === "sentence_triggers") return ["Sentence trigger", "trig", ""];
+  if (kind === "question_answers") return ["Question answer", "ans", ""];
+  return [origin.source, "", ""];
+}
+
+function feedRow(e) {
+  const [label, tag, detail] = originLabel(e.origin);
+  const said = e.text
+    ? `<span class="said">${escapeHtml(e.text)}</span>`
+    : '<span class="said empty">no match</span>';
+  const when = new Date(e.at * 1000).toLocaleTimeString();
+  return `<tr class="${e.accepted ? "" : "rejected"}">
+    <td class="num muted">${when}</td>
+    <td>${said}${e.origin && e.origin.template !== e.text
+          ? `<div class="detail">${escapeHtml(e.origin.template)}</div>` : ""}</td>
+    <td><span class="tag ${tag}">${escapeHtml(label)}</span>${
+      detail ? `<div class="detail">${escapeHtml(detail)}</div>` : ""}</td>
+    <td class="num">${e.score == null ? "—" : e.score.toFixed(2)}
+      <span class="muted">/ ${Number(e.max_score).toFixed(2)}</span></td>
+    <td class="num" title="${tookTitle(e)}">${took(e)}</td>
+    <td class="verdict">${e.accepted
+      ? '<span class="ok">accepted</span>'
+      : '<span class="err">rejected</span>'}</td>
+  </tr>`;
+}
+
+/* Time from audio-stop to transcript: what Home Assistant waited for. Sub-second
+   in milliseconds, because that is the range it lives in and "0.3 s" hides the
+   difference between a fast decode and a slow one. */
+function took(e) {
+  if (e.processing == null) return "—";
+  return e.processing < 1
+    ? `${Math.round(e.processing * 1000)} ms`
+    : `${e.processing.toFixed(2)} s`;
+}
+
+/* The same number against the length of audio it explains, since a long command
+   is expected to take longer than a short one. */
+function tookTitle(e) {
+  if (e.processing == null) return "";
+  const parts = ["Time to recognize, after the audio stopped"];
+  if (e.duration) {
+    parts.push(`${e.duration.toFixed(2)} s of speech`,
+      `${(e.processing / e.duration).toFixed(2)}× real time`);
+  }
+  return parts.join(" · ");
+}
+
+function renderDebugFeed() {
+  const host = $("debug-feed");
+  if (!$("debug-mode").checked) { host.innerHTML = ""; return; }
+  if (!debugRows.length) {
+    host.innerHTML = '<p class="empty">Listening — say something to your voice assistant.</p>';
+    return;
+  }
+  host.innerHTML = `<div class="feed"><table>
+    <thead><tr><th>Time</th><th>Heard</th><th>Source</th><th>Score</th><th>Took</th><th></th></tr></thead>
+    <tbody>${debugRows.map(feedRow).join("")}</tbody></table></div>`;
+}
+
+function renderDebug() {
+  const on = !!S.debug_mode;
+  $("debug-mode").checked = on;
+  $("debug-count").textContent = on ? "on — Home Assistant receives nothing" : "off";
+  // The page and the recognizer are always the same language now, so there is
+  // no longer a mismatch to warn about.
+  const notes = [];
+  if (on) {
+    notes.push("Home Assistant is receiving an empty transcript for every "
+      + "utterance, so nothing you say is acted on. Switch debug mode off when "
+      + "you're done — it also switches off by itself if the add-on restarts.");
+  }
+  $("debug-warn").innerHTML =
+    notes.map(n => `<p class="warn">${n}</p>`).join("");
+  renderDebugFeed();
+}
+
+async function pollTranscriptions() {
+  try {
+    const r = await (await fetch("api/transcriptions?since=" + debugSince)).json();
+    if (!r.debug_mode) {   // switched off elsewhere (or the server restarted)
+      S.debug_mode = false; setDebugPolling(false); renderDebug(); return;
+    }
+    if (r.entries && r.entries.length) {
+      debugSince = r.last_id;
+      debugRows = r.entries.reverse().concat(debugRows).slice(0, FEED_ROWS);
+      renderDebugFeed();
+    }
+  } catch (e) { /* transient: the next tick retries */ }
+}
+
+function setDebugPolling(on) {
+  if (debugTimer) { clearInterval(debugTimer); debugTimer = null; }
+  if (on) { pollTranscriptions(); debugTimer = setInterval(pollTranscriptions, 1500); }
+}
+
+/* ---- domains available for {name} filtering ---- */
+function domains() {
+  const ds = new Set(COMMON_DOMAINS);
+  Object.keys(S.devices_by_domain || {}).forEach(d => ds.add(d));
+  return [...ds].sort();
+}
+
+/* ---- custom commands -------------------------------------------------------
+   Speech-to-text only: a custom command contributes its phrasings to the
+   grammar and nothing else, so all it needs is the sentences and -- when one of
+   them uses {name} -- which device types that slot may match. */
+function renderCustom() {
+  const host = $("custom-list");
+  host.innerHTML = "";
+  (S.commands || []).forEach((cmd, i) => host.appendChild(commandCard(cmd, i)));
+  if (!(S.commands || []).length)
+    host.innerHTML = '<p class="empty">No custom commands yet.</p>';
+}
+
+function commandCard(cmd, i) {
+  const el = document.createElement("div");
+  el.className = "cmd"; el.dataset.i = i;
+  el.innerHTML = `
+    <div class="field">
+      <label>Sentences (one per line)</label>
+      <textarea class="c-sentences" rows="2" placeholder="movie time">${escapeHtml((cmd.sentences||[]).join("\n"))}</textarea>
+    </div>
+    <div class="field c-doms-wrap ${hasName(cmd.sentences)?"":"hide"}">
+      <label>Name domains <span class="muted">(which device types <code>{name}</code> can match)</span></label>
+      <div class="doms">${domains().map(d=>`<label><input type="checkbox" class="c-dom" value="${d}" ${(cmd.name_domains||[]).includes(d)?"checked":""}>${d}</label>`).join("")}</div>
+    </div>
+    <button class="mini ghost c-remove">Remove</button>
+  `;
+  el.querySelector(".c-sentences").addEventListener("input", e => {
+    el.querySelector(".c-doms-wrap").classList.toggle("hide", !hasName(e.target.value.split("\n")));
+    markDirty();
+  });
+  el.querySelector(".c-remove").addEventListener("click", () => {
+    S.commands.splice(i, 1); renderCustom(); markDirty();
+  });
+  el.querySelectorAll("input,textarea").forEach(x => x.addEventListener("input", markDirty));
+  return el;
+}
+
+function hasName(sentences) {
+  return (sentences||[]).some(s => /\{name\}/.test(s));
+}
+
+function collectCommands() {
+  return [...document.querySelectorAll("#custom-list .cmd")].map(el => {
+    const sentences = el.querySelector(".c-sentences").value.split("\n").map(s=>s.trim()).filter(Boolean);
+    const cmd = { sentences, mode: "stt" };
+    if (hasName(sentences)) {
+      const ds = [...el.querySelectorAll(".c-dom:checked")].map(c=>c.value);
+      if (ds.length) cmd.name_domains = ds;
+    }
+    return cmd;
+  }).filter(cmd => cmd.sentences.length);   // a card left blank isn't a command
+}
+
+/* ---- commands -------------------------------------------------------------
+   One card per (slot combination × targeted domain), so every row can be named
+   the way you'd say it ("turn on the lights in the kitchen") instead of by its
+   intent/slot-combination. A combo that targets no domain ("what time is it")
+   is a single card. The label IS the rendered example sentence: it comes from
+   the localized templates and the user's own entities, so it needs no separate
+   translation and can't drift from what the grammar actually accepts. */
+
+const RECOMMENDED = ["required", "usable"];
+let filter = "all", search = "";
+
+function cards() {
+  const out = [];
+  S.combos.forEach((c, i) => {
+    // Row label: the command's shape, slots as placeholders (see _example_shape).
+    const label = (d) => (d ? (c.examples_by_domain || {})[d] : (c.shapes || [])[0]) || "";
+    const mk = (d) => {
+      const cost = (d ? (c.cost_by_domain || {})[d] : c.cost) || {};
+      // No phrases => the entity gate dropped it (no device of this kind, or
+      // none with the needed capability). It can't be trained, so it's shown as
+      // unavailable rather than as a toggle that does nothing.
+      return { c, i, domain: d, key: i + ":" + (d || ""), say: label(d), cost,
+               available: (cost.phrases || 0) > 0 };
+    };
+    if ((c.domains || []).length) c.domains.forEach(d => out.push(mk(d)));
+    else out.push(mk(null));
+  });
+  return out;
+}
+
+function cardOn(card) {
+  return card.domain
+    ? (card.c.enabled_domains || []).includes(card.domain)
+    : !!card.c.enabled;
+}
+
+function setCard(card, on) {
+  const c = card.c;
+  if (card.domain) {
+    const set = new Set(c.enabled_domains || []);
+    on ? set.add(card.domain) : set.delete(card.domain);
+    c.enabled_domains = (c.domains || []).filter(d => set.has(d));
+    c.enabled = c.enabled_domains.length > 0;
+  } else {
+    c.enabled = on;
+    c.enabled_domains = [];
+  }
+}
+
+function fmt(n) {
+  if (n == null) return "?";
+  if (n < 1000) return String(n);
+  if (n < 100000) return (n / 1000).toFixed(n < 10000 ? 1 : 0) + "k";
+  return (n / 1000000).toFixed(1) + "M";
+}
+
+function plain(html) {
+  const t = document.createElement("div");
+  t.innerHTML = html || "";
+  return t.textContent.toLowerCase();
+}
+
+function visible(card) {
+  if (filter !== "all" && !card.available) return false;
+  if (filter === "on" && !cardOn(card)) return false;
+  if (filter === "off" && cardOn(card)) return false;
+  if (search && !(plain(card.say) + " " + (card.c.description || "").toLowerCase()
+                  + " " + (card.domain || "")).includes(search)) return false;
+  return true;
+}
+
+function renderCombos() {
+  const all = cards();
+  const shown = all.filter(visible);
+  const byGroup = {};
+  for (const card of shown) (byGroup[card.c.group] ||= []).push(card);
+  // Unavailable commands sink to the bottom of their group.
+  for (const g in byGroup)
+    byGroup[g].sort((a, b) => (a.available === b.available) ? 0 : (a.available ? -1 : 1));
+  const order = (S.groups && S.groups.length) ? S.groups : Object.keys(byGroup);
+  const host = $("commands-list");
+
+  if (!shown.length) {
+    host.innerHTML = '<p class="empty">No commands match.</p>';
+    updateMeter(all);
+    return;
+  }
+
+  host.innerHTML = order.filter(g => byGroup[g]).map(group => `
+    <details class="grp" open>
+      <summary><span class="grp-head">
+        <label class="sw" onclick="event.stopPropagation()">
+          <input type="checkbox" class="grp-cb" data-group="${escapeHtml(group)}"><span class="track"></span>
+        </label>
+        <h3>${escapeHtml(group)}</h3>
+        <span class="muted gcount" data-group="${escapeHtml(group)}"></span>
+      </span></summary>
+      ${byGroup[group].map(card => card.available ? `
+        <div class="cmd-row ${cardOn(card) ? "" : "off"}" data-key="${card.key}">
+          <label class="sw">
+            <input type="checkbox" class="card-cb" data-key="${card.key}" ${cardOn(card) ? "checked" : ""}>
+            <span class="track"></span>
+          </label>
+          <div class="cmd-main">
+            <div class="cmd-say">${card.say}</div>
+            <div class="cmd-sub">${escapeHtml(card.c.description || "")}</div>
+          </div>
+          <button class="det" data-key="${card.key}">Details</button>
+        </div>` : `
+        <div class="cmd-row na" title="No matching device in Home Assistant">
+          <label class="sw"><input type="checkbox" disabled><span class="track"></span></label>
+          <div class="cmd-main">
+            <div class="cmd-say muted">${escapeHtml(card.c.description || card.c.example || "")}</div>
+            <div class="cmd-sub">You have no device that can do this</div>
+          </div>
+        </div>`).join("")}
+    </details>`).join("");
+
+  const index = Object.fromEntries(all.map(c => [c.key, c]));
+  host.querySelectorAll(".card-cb").forEach(cb => cb.addEventListener("change", () => {
+    setCard(index[cb.dataset.key], cb.checked);
+    cb.closest(".cmd-row").classList.toggle("off", !cb.checked);
+    refreshGroups(all); markDirty();
+    if (filter !== "all") renderCombos();   // row may no longer belong here
+  }));
+  host.querySelectorAll(".grp-cb").forEach(t => t.addEventListener("change", () => {
+    all.filter(c => c.c.group === t.dataset.group && c.available && visible(c))
+       .forEach(c => setCard(c, t.checked));
+    renderCombos(); markDirty();
+  }));
+  host.querySelectorAll(".det").forEach(b =>
+    b.addEventListener("click", () => openDetail(index[b.dataset.key])));
+  refreshGroups(all);
+}
+
+/* Group switch + counts reflect the cards currently listed under them. */
+function refreshGroups(all) {
+  const shown = all.filter(c => c.available && visible(c));
+  document.querySelectorAll("#commands-list .grp-cb").forEach(t => {
+    const items = shown.filter(c => c.c.group === t.dataset.group);
+    const on = items.filter(cardOn).length;
+    t.checked = items.length > 0 && on === items.length;
+    t.indeterminate = on > 0 && on < items.length;
+    const cnt = document.querySelector(`#commands-list .gcount[data-group="${CSS.escape(t.dataset.group)}"]`);
+    if (cnt) cnt.textContent = `${on}/${items.length}`;
+  });
+  updateMeter(all);
+}
+
+/* Grammar-size meter: why you'd turn anything off. Phrase counts are per card,
+   so the total is an upper bound (identical phrasings shared by two commands
+   are counted twice); good enough to compare choices.
+
+   The phrases Home Assistant contributes are in the grammar too, and they are
+   not cards, so they sit in the total as a constant — otherwise the headline
+   number would understate the grammar it's meant to describe. */
+function hassPhrases() {
+  return HASS_SOURCES.reduce((n, [key]) => {
+    const src = hassSource(key);
+    return n + (src.enabled ? (src.phrases || 0) : 0);
+  }, 0);
+}
+
+function updateMeter(all) {
+  const usable = all.filter(c => c.available);
+  const on = usable.filter(cardOn);
+  const extra = hassPhrases();
+  const phrases = on.reduce((n, c) => n + (c.cost.phrases || 0), 0) + extra;
+  $("m-count").textContent = on.length;
+  $("m-total").textContent = usable.length;
+  $("m-phrases").textContent = fmt(phrases);
+  $("m-extra").textContent = extra
+    ? ` (incl. ~${fmt(extra)} from Home Assistant)` : "";
+  const ceiling = usable.reduce((n, c) => n + (c.cost.phrases || 0), extra) || 1;
+  $("m-fill").style.width = Math.round(100 * phrases / ceiling) + "%";
+}
+
+/* ---- details drill-down ----
+   Read-only: every phrasing the command accepts, with each slot as a picklist
+   of the values it can actually take. Narrowing a device/area/floor is done
+   globally, on the Names tab. */
+function openDetail(card) {
+  const c = card.c;
+  $("d-say").innerHTML = card.say || escapeHtml(c.description || "");
+  const ways = (card.domain
+      ? [(c.examples_by_domain_full || {})[card.domain] || card.say]
+      : (c.examples || [])
+    ).filter(Boolean);
+
+  $("d-body").innerHTML = `
+    <div class="cmd-sub">${escapeHtml(c.description || "")} · adds ~<b>${
+      fmt(card.cost.phrases)}</b> phrases (${fmt(card.cost.sentences)} templates)
+      to the grammar</div>
+    <div class="dlg-sec">
+      <h4>Ways to say it</h4>
+      ${ways.map(e => `<div class="cmd-say">${e}</div>`).join("")
+        || '<div class="empty">none</div>'}
+    </div>
+    <div class="dlg-sec">
+      <span class="muted" style="font-size:12px">Technical id:
+      <code>${c.intent}/${c.combo}${card.domain ? " · " + card.domain : ""}</code></span>
+    </div>`;
+  $("detail").showModal();
+}
+
+/* ---- names -----------------------------------------------------------------
+   Global voice targeting: switch a device/area/floor off and it disappears from
+   every command that could have named it. */
+
+/* Labels are escaped: a built-in's is "Intent/combo", but a custom command's is
+   its own first sentence, so unescaped it put user-authored text into the page
+   as markup. */
+function usedBy(items){ return (items&&items.length) ? `<div class="usedby"><b>Used by:</b> ${items.map(s => escapeHtml(String(s))).join(", ")}</div>` : '<div class="usedby empty">Used by no enabled command</div>'; }
+
+/* Mutable override entry for one value; defaults mean "unchanged". Aliases and
+   per-command exclusions can still be present in the stored document (written
+   by an older version); we leave them alone rather than clobbering them. */
+function ovSpec(kind, value) {
+  const doc = (S.overrides ||= {});
+  const section = (doc[kind] ||= {});
+  return (section[value] ||= {});
+}
+
+function sourceLabel(s) {
+  const eid = s.entity_id ? `<code>${escapeHtml(s.entity_id)}</code>` : "unknown entity";
+  return s.alias_of ? `${eid} — alias of ${escapeHtml(s.alias_of)}` : eid;
+}
+
+/* One row per spoken name. Areas and floors arrive as plain strings; devices
+   arrive as {name, sources}, because a name can be shared by several entities
+   or be an alias of another name. The switch belongs to the name — that is what
+   the grammar holds — so switching "Media Player" off silences every entity
+   called that; the sources are listed so you can see which ones. */
+function valueRow(kind, entry) {
+  const value = (typeof entry === "string") ? entry : entry.name;
+  const sources = (typeof entry === "string") ? [] : (entry.sources || []);
+  const on = ovSpec(kind, value).voice !== false;
+  // A single plainly-named entity needs no explanation; anything else does.
+  const explain = sources.length > 1 || sources.some(s => s.alias_of);
+  return `<div class="val ${on ? "" : "voice-off"}" data-kind="${kind}" data-value="${escapeHtml(value)}">
+    <div class="val-row">
+      <label class="sw" title="Recognize this by voice">
+        <input type="checkbox" class="v-voice" ${on ? "checked" : ""}><span class="track"></span>
+      </label>
+      <span class="v-name">${escapeHtml(value)}</span>
+      ${sources.length > 1 ? `<span class="v-count">${sources.length} entities</span>` : ""}
+    </div>
+    ${explain ? `<ul class="v-src">${sources.map(s => `<li>${sourceLabel(s)}</li>`).join("")}</ul>` : ""}
+  </div>`;
+}
+
+function renderLists() {
+  const sec = (title, sub, kind, values, used) => `
+    <div class="list-row">
+      <h3>${title} <span class="muted">${sub}</span></h3>
+      ${usedBy(used)}
+      ${(values || []).length ? (values.map(v => valueRow(kind, v)).join(""))
+                              : '<div class="empty">none</div>'}
+    </div>`;
+  const rows = [
+    sec("Areas", "{area}", "areas", S.areas.values, S.areas.used_by),
+    sec("Floors", "{floor}", "floors", S.floors.values, S.floors.used_by),
+  ];
+  const dom = S.devices_by_domain || {};
+  for (const d of Object.keys(dom).sort())
+    rows.push(sec(escapeHtml(d), "{name}", "entities", dom[d].values, dom[d].used_by));
+  $("lists").innerHTML = rows.join("");
+
+  $("lists").querySelectorAll(".val").forEach(row => {
+    const { kind, value } = row.dataset;
+    const spec = ovSpec(kind, value);
+    row.querySelector(".v-voice").addEventListener("change", e => {
+      spec.voice = e.target.checked;
+      row.classList.toggle("voice-off", !e.target.checked);
+      markDirty();
+    });
+  });
+}
+
+/* ---- numeric package lists -------------------------------------------------
+   The server repeats validation authoritatively before writing anything. This
+   mirror exists for immediate feedback and to keep Save disabled on bad input. */
+function fullRangeExpression(row) {
+  return `${row.minimum}-${row.maximum}${row.step === 1 ? "" : `/${row.step}`}`;
+}
+
+function validateNumericRange(row) {
+  if (row.expression == null) {
+    const summary = row.step === 1
+      ? `${row.minimum}–${row.maximum}`
+      : `${row.minimum}–${row.maximum} in steps of ${row.step}`;
+    return {count:row.package_count, error:"", summary};
+  }
+  const text = String(row.expression).trim();
+  if (!text)
+    return {count:0, error:"Enter values, or choose Full range.", summary:""};
+  const values = new Set();
+  const segments = [];
+  for (const raw of text.split(",")) {
+    const m = raw.match(/^\s*(-?\d+)(?:\s*(?:-|\.\.)\s*(-?\d+)(?:\s*\/\s*(\d+))?)?\s*$/);
+    if (!m)
+      return {count:0, error:`Invalid item “${raw.trim()}”. Use N or START-END[/STEP].`, summary:""};
+    const start = Number(m[1]), stop = m[2] == null ? start : Number(m[2]);
+    const step = Number(m[3] || 1);
+    if (start > stop) return {count:0, error:`${start}-${stop} must be ascending.`, summary:""};
+    if (step <= 0) return {count:0, error:"The step must be greater than zero.", summary:""};
+    if (start < row.minimum || stop > row.maximum)
+      return {count:0, error:`Values must stay within ${row.minimum}-${row.maximum}.`, summary:""};
+    if ((start-row.minimum)%row.step || (stop-row.minimum)%row.step)
+      return {count:0, error:`Values must follow the package step of ${row.step}.`, summary:""};
+    if (start !== stop && step%row.step)
+      return {count:0, error:`The step must be a multiple of ${row.step}.`, summary:""};
+    if (start !== stop && (stop-start)%step)
+      return {count:0, error:`${start}-${stop}/${step} does not land on its end value.`, summary:""};
+    for (let value=start; value<=stop; value+=step) values.add(value);
+    segments.push(start === stop ? `${start}`
+      : step === 1 ? `${start}–${stop}`
+      : `${start}–${stop} in steps of ${step}`);
+  }
+  return {count:values.size, error:"", summary:segments.join("; ")};
+}
+
+function updateNumericValidity() {
+  $("save").disabled = !!document.querySelector(".range-spec.invalid");
+}
+
+function refreshNumericRow(host, row) {
+  const result = validateNumericRange(row);
+  const input = host.querySelector(".range-spec");
+  const error = host.querySelector(".range-error");
+  const count = host.querySelector(".range-count");
+  const summary = host.querySelector(".range-summary");
+  if (input) input.classList.toggle("invalid", !!result.error);
+  error.textContent = result.error;
+  count.textContent = result.error
+    ? ""
+    : `${result.count} of ${row.package_count} package values`;
+  summary.textContent = result.error ? "" : result.summary;
+  updateNumericValidity();
+}
+
+function renderNumericRanges() {
+  const host = $("numeric-ranges");
+  const rows = S.numeric_ranges || [];
+  if (!rows.length) {
+    host.innerHTML = '<div class="empty">No numeric lists are used by this language.</div>';
+    return;
+  }
+  host.innerHTML = rows.map((row, index) => {
+    const preset = row.mode === "custom" ? "custom" : row.expression == null
+      ? "full"
+      : ((row.presets || []).find(p => p.expression === row.expression) || {}).id || "custom";
+    const advanced = preset === "custom";
+    return `<div class="list-row numeric-row" data-index="${index}">
+      <h3>${escapeHtml(row.label)} <code>{${escapeHtml(row.name)}}</code></h3>
+      <div class="usedby">Package range: ${row.minimum}-${row.maximum}
+        ${row.step === 1 ? "" : `in steps of ${row.step}`}</div>
+      ${usedBy(row.used_by)}
+      <div class="range-controls">
+        <select class="range-preset" aria-label="${escapeHtml(row.label)} preset">
+          ${(row.presets || []).map(p => `<option value="${p.id}" ${p.id === preset ? "selected" : ""}>
+            ${escapeHtml(p.label)}${p.count == null ? "" : ` (${p.count})`}</option>`).join("")}
+        </select>
+        <input type="text" class="range-spec ${advanced ? "" : "hide"}"
+          value="${escapeHtml(row.expression == null ? "" : String(row.expression))}"
+          placeholder="3, 5, 8, 10-100/10"
+          aria-label="${escapeHtml(row.label)} allowed values">
+        <span class="v-count range-count"></span>
+      </div>
+      <div class="usedby"><b>Allowed values:</b> <span class="range-summary"></span></div>
+      <div class="range-error" role="alert"></div>
+    </div>`;
+  }).join("");
+
+  host.querySelectorAll(".numeric-row").forEach(rowHost => {
+    const row = rows[Number(rowHost.dataset.index)];
+    const select = rowHost.querySelector(".range-preset");
+    const input = rowHost.querySelector(".range-spec");
+    select.addEventListener("change", () => {
+      const preset = (row.presets || []).find(p => p.id === select.value);
+      if (preset.id === "custom") {
+        row.mode = "custom";
+        if (row.expression == null) row.expression = fullRangeExpression(row);
+      } else {
+        row.mode = preset.id;
+        row.expression = preset.expression;
+      }
+      renderNumericRanges();
+      markDirty();
+    });
+    input.addEventListener("input", () => {
+      row.mode = "custom";
+      row.expression = input.value;
+      refreshNumericRow(rowHost, row);
+      markDirty();
+    });
+    refreshNumericRow(rowHost, row);
+  });
+}
+
+function collectNumericRanges() {
+  const ranges = {};
+  for (const row of (S.numeric_ranges || [])) {
+    const result = validateNumericRange(row);
+    if (result.error) throw new Error(`${row.label}: ${result.error}`);
+    ranges[row.name] = row.expression;
+  }
+  return ranges;
+}
+
+/* enabled.json entry for a combo: [intent,combo] (all), [intent,combo,[domains]]
+   (subset), or null (off). */
+function comboSelection(c) {
+  const doms = c.domains || [];
+  if (doms.length) {
+    const ed = c.enabled_domains || [];
+    if (!ed.length) return null;
+    return ed.length === doms.length ? [c.intent, c.combo] : [c.intent, c.combo, ed];
+  }
+  return c.enabled ? [c.intent, c.combo] : null;
+}
+
+/* ---- save ---- */
+async function save() {
+  const btn = $("save"), st = $("status");
+  btn.disabled = true; st.className = "muted"; st.textContent = "Saving…";
+  try {
+    const res = await (await fetch("api/save", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        // Sent so the server can refuse a page loaded before the `language`
+        // option changed, rather than applying these edits to another language.
+        lang: S.lang,
+        max_score: parseFloat($("max-score").value),
+        enabled: S.combos.map(comboSelection).filter(Boolean),
+        commands: collectCommands(),
+        overrides: S.overrides || {},
+        numeric_ranges: collectNumericRanges(),
+        ...Object.fromEntries(HASS_SOURCES
+          .filter(([key]) => typeof hassSource(key).enabled === "boolean")
+          .map(([key]) => [key, hassSource(key).enabled])),
+      })
+    })).json();
+    st.className = res.ok ? "ok" : "err";
+    // `error` carries the reason a request was refused outright — a page loaded
+    // before the language option changed, say. Showing a bare "Failed." there
+    // would hide the one thing that tells you what to do about it.
+    st.textContent = res.message || res.error || (res.ok?"Saved.":"Failed.");
+    if (res.ok) { clearDirty(); await loadState(); }
+  } catch (e) { st.className="err"; st.textContent = "Save failed: " + e; }
+  finally { btn.disabled = false; updateNumericValidity(); }
+}
+
+/* ---- tabs + wiring ---- */
+document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("nav.tabs button").forEach(x=>x.classList.toggle("active", x===b));
+  ["builtin","custom","names","numbers","settings"].forEach(t => $("tab-"+t).hidden = (t!==b.dataset.tab));
+}));
+$("add-cmd").addEventListener("click", () => {
+  (S.commands ||= []).push({ sentences:[], mode:"stt" });
+  renderCustom(); markDirty();
+});
+$("max-score").addEventListener("input", markDirty);
+/* Debug mode applies at once (it doesn't touch the grammar), so it posts on
+   change rather than waiting for Save -- and therefore never marks dirty. */
+$("debug-mode").addEventListener("change", async e => {
+  const on = e.target.checked;
+  S.debug_mode = on;
+  debugSince = 0; debugRows = [];
+  renderDebug();
+  try {
+    await fetch("api/debug_mode", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ enabled: on }),  // debug mode is global, not per-language
+    });
+  } catch (err) {
+    S.debug_mode = !on; renderDebug();
+    $("status").className = "err";
+    $("status").textContent = "Could not change debug mode: " + err;
+    return;
+  }
+  setDebugPolling(on);
+});
+$("cmd-search").addEventListener("input", e => {
+  search = e.target.value.trim().toLowerCase(); renderCombos();
+});
+$("cmd-filter").addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  filter = b.dataset.filter;
+  [...e.currentTarget.children].forEach(x => x.classList.toggle("on", x === b));
+  renderCombos();
+});
+$("cmd-reset").addEventListener("click", () => {
+  S.combos.forEach(c => {
+    const on = RECOMMENDED.includes(c.importance);
+    c.enabled = on;
+    c.enabled_domains = on ? [...(c.domains || [])] : [];
+  });
+  renderCombos(); markDirty();
+});
+$("d-close").addEventListener("click", () => $("detail").close());
+$("detail").addEventListener("click", e => { if (e.target.id === "detail") $("detail").close(); });
+$("save").addEventListener("click", save);
+window.addEventListener("beforeunload", e => { if (dirty){ e.preventDefault(); e.returnValue=""; } });
+loadState();
+</script>
+</body>
+</html>

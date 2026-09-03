@@ -1,0 +1,492 @@
+[
+  {
+    "language": "fr",
+    "intent": "HassCancelTimer",
+    "combo": "default",
+    "text": "annule le minuteur",
+    "expected_intent": "HassCancelTimer",
+    "expected_slots": {},
+    "wav": "HassCancelTimer__default.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassClimateGetTemperature",
+    "combo": "area_only",
+    "text": "Quelle est la température dans le Cuisine",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "area": "Cuisine"
+    },
+    "wav": "HassClimateGetTemperature__area_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassClimateGetTemperature",
+    "combo": "default",
+    "text": "Quelle est la température",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {},
+    "wav": "HassClimateGetTemperature__default.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassClimateGetTemperature",
+    "combo": "name_only",
+    "text": "Quelle est la température de le Thermostat du bureau",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "name": "Thermostat du bureau"
+    },
+    "wav": "HassClimateGetTemperature__name_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassDecreaseTimer",
+    "combo": "hours_only",
+    "text": "enlève 2 heure au minuteur",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassDecreaseTimer__hours_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassDecreaseTimer",
+    "combo": "minutes_only",
+    "text": "enlève 5 minute au minuteur",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassDecreaseTimer__minutes_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassDecreaseTimer",
+    "combo": "seconds_only",
+    "text": "enlève 30 seconde au minuteur",
+    "expected_intent": "HassDecreaseTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassDecreaseTimer__seconds_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassFanSetSpeed",
+    "combo": "default",
+    "text": "règle la vitesse du ventilateur à 50 pour cent",
+    "expected_intent": "HassFanSetSpeed",
+    "expected_slots": {
+      "percentage": 50.0
+    },
+    "wav": "HassFanSetSpeed__default.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassFanSetSpeed",
+    "combo": "name_only",
+    "text": "règle la vitesse de le Hotte à 50 pour cent",
+    "expected_intent": "HassFanSetSpeed",
+    "expected_slots": {
+      "name": "Hotte",
+      "percentage": 50.0
+    },
+    "wav": "HassFanSetSpeed__name_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassGetCurrentDate",
+    "combo": "default",
+    "text": "Quelle est la date du jour",
+    "expected_intent": "HassGetCurrentDate",
+    "expected_slots": {},
+    "wav": "HassGetCurrentDate__default.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassGetCurrentTime",
+    "combo": "default",
+    "text": "Quelle heure est il",
+    "expected_intent": "HassGetCurrentTime",
+    "expected_slots": {},
+    "wav": "HassGetCurrentTime__default.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassGetState",
+    "combo": "name_only",
+    "text": "quelle est la valeur de le température extérieure",
+    "expected_intent": "HassGetState",
+    "expected_slots": {
+      "name": "température extérieure"
+    },
+    "wav": "HassGetState__name_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassGetState",
+    "combo": "name_state",
+    "text": "le Hotte est allumées",
+    "expected_intent": "HassGetState",
+    "expected_slots": {
+      "name": "Hotte",
+      "state": "on"
+    },
+    "wav": "HassGetState__name_state.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassGetWeather",
+    "combo": "default",
+    "text": "Quel est le temps",
+    "expected_intent": "HassGetWeather",
+    "expected_slots": {},
+    "wav": "HassGetWeather__default.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassIncreaseTimer",
+    "combo": "hours_only",
+    "text": "ajoute 2 heure au minuteur",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassIncreaseTimer__hours_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassIncreaseTimer",
+    "combo": "minutes_only",
+    "text": "ajoute 5 minute au minuteur",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassIncreaseTimer__minutes_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassIncreaseTimer",
+    "combo": "seconds_only",
+    "text": "ajoute 30 seconde au minuteur",
+    "expected_intent": "HassIncreaseTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassIncreaseTimer__seconds_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassLightSet",
+    "combo": "area_brightness",
+    "text": "règle la luminosité dans le Cuisine à 50 pour cent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "area": "Cuisine",
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__area_brightness.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassLightSet",
+    "combo": "brightness_only",
+    "text": "règle la luminosité à 50 pour cent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__brightness_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassLightSet",
+    "combo": "floor_brightness",
+    "text": "règle la luminosité dans le Premier Étage à 50 pour cent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "floor": "Premier Étage",
+      "brightness": 50.0,
+      "domain": "light"
+    },
+    "wav": "HassLightSet__floor_brightness.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassLightSet",
+    "combo": "name_brightness",
+    "text": "règle la luminosité de le Lampe A à 50 pour cent",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "name": "Lampe A",
+      "brightness": 50.0
+    },
+    "wav": "HassLightSet__name_brightness.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassMediaNext",
+    "combo": "default",
+    "text": "morceau suivant",
+    "expected_intent": "HassMediaNext",
+    "expected_slots": {},
+    "wav": "HassMediaNext__default.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassMediaPause",
+    "combo": "default",
+    "text": "arrête la lecture",
+    "expected_intent": "HassMediaPause",
+    "expected_slots": {},
+    "wav": "HassMediaPause__default.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassMediaPlayerMute",
+    "combo": "default",
+    "text": "mets le son en sourdine",
+    "expected_intent": "HassMediaPlayerMute",
+    "expected_slots": {},
+    "wav": "HassMediaPlayerMute__default.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassMediaPlayerUnmute",
+    "combo": "default",
+    "text": "enlève la sourdine",
+    "expected_intent": "HassMediaPlayerUnmute",
+    "expected_slots": {},
+    "wav": "HassMediaPlayerUnmute__default.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassMediaPrevious",
+    "combo": "default",
+    "text": "morceau précédent",
+    "expected_intent": "HassMediaPrevious",
+    "expected_slots": {},
+    "wav": "HassMediaPrevious__default.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassMediaUnpause",
+    "combo": "default",
+    "text": "reprends la lecture",
+    "expected_intent": "HassMediaUnpause",
+    "expected_slots": {},
+    "wav": "HassMediaUnpause__default.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassNevermind",
+    "combo": "default",
+    "text": "oublie",
+    "expected_intent": "HassNevermind",
+    "expected_slots": {},
+    "wav": "HassNevermind__default.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassPauseTimer",
+    "combo": "default",
+    "text": "mets le minuteur en pause",
+    "expected_intent": "HassPauseTimer",
+    "expected_slots": {},
+    "wav": "HassPauseTimer__default.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassSetPosition",
+    "combo": "name_only",
+    "text": "règle la position de le Fenêtre Bébé à 50 pour cent",
+    "expected_intent": "HassSetPosition",
+    "expected_slots": {
+      "name": "Fenêtre Bébé",
+      "position": 50.0
+    },
+    "wav": "HassSetPosition__name_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassSetVolume",
+    "combo": "default",
+    "text": "règle le volume à 50 pour cent",
+    "expected_intent": "HassSetVolume",
+    "expected_slots": {
+      "volume_level": 50.0
+    },
+    "wav": "HassSetVolume__default.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassSetVolumeRelative",
+    "combo": "default",
+    "text": "augmente le volume",
+    "expected_intent": "HassSetVolumeRelative",
+    "expected_slots": {
+      "volume_step": "up"
+    },
+    "wav": "HassSetVolumeRelative__default.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassStartTimer",
+    "combo": "hours_only",
+    "text": "mets un minuteur de 2 heure",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassStartTimer__hours_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassStartTimer",
+    "combo": "minutes_only",
+    "text": "mets un minuteur de 5 minute",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassStartTimer__minutes_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassStartTimer",
+    "combo": "seconds_only",
+    "text": "mets un minuteur de 30 seconde",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassStartTimer__seconds_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassTimerStatus",
+    "combo": "default",
+    "text": "Il reste combien de temps",
+    "expected_intent": "HassTimerStatus",
+    "expected_slots": {},
+    "wav": "HassTimerStatus__default.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassTurnOff",
+    "combo": "area_domain",
+    "text": "éteins les lumières dans le Cuisine",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "area": "Cuisine",
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__area_domain.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassTurnOff",
+    "combo": "domain_only",
+    "text": "éteins les lumières",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__domain_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassTurnOff",
+    "combo": "floor_domain",
+    "text": "éteins les lumières dans le Premier Étage",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "floor": "Premier Étage",
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__floor_domain.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassTurnOff",
+    "combo": "name_only",
+    "text": "éteins le Enceintes",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "name": "Enceintes"
+    },
+    "wav": "HassTurnOff__name_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassTurnOn",
+    "combo": "area_domain",
+    "text": "allume les lumières dans le Cuisine",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "area": "Cuisine",
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__area_domain.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassTurnOn",
+    "combo": "domain_only",
+    "text": "allume les lumières",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__domain_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassTurnOn",
+    "combo": "floor_domain",
+    "text": "allume les lumières dans le Premier Étage",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "floor": "Premier Étage",
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__floor_domain.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassTurnOn",
+    "combo": "name_area",
+    "text": "allume le Enceintes dans le Cuisine",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "Enceintes",
+      "area": "Cuisine"
+    },
+    "wav": "HassTurnOn__name_area.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassTurnOn",
+    "combo": "name_only",
+    "text": "allume le Enceintes",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "Enceintes"
+    },
+    "wav": "HassTurnOn__name_only.flac"
+  },
+  {
+    "language": "fr",
+    "intent": "HassUnpauseTimer",
+    "combo": "default",
+    "text": "reprends le minuteur",
+    "expected_intent": "HassUnpauseTimer",
+    "expected_slots": {},
+    "wav": "HassUnpauseTimer__default.flac"
+  }
+]

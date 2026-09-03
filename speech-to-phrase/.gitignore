@@ -1,0 +1,23 @@
+data/
+local/
+.claude/
+# Populated only inside the container image (Dockerfile BUNDLE_MODEL).
+/models/
+tests/wav/.tts_cache/
+__pycache__/
+*.pyc
+*.fst
+*.fst.tokens
+.pytest_cache/
+lib/build/
+lib/*.egg-info/
+
+.python-version
+
+# Local backend and model-training experiments are not part of the app release.
+lib/speech_to_phrase/backends/zipformer.py
+tools/requirements-zipformer.txt
+tools/zipformer_test.py
+training/
+
+/*.sh

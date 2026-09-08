@@ -1,7 +1,7 @@
 """Per-language settings persisted to ``<data>/<lang>/settings.json``.
 
-Each one has an add-on option supplying the default for every language, and a
-web-UI override for one language:
+Each one has a model/backend-specific runtime default and a web-UI override for
+one language:
 
   * ``max_score`` -- the max per-token score at/below which a decode is accepted
     (lower = more confident; above it the utterance is gated to an empty
@@ -30,8 +30,8 @@ _LOGGER = logging.getLogger(__name__)
 
 FILENAME = "settings.json"
 
-# Guard rails for a user-entered gate. The fitted default is ~5.0 (citrinet);
-# well below ~1 nothing matches, well above ~15 even OOV noise is accepted.
+# Guard rails for a user-entered gate. Fitted defaults are model-specific; well
+# below ~1 nothing matches, while well above ~15 accepts even OOV noise.
 MIN_MAX_SCORE = 0.1
 MAX_MAX_SCORE = 50.0
 
@@ -111,7 +111,13 @@ def set_bool(
     return value
 
 
-def set_max_score(data_dir: Union[str, Path], lang: str, value: Any) -> Optional[float]:
+def set_max_score(
+    data_dir: Union[str, Path],
+    lang: str,
+    value: Any,
+    *,
+    model_id: Optional[str] = None,
+) -> Optional[float]:
     """Persist the gate for `lang` (clamped to the valid range). Returns the
     stored value, or None if `value` could not be parsed, in which case nothing
     is written and the previous setting (or the per-backend default) stands.
@@ -124,5 +130,52 @@ def set_max_score(data_dir: Union[str, Path], lang: str, value: Any) -> Optional
         _LOGGER.warning("Ignoring unparseable max_score %r for '%s'", value, lang)
         return None
     stored = min(MAX_MAX_SCORE, max(MIN_MAX_SCORE, parsed))
-    update(data_dir, lang, {"max_score": stored})
+    values: Dict[str, Any] = {"max_score": stored}
+    if model_id:
+        values["max_score_model"] = model_id
+    update(data_dir, lang, values)
     return stored
+
+
+def migrate_max_score_default(
+    data_dir: Union[str, Path],
+    lang: str,
+    *,
+    model_id: str,
+    previous_model_ids: Iterable[str],
+    previous_default: float,
+    new_default: float,
+) -> bool:
+    """Move a materialized old default to a new model's calibrated default.
+
+    Older UI saves persisted the displayed default without recording which
+    model supplied it. Exact non-default values are treated as user choices and
+    retained. Once associated with the current model, even a value equal to the
+    old default is considered an explicit override and is not migrated again.
+    """
+    p = path(data_dir, lang)
+    data = _read(p)
+    if "max_score" not in data or data.get("max_score_model") == model_id:
+        return False
+    previous_models = set(previous_model_ids)
+    stored_model = data.get("max_score_model")
+    if stored_model is not None and stored_model not in previous_models:
+        return False
+    try:
+        stored = float(data["max_score"])
+    except (TypeError, ValueError):
+        return False
+
+    migrated = stored == previous_default
+    values: Dict[str, Any] = {"max_score_model": model_id}
+    if migrated:
+        values["max_score"] = new_default
+        _LOGGER.info(
+            "Migrating the '%s' max-score default from %.3f to %.3f for %s",
+            lang,
+            previous_default,
+            new_default,
+            model_id,
+        )
+    update(data_dir, lang, values)
+    return migrated

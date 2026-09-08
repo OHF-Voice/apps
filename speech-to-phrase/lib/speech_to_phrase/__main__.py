@@ -51,7 +51,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument(
         "--backend",
         default="nemo",
-        choices=["nemo", "coqui"],
+        choices=["nemo", "citrinet", "coqui"],
         help="Acoustic backend (default: nemo)",
     )
     parser.add_argument("--model", required=True, help="Path to the model directory")

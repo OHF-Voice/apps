@@ -49,15 +49,12 @@ from vendored_lib import bind as _bind_vendored_lib  # noqa: E402
 
 _bind_vendored_lib()
 
+import models  # noqa: E402
 from speech_to_phrase.audio import resample as resample_audio  # noqa: E402
 
 HA_URL = os.environ.get("HA_URL", "http://homeassistant.local:8123")
 TOKEN = os.environ.get("HA_TOKEN", "")
 SAMPLE_RATE = 16000
-
-# Per-backend score gate: at or below this a transcript is accepted locally,
-# above it the utterance is handed to the cloud fallback (models.DEFAULT_MAX_SCORE).
-GATE = {"nemo": 5.0, "coqui": 2.0}
 
 # HA Cloud TTS locale per language.
 TTS_LANGUAGE = {
@@ -267,7 +264,9 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--language", required=True)
     ap.add_argument("--model", required=True, type=Path)
-    ap.add_argument("--backend", default="nemo", choices=["nemo", "coqui"])
+    ap.add_argument(
+        "--backend", default="nemo", choices=["nemo", "citrinet", "coqui"]
+    )
     ap.add_argument("--intents-repo", required=True, type=Path)
     ap.add_argument("--s2p-json-dir", type=Path, default=None,
                     help="speech_to_phrase/ dir built by intents-package (overrides the "
@@ -275,9 +274,11 @@ def main() -> int:
     ap.add_argument("--engine-id", default="tts.home_assistant_cloud")
     ap.add_argument("--cache-dir", type=Path, default=Path("tests/wav/.tts_cache"))
     ap.add_argument("--token-bonus", type=float, default=None)
+    ap.add_argument("--max-score", type=float, default=None)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--json-out", type=Path, default=None)
     args = ap.parse_args()
+    args.backend = models.resolve_backend(args.language, args.backend)
 
     if args.s2p_json_dir:
         import home_assistant_intents  # noqa: PLC0415
@@ -316,7 +317,11 @@ def main() -> int:
     matcher = build_matcher(args.language, entities, areas, floors)
     print(f"matcher: {'built' if matcher else 'UNAVAILABLE'}")
 
-    gate = GATE[args.backend]
+    gate = (
+        args.max_score
+        if args.max_score is not None
+        else models.default_max_score(args.backend, args.model)
+    )
     tts_language = TTS_LANGUAGE.get(args.language, f"{args.language}-{args.language.upper()}")
 
     cases = lean_examples(args.intents_repo, args.language)

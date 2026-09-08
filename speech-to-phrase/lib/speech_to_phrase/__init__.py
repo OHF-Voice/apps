@@ -1,7 +1,7 @@
 """speech_to_phrase: constrained CTC speech-to-text over sentence templates.
 
 Build a grammar from sentence templates, then transcribe audio constrained to
-that grammar with either a Citrinet (ONNX) or Coqui (TFLite) CTC backend:
+that grammar with either a NeMo (ONNX) or Coqui (TFLite) CTC backend:
 
     from speech_to_phrase import load_recognizer
     rec = load_recognizer("nemo", "local/stt_en_parakeet_tdt_ctc_110m", language="en")
@@ -128,7 +128,7 @@ class Recognizer:
         # command for OOV audio.
         self.token_bonus_rescue_similarity = token_bonus_rescue_similarity
         self.token_bonus_rescue_multiplier = token_bonus_rescue_multiplier
-        # Citrinet can put almost all probability on CTC blank while a VPE noise
+        # NeMo CTC can put almost all probability on blank while a VPE noise
         # suppressor distorts one word. In a narrow confidence band, retry with a
         # selection-only blank penalty so the full entity name can compete with a
         # short generic command. Bounding the retry prevents rejected OOV audio
@@ -268,12 +268,12 @@ def load_recognizer(
     """Create a :class:`Recognizer` for ``"nemo"`` or ``"coqui"``.
 
     Extra keyword arguments are forwarded to the backend (e.g. ``spm_model=...``
-    for Citrinet; ``stt_binary=...`` for Coqui). ``beam`` sets the decode
+    for NeMo; ``stt_binary=...`` for Coqui). ``beam`` sets the decode
     pruning beam; if unset it defaults per backend (Coqui benefits from pruning
     its many-frame character grammar). The token-bonus rescue options control a
     bounded recovery pass for a rejected short decode whose corrected text
     resembles the unconstrained CTC transcript. The blank-retry options control
-    Citrinet's recovery pass for low-confidence short decodes. Leaving these
+    NeMo CTC's recovery pass for low-confidence short decodes. Leaving these
     options unset uses the calibrated backend defaults.
     """
     backend = backend.lower()

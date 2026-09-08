@@ -42,6 +42,7 @@ import soundfile as sf
 from scipy.signal import fftconvolve
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+import models  # noqa: E402
 from audio_frontend import prepare_audio  # noqa: E402  (src on path above)
 
 from speech_to_phrase import load_recognizer
@@ -62,20 +63,6 @@ HA_URL = os.environ.get("HA_URL", "http://homeassistant.local:8123")
 TOKEN = os.environ.get("HA_TOKEN", "")
 TTS_LANGUAGE = "en-US"
 SAMPLE_RATE = 16000
-# citrinet gate re-fit 8.0 -> 5.0 (2026-07-01): the expanded ~26-intent grammar
-# has short commands ("next"/"stop"/"go back") that noise/OOV audio false-matches
-# at 6-8, so 8.0 gave ~18/112 OOV false-accepts. Youden-optimal for the production
-# pipeline is 5.5, but we ship a more conservative 5.0 default (OOV FA -> 2/112,
-# legit acceptance 93% clean/97% all). Users can override per-language in the web
-# UI. Re-fit with this tool (see the "gate fitting" sweep it prints).
-# coqui gate re-fit 1.25 -> 2.0 (2026-07-01): evaluated sl_SL-coqui on Common
-# Voice with a grammar-size sweep (fixed in-grammar probe set + disjoint OOV
-# set, real human speech). The 1.25 default rejected ~24% of correctly
-# recognized commands (needless cloud fallback); usable accuracy only reaches
-# the decode ceiling (94% short / 97% all) around gate ~2.5. 2.0 keeps ~89%
-# usable on short/command-like utterances at ~4% OOV false-accept.
-GATE_THRESHOLD = {"nemo": 5.0, "coqui": 2.0}
-
 def transcribe(rec, audio: np.ndarray):
     """Recognize a clip through the same lossless front-end as production."""
     return rec.transcribe(prepare_audio(audio))
@@ -357,6 +344,7 @@ def main() -> int:
     ap.add_argument("--language", default="en")
     ap.add_argument("--backend", default="nemo")
     ap.add_argument("--model", required=True, type=Path)
+    ap.add_argument("--max-score", type=float, default=None)
     ap.add_argument("--engine-id", default="tts.home_assistant_cloud")
     ap.add_argument("--samples", type=int, default=3, help="realizations per template")
     ap.add_argument("--snr-db", type=float, nargs="+", default=[15.0, 5.0])
@@ -372,6 +360,7 @@ def main() -> int:
     ap.add_argument("--dump-scores", type=Path, default=None,
                     help="write raw legit/confusion/OOV scores to this JSON path")
     args = ap.parse_args()
+    args.backend = models.resolve_backend(args.language, args.backend)
 
     wav = args.s2p_repo / "tests" / "wav"
     rir_dir = args.rir_dir or (wav / "rir")
@@ -391,7 +380,11 @@ def main() -> int:
     rec = load_recognizer(args.backend, args.model, language=args.language,
                           token_bonus=args.token_bonus)
     rec.train(templates, list_values=LIST_VALUES)
-    gate = GATE_THRESHOLD.get(args.backend, 4.0)
+    gate = (
+        args.max_score
+        if args.max_score is not None
+        else models.default_max_score(args.backend, args.model)
+    )
 
     # per-condition tally of category -> count
     tally: Dict[str, Dict[str, int]] = {c[0]: {} for c in conditions}

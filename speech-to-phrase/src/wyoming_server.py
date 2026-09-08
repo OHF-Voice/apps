@@ -408,16 +408,15 @@ def main() -> None:
         default=None,
         help="word-insertion reward per emitted token (0 = off); "
         "if unset, a per-backend default is used "
-        "(citrinet 2.0, coqui 0.0). Counters the CTC length "
+        "(nemo 2.0, coqui 0.0). Counters the CTC length "
         "bias that lets a short parse win over a longer, "
         "better-fitting one",
     )
     ap.add_argument("--debug", action="store_true")
     cfg = ap.parse_args()
-    if cfg.backend == "auto":
-        # Same per-language selection app.py uses, so a Coqui-only language
-        # (sl/nl/cs) picks coqui here too instead of failing to find a model.
-        cfg.backend = models.resolve_backend(cfg.language, "auto")
+    # Same per-language selection app.py uses, including the legacy Citrinet
+    # spelling and Coqui-only languages such as Czech.
+    cfg.backend = models.resolve_backend(cfg.language, cfg.backend)
     if cfg.max_score is None:
         configured_model = cfg.model or models.model_name_for(cfg.language, cfg.backend)
         cfg.max_score = models.default_max_score(cfg.backend, configured_model)

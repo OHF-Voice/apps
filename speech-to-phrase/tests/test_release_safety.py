@@ -23,6 +23,7 @@ from speech_to_phrase.backends.coqui import CoquiModel  # noqa: E402
 
 import app as web_app  # noqa: E402
 import models  # noqa: E402
+import settings  # noqa: E402
 
 
 def test_default_english_model_is_bundled_parakeet():
@@ -35,8 +36,61 @@ def test_default_english_model_is_bundled_parakeet():
         == 3.8
     )
     assert models.default_max_score("nemo", "stt_de_citrinet_1024") == 5.0
+    assert models.resolve_backend("en", "citrinet") == "nemo"
+    assert models.model_name_for("en", "citrinet") == model_name
+    assert models.default_token_bonus("citrinet") == 2.0
     dockerfile = (ROOT / "Dockerfile").read_text()
     assert f"ARG BUNDLE_MODEL={model_name}" in dockerfile
+
+
+def test_legacy_english_default_gate_is_migrated(tmp_path):
+    settings.set_max_score(tmp_path, "en", 5.0)
+
+    assert settings.migrate_max_score_default(
+        tmp_path,
+        "en",
+        model_id=models.ENGLISH_MODEL,
+        previous_model_ids=models.LEGACY_ENGLISH_MODELS,
+        previous_default=5.0,
+        new_default=3.8,
+    )
+    assert settings.load(tmp_path, "en") == {
+        "max_score": 3.8,
+        "max_score_model": models.ENGLISH_MODEL,
+    }
+
+    settings.set_max_score(
+        tmp_path,
+        "en",
+        5.0,
+        model_id=models.ENGLISH_MODEL,
+    )
+    assert not settings.migrate_max_score_default(
+        tmp_path,
+        "en",
+        model_id=models.ENGLISH_MODEL,
+        previous_model_ids=models.LEGACY_ENGLISH_MODELS,
+        previous_default=5.0,
+        new_default=3.8,
+    )
+    assert settings.get_max_score(tmp_path, "en", 3.8) == 5.0
+
+
+def test_custom_legacy_gate_is_preserved_during_model_migration(tmp_path):
+    settings.set_max_score(tmp_path, "en", 4.5)
+
+    assert not settings.migrate_max_score_default(
+        tmp_path,
+        "en",
+        model_id=models.ENGLISH_MODEL,
+        previous_model_ids=models.LEGACY_ENGLISH_MODELS,
+        previous_default=5.0,
+        new_default=3.8,
+    )
+    assert settings.load(tmp_path, "en") == {
+        "max_score": 4.5,
+        "max_score_model": models.ENGLISH_MODEL,
+    }
 
 
 def _cfg(data: Path) -> Namespace:

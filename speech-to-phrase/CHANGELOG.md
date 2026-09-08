@@ -1,13 +1,21 @@
 # Changelog
 
-## 2.0.0
+## 2.1.0
 
 - English now defaults to the Parakeet TDT-CTC 110M model, which is bundled in
   the image for offline first startup. Its score gate is calibrated separately
-  from the other NeMo CTC models. The redistributed ONNX export comes from
+  from the other NeMo CTC models at `3.8`; upgrades migrate a previously
+  materialized English default of `5.0` while preserving custom values. The
+  redistributed ONNX export comes from
   `csukuangfj/sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000` revision
   `3af92f152d32c836acabf38f4c993bc96b80eb2d` and retains NVIDIA's CC-BY-4.0
   attribution in the model archive.
+- The ONNX acoustic backend is now named `nemo`, reflecting that it supports
+  Citrinet, Conformer, and Parakeet models. Command-line callers may continue to
+  use `citrinet`; it is normalized to `nemo` for model selection, defaults, and
+  grammar fingerprints.
+
+## 2.0.0
 
 - Numeric lists such as brightness, cover position, volume and timer duration can
   now be narrowed per language in **Numbers**. Voice-friendly
@@ -18,8 +26,9 @@
   rejected before anything is saved, and the same restriction is applied to both
   the speech grammar and intent matcher.
 
-- The image is **275 MB smaller** (857 → 582 MB), because the log-mel front end
-  no longer needs librosa. It was used for exactly three calls — the mel
+- Removed roughly **275 MB** of Python dependencies before model assets by
+  replacing librosa in the log-mel front end. It was used for exactly three
+  calls — the mel
   filterbank, the STFT and resampling — and hard-depends on numba and
   scikit-learn, hence llvmlite, whose single shared object was 170 MB: about a
   fifth of the whole image for code the recognizer never executed. The

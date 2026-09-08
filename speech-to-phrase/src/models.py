@@ -21,7 +21,19 @@ import tarfile
 import tempfile
 import urllib.request
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional
+
+from speech_to_phrase.defaults import (
+    DEFAULT_MAX_SCORE,
+    DEFAULT_TOKEN_BONUS,
+    ENGLISH_MODEL,
+    ENGLISH_MODEL_ALIASES,
+    LEGACY_ENGLISH_MODELS,
+    MODEL_MAX_SCORE,
+    default_max_score,
+    default_token_bonus,
+    normalize_backend,
+)
 
 _LOGGER = logging.getLogger("speech-to-phrase.models")
 
@@ -56,26 +68,8 @@ STT_BINARY_SHA256 = {
 # *.onnx (NeMo CTC, often named <model>.onnx), or *.fst (kaldi).
 MODEL_GLOBS = ("*.tflite", "*.onnx", "*.fst")
 
-# Default score gate: the max per-token penalty at/below which a local
-# transcript is accepted (above it the utterance is treated as out-of-grammar
-# and handed to the cloud fallback). The scales differ by backend and model.
-# Parakeet 3.8 retained 62/67 VPE commands while rejecting every evaluation OOV
-# clip. Citrinet 5.0 was re-fit on tests/en; Coqui 2.0 was re-fit on Common
-# Voice (sl). Users can override the gate per language in the web UI.
-DEFAULT_MAX_SCORE = {"nemo": 5.0, "coqui": 2.0}
-MODEL_MAX_SCORE = {
-    "stt_en_parakeet_tdt_ctc_110m": 3.8,
-    "parakeet-tdt-ctc-110m": 3.8,
-}
-
-
-def default_max_score(backend: str, model: Optional[Union[str, Path]] = None) -> float:
-    if model is not None:
-        model_name = Path(model).name
-        if model_name in MODEL_MAX_SCORE:
-            return MODEL_MAX_SCORE[model_name]
-    return DEFAULT_MAX_SCORE.get(backend, 5.0)
-
+# Recognition defaults are imported from the library so production and
+# benchmarking use the same model-specific calibration.
 
 # Word-insertion reward per emitted token. The recognizer compares the candidate
 # it generates with the unbiased decode using the per-token acoustic score, so
@@ -86,12 +80,6 @@ def default_max_score(backend: str, model: Optional[Union[str, Path]] = None) ->
 # commands and the OOV corpus in tests/wav.
 # Coqui is 0 because it has not been measured -- its cost scale differs from
 # NeMo CTC's, so borrowing the number would be a guess.
-DEFAULT_TOKEN_BONUS = {"nemo": 2.0, "coqui": 0.0}
-
-
-def default_token_bonus(backend: str) -> float:
-    return DEFAULT_TOKEN_BONUS.get(backend, 0.0)
-
 
 # language -> {backend: HuggingFace model name}. The repo ships NeMo CTC models
 # (Citrinet/Conformer/Parakeet, ONNX -> "nemo" backend, runs on onnxruntime
@@ -100,7 +88,7 @@ def default_token_bonus(backend: str) -> float:
 # validated.
 MODEL_NAMES = {
     "en": {
-        "nemo": "stt_en_parakeet_tdt_ctc_110m",
+        "nemo": ENGLISH_MODEL,
         "coqui": "en_US-coqui",
     },
     "de": {"nemo": "stt_de_citrinet_1024", "coqui": "de_DE-coqui"},
@@ -157,7 +145,7 @@ def model_name_for(language: str, backend: str) -> Optional[str]:
     model is a configuration answer -- None -- not a different model.
     ``resolve_backend`` is what picks a backend that exists.
     """
-    return MODEL_NAMES.get(language, {}).get(backend)
+    return MODEL_NAMES.get(language, {}).get(normalize_backend(backend))
 
 
 def backends_for(language: str) -> List[str]:
@@ -171,6 +159,7 @@ def resolve_backend(language: str, requested: str) -> str:
     Coqui is used for languages that ship only a Coqui model (``cs``; Dutch
     moved to NeMo CTC). Non-auto values pass through unchanged -- and if that
     pairing has no model, ``resolve`` says so rather than substituting one."""
+    requested = normalize_backend(requested)
     if requested != "auto":
         return requested
     by_backend = MODEL_NAMES.get(language, {})
@@ -312,6 +301,7 @@ def resolve(
     The coqui backend additionally needs the stt_onlyprobs binary, which is
     fetched here and exported via $STT_ONLYPROBS.
     """
+    backend = normalize_backend(backend)
     if backend == "coqui":
         ensure_stt_binary(tools_dir or (Path(models_dir).parent / "tools"))
     if model:

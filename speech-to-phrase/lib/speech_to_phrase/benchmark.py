@@ -1,4 +1,4 @@
-"""Benchmark the Citrinet + FST constrained speech-to-text pipeline.
+"""Benchmark the constrained CTC + FST speech-to-text pipeline.
 
 Given a file of sentence templates and a dataset of audio files with their
 expected transcripts, this builds the grammar FST once (training) and then
@@ -8,10 +8,11 @@ real-time factor).
 
 Usage:
 
-    python -m citrinet.benchmark \\
+    python -m speech_to_phrase.benchmark \\
         --templates templates.txt \\
         --dataset dataset.jsonl \\
-        [--model stt_en_citrinet_512] [--language en]
+        --model-dir stt_en_parakeet_tdt_ctc_110m \\
+        [--language en]
 
 Templates file: one template per line (same syntax as the `stt_local.sentences`
 config), blank lines and lines starting with '#' are ignored.
@@ -46,6 +47,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
 from . import load_recognizer
+from .defaults import default_max_score, normalize_backend
 
 # ----------------------------------------------------------------------------
 # Dataset / template loading
@@ -241,9 +243,8 @@ def run_benchmark(args: argparse.Namespace) -> int:
         f"Loaded {len(templates)} templates and {len(samples)} samples", file=sys.stderr
     )
 
-    # Per-token penalty scale differs by backend (subword vs character), so the
-    # gating threshold does too. Swept on tests/en; validate on more data.
-    default_threshold = {"citrinet": 4.0, "coqui": 1.25}[args.backend]
+    args.backend = normalize_backend(args.backend)
+    default_threshold = default_max_score(args.backend, args.model_dir)
     if args.close_score is None:
         args.close_score = default_threshold
     if args.max_score is None:
@@ -525,8 +526,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--backend",
-        default="citrinet",
-        choices=["citrinet", "coqui"],
+        default="nemo",
+        choices=["nemo", "citrinet", "coqui"],
         help="Acoustic backend",
     )
     parser.add_argument(

@@ -54,9 +54,10 @@ the one the recognizer is running. Change it there and reload the page.
 - **Settings** — **Max score**, the confidence gate: a decode is accepted only
   when its score is at or below this, and anything above is handed back to Home
   Assistant as nothing so it can fall back to cloud speech-to-text. Lower is
-  stricter. It defaults to a value fitted per recognizer backend (Citrinet
-  `5.0`, Coqui `2.0` — the scales differ), applies immediately with no retrain,
-  and **Debug mode** below is how you tune it.
+  stricter. It defaults to a value fitted per model/backend (English Parakeet
+  `3.8`, other NeMo CTC models `5.0`, and Coqui `2.0` — the scales differ),
+  applies immediately with no retrain, and **Debug mode** below is how you tune
+  it.
   Also a switch per Home-Assistant sentence source. Each lists the phrases it
   currently contributes and what they cost, and flags any that can't be
   recognized — a phrase with no spoken form, or one using a list

@@ -135,7 +135,7 @@ def main() -> int:
           f"{exact_feat}/{len(clips)} exact, worst max|diff| {worst_feat:.1e}")
 
     if MODEL.is_dir():
-        rec = load_recognizer("citrinet", MODEL, language="de")
+        rec = load_recognizer("nemo", MODEL, language="de")
         model = rec.model
         sample = clips[:8]
         worst_lp = 0.0

@@ -175,7 +175,7 @@ def test_api_rejects_invalid_ranges_before_writing_and_round_trips(
 ):
     monkeypatch.setattr(web_app.models, "resolve", lambda *_args, **_kwargs: None)
     cfg = Namespace(
-        backend="citrinet",
+        backend="nemo",
         data=str(tmp_path),
         language="en",
         model=None,

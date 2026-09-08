@@ -144,15 +144,14 @@ class IngressPrefixMiddleware:
 
 
 def create_app(cfg: argparse.Namespace) -> Flask:
-    if cfg.backend == "auto":
-        # Pick a backend that actually has a model for this language (Citrinet
-        # preferred; Coqui for the languages that ship only that, i.e. cs).
-        cfg.backend = models.resolve_backend(cfg.language, "auto")
-    # Gate default depends on the (now-resolved) backend: Citrinet and Coqui use
-    # different penalty scales. Only applied when the user left it unset. Same
-    # for the word-insertion reward, whose scale is likewise per-backend.
+    # Resolve auto selection and the former "citrinet" spelling to a canonical
+    # backend before model/default lookup and grammar fingerprinting.
+    cfg.backend = models.resolve_backend(cfg.language, cfg.backend)
+    # Gate default depends on the selected model/backend. Only applied when the
+    # user left it unset. The word-insertion reward remains per-backend.
     if getattr(cfg, "max_score", None) is None:
-        cfg.max_score = models.default_max_score(cfg.backend)
+        configured_model = cfg.model or models.model_name_for(cfg.language, cfg.backend)
+        cfg.max_score = models.default_max_score(cfg.backend, configured_model)
     if getattr(cfg, "token_bonus", None) is None:
         cfg.token_bonus = models.default_token_bonus(cfg.backend)
     app = Flask(__name__, template_folder=str(Path(__file__).parent / "templates"))
@@ -174,6 +173,20 @@ def create_app(cfg: argparse.Namespace) -> Flask:
     except Exception:  # noqa: BLE001
         _LOGGER.exception("model provisioning failed; UI will run without retraining")
         cfg.model = None
+
+    if (
+        cfg.language == "en"
+        and cfg.model
+        and Path(cfg.model).name in models.ENGLISH_MODEL_ALIASES
+    ):
+        settings.migrate_max_score_default(
+            cfg.data,
+            cfg.language,
+            model_id=Path(cfg.model).name,
+            previous_model_ids=models.LEGACY_ENGLISH_MODELS,
+            previous_default=5.0,
+            new_default=models.default_max_score(cfg.backend, cfg.model),
+        )
 
     # Train the configured language now if its inputs changed (first boot,
     # entity/area/floor renames, config edits), then watch for further changes.
@@ -454,7 +467,12 @@ def create_app(cfg: argparse.Namespace) -> Flask:
         # Score gate: persisted per-language and hot-reloaded by the STT server
         # (no retrain needed — it only affects runtime gating, not the grammar).
         if body.get("max_score") is not None:
-            settings.set_max_score(data_dir, lang, body["max_score"])
+            settings.set_max_score(
+                data_dir,
+                lang,
+                body["max_score"],
+                model_id=_model_id(cfg, lang),
+            )
         # Home Assistant sentence sources: these change the grammar, so the
         # retrain below is what makes them take effect.
         for source in hs.SOURCES:
@@ -1054,12 +1072,16 @@ def main() -> None:
     ap.add_argument("--language", default="en")
     # "auto" resolves to a backend that has a model for the language, which is
     # the only sensible production answer -- Czech ships Coqui and nothing else,
-    # so a hardcoded "citrinet" here meant no model at all. There is no add-on
+    # so a hardcoded "nemo" here meant no model at all. There is no add-on
     # option for this: nobody configuring a voice assistant wants to choose a
     # CTC topology, and the wrong choice only ever produced a model that would
     # not load. Still switchable on the command line for testing one backend
     # against the other.
-    ap.add_argument("--backend", default="auto", choices=["auto", "citrinet", "coqui"])
+    ap.add_argument(
+        "--backend",
+        default="auto",
+        choices=["auto", "nemo", "citrinet", "coqui"],
+    )
     ap.add_argument(
         "--model",
         default=os.environ.get("MODEL_DIR"),
@@ -1125,18 +1147,18 @@ def main() -> None:
         "--max-score",
         type=float,
         default=None,
-        help="score gate; if unset, a per-backend default is used "
-        "(citrinet 5.0, coqui 2.0)",
+        help="score gate; if unset, a model/backend default is used "
+        "(English Parakeet 3.8, other NeMo CTC 5.0, Coqui 2.0)",
     )
     # Offsets the decoder's bias toward short paths (see models.DEFAULT_TOKEN_BONUS).
-    # Unset => the per-backend default (citrinet 2.0, coqui 0.0).
+    # Unset => the per-backend default (nemo 2.0, coqui 0.0).
     ap.add_argument(
         "--token-bonus",
         type=float,
         default=None,
         help="word-insertion reward per emitted token (0 = off); "
         "if unset, a per-backend default is used "
-        "(citrinet 2.0, coqui 0.0)",
+        "(nemo 2.0, coqui 0.0)",
     )
     ap.add_argument(
         "--no-wyoming", action="store_true", help="UI only (don't serve Wyoming STT)"

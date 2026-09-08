@@ -21,7 +21,7 @@ a restart always comes back with it off.
 
 Run locally:
     python src/wyoming_server.py --uri tcp://0.0.0.0:10300 \
-        --backend citrinet --model <model_dir> --grammar ./data/en/grammar.fst
+        --backend nemo --model <model_dir> --grammar ./data/en/grammar.fst
 """
 
 import argparse
@@ -385,7 +385,7 @@ async def run(cfg: argparse.Namespace) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--uri", default="tcp://0.0.0.0:10300")
-    ap.add_argument("--backend", default="citrinet")
+    ap.add_argument("--backend", default="nemo")
     ap.add_argument(
         "--model",
         default=None,
@@ -399,8 +399,8 @@ def main() -> None:
         "--max-score",
         type=float,
         default=None,
-        help="score gate; if unset, a per-backend default is used "
-        "(citrinet 5.0, coqui 2.0)",
+        help="score gate; if unset, a model/backend default is used "
+        "(English Parakeet 3.8, other NeMo CTC 5.0, Coqui 2.0)",
     )
     ap.add_argument(
         "--token-bonus",
@@ -408,18 +408,18 @@ def main() -> None:
         default=None,
         help="word-insertion reward per emitted token (0 = off); "
         "if unset, a per-backend default is used "
-        "(citrinet 2.0, coqui 0.0). Counters the CTC length "
+        "(nemo 2.0, coqui 0.0). Counters the CTC length "
         "bias that lets a short parse win over a longer, "
         "better-fitting one",
     )
     ap.add_argument("--debug", action="store_true")
     cfg = ap.parse_args()
-    if cfg.backend == "auto":
-        # Same per-language selection app.py uses, so a coqui-only language
-        # (sl/nl/cs) picks coqui here too instead of failing to find a model.
-        cfg.backend = models.resolve_backend(cfg.language, "auto")
+    # Same per-language selection app.py uses, including the legacy Citrinet
+    # spelling and Coqui-only languages such as Czech.
+    cfg.backend = models.resolve_backend(cfg.language, cfg.backend)
     if cfg.max_score is None:
-        cfg.max_score = models.default_max_score(cfg.backend)
+        configured_model = cfg.model or models.model_name_for(cfg.language, cfg.backend)
+        cfg.max_score = models.default_max_score(cfg.backend, configured_model)
     if cfg.token_bonus is None:
         cfg.token_bonus = models.default_token_bonus(cfg.backend)
     logging.basicConfig(level=logging.DEBUG if cfg.debug else logging.INFO)

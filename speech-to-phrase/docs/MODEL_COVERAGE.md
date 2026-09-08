@@ -27,9 +27,9 @@ languages** (`src/models.py:MODEL_NAMES`) but can only *serve* the **8** that
 also have sentence templates, covering **9** of the 66 HA codes (regional
 variants share a base model):
 
-| Base lang | Citrinet model | Coqui model | Templates? | Covers HA codes |
+| Base lang | NeMo CTC model | Coqui model | Templates? | Covers HA codes |
 |-----------|----------------|-------------|:----------:|-----------------|
-| en | `stt_en_citrinet_512` | `en_US-coqui` | ✅ | en (US/GB) |
+| en | `stt_en_parakeet_tdt_ctc_110m` | `en_US-coqui` | ✅ | en (US/GB) |
 | de | `stt_de_citrinet_1024` | `de_DE-coqui` | ✅ | de, de-CH |
 | es | `stt_es_citrinet_512` | — | ✅ | es (ES/MX) |
 | fr | `stt_fr_conformer_ctc_large` | `fr_FR-rhasspy` | ✅ | fr |

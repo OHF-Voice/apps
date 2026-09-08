@@ -11,7 +11,7 @@ file (JSONL), in input order:
 parse. Example:
 
     python -m speech_to_phrase \\
-        --backend citrinet --model local/stt_en_citrinet_512_gamma_0_25 \\
+        --backend nemo --model local/stt_en_parakeet_tdt_ctc_110m \\
         --templates tests/en/sentences.txt --language en \\
         tests/en/*.wav
 """
@@ -50,9 +50,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     parser.add_argument(
         "--backend",
-        default="citrinet",
-        choices=["citrinet", "coqui"],
-        help="Acoustic backend (default: citrinet)",
+        default="nemo",
+        choices=["nemo", "coqui"],
+        help="Acoustic backend (default: nemo)",
     )
     parser.add_argument("--model", required=True, help="Path to the model directory")
     parser.add_argument(

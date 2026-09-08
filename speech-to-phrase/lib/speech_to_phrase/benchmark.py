@@ -11,7 +11,7 @@ Usage:
     python -m citrinet.benchmark \\
         --templates templates.txt \\
         --dataset dataset.jsonl \\
-        [--model stt_en_citrinet_512] [--language en]
+        [--model stt_en_parakeet_tdt_ctc_110m] [--language en]
 
 Templates file: one template per line (same syntax as the `stt_local.sentences`
 config), blank lines and lines starting with '#' are ignored.
@@ -243,7 +243,7 @@ def run_benchmark(args: argparse.Namespace) -> int:
 
     # Per-token penalty scale differs by backend (subword vs character), so the
     # gating threshold does too. Swept on tests/en; validate on more data.
-    default_threshold = {"citrinet": 4.0, "coqui": 1.25}[args.backend]
+    default_threshold = {"nemo": 4.0, "coqui": 1.25}[args.backend]
     if args.close_score is None:
         args.close_score = default_threshold
     if args.max_score is None:
@@ -525,8 +525,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--backend",
-        default="citrinet",
-        choices=["citrinet", "coqui"],
+        default="nemo",
+        choices=["nemo", "coqui"],
         help="Acoustic backend",
     )
     parser.add_argument(

@@ -57,7 +57,7 @@ SAMPLE_RATE = 16000
 
 # Per-backend score gate: at or below this a transcript is accepted locally,
 # above it the utterance is handed to the cloud fallback (models.DEFAULT_MAX_SCORE).
-GATE = {"citrinet": 5.0, "coqui": 2.0}
+GATE = {"nemo": 5.0, "coqui": 2.0}
 
 # HA Cloud TTS locale per language.
 TTS_LANGUAGE = {
@@ -267,7 +267,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--language", required=True)
     ap.add_argument("--model", required=True, type=Path)
-    ap.add_argument("--backend", default="citrinet", choices=["citrinet", "coqui"])
+    ap.add_argument("--backend", default="nemo", choices=["nemo", "coqui"])
     ap.add_argument("--intents-repo", required=True, type=Path)
     ap.add_argument("--s2p-json-dir", type=Path, default=None,
                     help="speech_to_phrase/ dir built by intents-package (overrides the "
@@ -305,7 +305,7 @@ def main() -> int:
 
     token_bonus = args.token_bonus
     if token_bonus is None:
-        token_bonus = 2.0 if args.backend == "citrinet" else 0.0
+        token_bonus = 2.0 if args.backend == "nemo" else 0.0
 
     rec = load_recognizer(
         args.backend, args.model, language=args.language, token_bonus=token_bonus

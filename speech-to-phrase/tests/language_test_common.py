@@ -303,7 +303,7 @@ def build_harness(language: str, grammar_path: Path) -> LanguageHarness:
     return LanguageHarness(
         recognizer=recognizer,
         matcher=build_matcher(language, fixtures),
-        max_score=models.default_max_score(backend),
+        max_score=models.default_max_score(backend, model_dir),
     )
 
 

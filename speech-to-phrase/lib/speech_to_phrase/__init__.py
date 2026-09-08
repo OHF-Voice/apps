@@ -4,7 +4,7 @@ Build a grammar from sentence templates, then transcribe audio constrained to
 that grammar with either a Citrinet (ONNX) or Coqui (TFLite) CTC backend:
 
     from speech_to_phrase import load_recognizer
-    rec = load_recognizer("citrinet", "local/stt_en_citrinet_512", language="en")
+    rec = load_recognizer("nemo", "local/stt_en_parakeet_tdt_ctc_110m", language="en")
     rec.train(open("sentences.txt").read().splitlines())
     result = rec.transcribe("clip.wav")
     print(result.text, result.score, result.margin)
@@ -76,7 +76,7 @@ def _shares_content_word(left: str, right: str) -> bool:
 
 
 def _normalize_list_values(
-    list_values: Optional[Mapping[str, Sequence[str]]]
+    list_values: Optional[Mapping[str, Sequence[str]]],
 ) -> Optional[Dict[str, List[str]]]:
     """Normalize slot values the same way as templates (NFC + lowercase + strip).
 
@@ -176,6 +176,7 @@ class Recognizer:
         """
         assert self.grammar is not None
         greedy_cost = float(-log_probs.max(axis=-1).sum())
+
         def decode_one(bonus: float) -> tuple[Result, List[int]]:
             decoded = self.grammar.decode(
                 log_probs,
@@ -264,7 +265,7 @@ def load_recognizer(
     blank_retry_max_score: Optional[float] = None,
     **kwargs,
 ) -> Recognizer:
-    """Create a :class:`Recognizer` for ``"citrinet"`` or ``"coqui"``.
+    """Create a :class:`Recognizer` for ``"nemo"`` or ``"coqui"``.
 
     Extra keyword arguments are forwarded to the backend (e.g. ``spm_model=...``
     for Citrinet; ``stt_binary=...`` for Coqui). ``beam`` sets the decode
@@ -276,10 +277,10 @@ def load_recognizer(
     options unset uses the calibrated backend defaults.
     """
     backend = backend.lower()
-    if backend == "citrinet":
-        from .backends.citrinet import CitrinetModel
+    if backend in {"nemo", "citrinet"}:
+        from .backends.nemo import NemoCtcModel
 
-        model: AcousticModel = CitrinetModel(Path(model_dir), **kwargs)
+        model: AcousticModel = NemoCtcModel(Path(model_dir), **kwargs)
         # Beam relative to the best grammar candidate per frame; validated to
         # not sever low-probability required subwords (e.g. rare names).
         default_beam = 15.0
@@ -295,7 +296,7 @@ def load_recognizer(
         default_token_bonus_rescue = (1.0, 1.0)
         default_blank_retry = (0.0, math.inf, -math.inf)
     else:
-        raise ValueError(f"Unknown backend: {backend!r} (expected citrinet|coqui)")
+        raise ValueError(f"Unknown backend: {backend!r} (expected nemo|coqui)")
 
     return Recognizer(
         model,

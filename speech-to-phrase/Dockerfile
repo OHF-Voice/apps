@@ -75,10 +75,10 @@ RUN \
     && "${VIRTUAL_ENV}/bin/python3" -c "import speech_to_phrase; print('vendored speech_to_phrase imports OK after purge')"
 
 # Bundle the default acoustic model so a fresh install works offline and doesn't
-# spend its first boot downloading ~140 MB. Only src/models.py is copied first,
+# spend its first boot downloading the model. Only src/models.py is copied first,
 # so editing the rest of the app doesn't invalidate this layer and re-download.
 # Build with --build-arg BUNDLE_MODEL= for a lean image that fetches on demand.
-ARG BUNDLE_MODEL=stt_en_citrinet_512
+ARG BUNDLE_MODEL=stt_en_parakeet_tdt_ctc_110m
 COPY src/models.py ./src/models.py
 RUN \
     if [ -n "${BUNDLE_MODEL}" ]; then \

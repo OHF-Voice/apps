@@ -74,7 +74,7 @@ SAMPLE_RATE = 16000
 # recognized commands (needless cloud fallback); usable accuracy only reaches
 # the decode ceiling (94% short / 97% all) around gate ~2.5. 2.0 keeps ~89%
 # usable on short/command-like utterances at ~4% OOV false-accept.
-GATE_THRESHOLD = {"citrinet": 5.0, "coqui": 2.0}
+GATE_THRESHOLD = {"nemo": 5.0, "coqui": 2.0}
 
 def transcribe(rec, audio: np.ndarray):
     """Recognize a clip through the same lossless front-end as production."""
@@ -355,7 +355,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--s2p-repo", required=True, type=Path)
     ap.add_argument("--language", default="en")
-    ap.add_argument("--backend", default="citrinet")
+    ap.add_argument("--backend", default="nemo")
     ap.add_argument("--model", required=True, type=Path)
     ap.add_argument("--engine-id", default="tts.home_assistant_cloud")
     ap.add_argument("--samples", type=int, default=3, help="realizations per template")

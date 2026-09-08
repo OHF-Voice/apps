@@ -2,6 +2,13 @@
 
 ## 2.0.0
 
+- English now defaults to the Parakeet TDT-CTC 110M model, which is bundled in
+  the image for offline first startup. Its score gate is calibrated separately
+  from the other NeMo CTC models. The redistributed ONNX export comes from
+  `csukuangfj/sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000` revision
+  `3af92f152d32c836acabf38f4c993bc96b80eb2d` and retains NVIDIA's CC-BY-4.0
+  attribution in the model archive.
+
 - Numeric lists such as brightness, cover position, volume and timer duration can
   now be narrowed per language in **Numbers**. Voice-friendly
   **Recommended** ranges are the default, and the UI always shows their active

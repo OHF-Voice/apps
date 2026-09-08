@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Regression check for human Voice Preview Edition recordings.
 
-The local Citrinet model is intentionally not committed. When it is available,
+The local Parakeet model is intentionally not committed. When it is available,
 this builds the same selected English production grammar and decodes every WAV
 under ``tests/wav/mike`` through the production audio front-end. Alternate
 phrasings pass only when Home Assistant resolves them to the same intent and
@@ -28,7 +28,7 @@ from models import default_max_score  # noqa: E402
 from overrides import Overrides  # noqa: E402
 from wyoming_server import build_info  # noqa: E402
 
-MODEL = ROOT / "local/models/stt_en_citrinet_512"
+MODEL = ROOT / "local/models/parakeet-tdt-ctc-110m"
 ENABLED = ROOT / "local/data/en/enabled.json"
 WAV_ROOT = ROOT / "tests/wav/mike"
 OOV_ROOT = ROOT / "tests/wav/oov"
@@ -109,7 +109,7 @@ def main() -> int:
     )
 
     if not MODEL.is_dir() or not ENABLED.exists():
-        print("SKIP recognition: local English Citrinet artifacts are unavailable")
+        print("SKIP recognition: local English Parakeet artifacts are unavailable")
         return 0 if ok else 1
 
     wavs = sorted(WAV_ROOT.rglob("*.wav"))
@@ -122,7 +122,7 @@ def main() -> int:
         ENTITIES,
         SLOT_LISTS,
     )
-    recognizer = load_recognizer("citrinet", MODEL, language="en", token_bonus=2.0)
+    recognizer = load_recognizer("nemo", MODEL, language="en", token_bonus=2.0)
     recognizer.train(templates, list_values)
     matcher = build_matcher(
         "en",
@@ -132,7 +132,7 @@ def main() -> int:
         custom_commands=CUSTOM_COMMANDS,
     )
     assert matcher is not None
-    gate = default_max_score("citrinet")
+    gate = default_max_score("nemo", MODEL)
 
     recognized = 0
     for wav in wavs:

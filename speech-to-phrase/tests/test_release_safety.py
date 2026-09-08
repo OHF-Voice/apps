@@ -25,6 +25,20 @@ import app as web_app  # noqa: E402
 import models  # noqa: E402
 
 
+def test_default_english_model_is_bundled_parakeet():
+    model_name = models.model_name_for("en", "nemo")
+
+    assert model_name == "stt_en_parakeet_tdt_ctc_110m"
+    assert models.default_max_score("nemo", model_name) == 3.8
+    assert (
+        models.default_max_score("nemo", ROOT / "local/models/parakeet-tdt-ctc-110m")
+        == 3.8
+    )
+    assert models.default_max_score("nemo", "stt_de_citrinet_1024") == 5.0
+    dockerfile = (ROOT / "Dockerfile").read_text()
+    assert f"ARG BUNDLE_MODEL={model_name}" in dockerfile
+
+
 def _cfg(data: Path) -> Namespace:
     return Namespace(
         data=str(data),

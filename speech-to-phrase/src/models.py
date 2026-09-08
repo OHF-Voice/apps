@@ -21,11 +21,11 @@ import tarfile
 import tempfile
 import urllib.request
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
 _LOGGER = logging.getLogger("speech-to-phrase.models")
 
-HF_REVISION = "d43a4ca808807524732c919ac1287b0b10999629"
+HF_REVISION = "9e6bcf3af07909f39f71674f62372508d00dd4a9"
 HF_BASE = (
     "https://huggingface.co/datasets/rhasspy/rhasspy-speech/"
     f"resolve/{HF_REVISION}/models"
@@ -53,20 +53,27 @@ STT_BINARY_SHA256 = {
     ),
 }
 # A directory is "a model" if it holds an acoustic-model file: *.tflite (coqui),
-# *.onnx (citrinet, often named <model>.onnx), or *.fst (kaldi).
+# *.onnx (NeMo CTC, often named <model>.onnx), or *.fst (kaldi).
 MODEL_GLOBS = ("*.tflite", "*.onnx", "*.fst")
 
-# Per-backend default score gate: the max per-token penalty at/below which a
-# local transcript is accepted (above it the utterance is treated as
-# out-of-grammar and handed to the cloud fallback). The scales differ because
-# Citrinet is subword and Coqui is character. Citrinet 5.0 was re-fit on
-# tests/en; Coqui 2.0 was re-fit on Common Voice (sl) — the old 1.25 rejected
-# ~24% of correctly recognized commands. Users can override globally (add-on
-# ``max_score`` option) or per-language in the web UI.
-DEFAULT_MAX_SCORE = {"citrinet": 5.0, "coqui": 2.0}
+# Default score gate: the max per-token penalty at/below which a local
+# transcript is accepted (above it the utterance is treated as out-of-grammar
+# and handed to the cloud fallback). The scales differ by backend and model.
+# Parakeet 3.8 retained 62/67 VPE commands while rejecting every evaluation OOV
+# clip. Citrinet 5.0 was re-fit on tests/en; Coqui 2.0 was re-fit on Common
+# Voice (sl). Users can override the gate per language in the web UI.
+DEFAULT_MAX_SCORE = {"nemo": 5.0, "coqui": 2.0}
+MODEL_MAX_SCORE = {
+    "stt_en_parakeet_tdt_ctc_110m": 3.8,
+    "parakeet-tdt-ctc-110m": 3.8,
+}
 
 
-def default_max_score(backend: str) -> float:
+def default_max_score(backend: str, model: Optional[Union[str, Path]] = None) -> float:
+    if model is not None:
+        model_name = Path(model).name
+        if model_name in MODEL_MAX_SCORE:
+            return MODEL_MAX_SCORE[model_name]
     return DEFAULT_MAX_SCORE.get(backend, 5.0)
 
 
@@ -74,12 +81,12 @@ def default_max_score(backend: str) -> float:
 # it generates with the unbiased decode using the per-token acoustic score, so
 # the bonus can recover a long command without winning merely by adding optional
 # words. A rejected short candidate gets a stronger rescue attempt only when the
-# corrected phrase closely matches the unconstrained CTC transcript. Citrinet
-# 2.0 and the rescue thresholds were fit against human English commands and the
-# OOV corpus in tests/wav.
+# corrected phrase closely matches the unconstrained CTC transcript. The NeMo
+# CTC default of 2.0 and the rescue thresholds were fit against human English
+# commands and the OOV corpus in tests/wav.
 # Coqui is 0 because it has not been measured -- its cost scale differs from
-# Citrinet's, so borrowing the number would be a guess.
-DEFAULT_TOKEN_BONUS = {"citrinet": 2.0, "coqui": 0.0}
+# NeMo CTC's, so borrowing the number would be a guess.
+DEFAULT_TOKEN_BONUS = {"nemo": 2.0, "coqui": 0.0}
 
 
 def default_token_bonus(backend: str) -> float:
@@ -87,35 +94,39 @@ def default_token_bonus(backend: str) -> float:
 
 
 # language -> {backend: HuggingFace model name}. The repo ships NeMo CTC models
-# (citrinet/conformer, ONNX -> "citrinet" backend, runs on onnxruntime with no
-# extra binary) and Coqui TFLite models ("coqui" backend, needs stt_onlyprobs).
-# Citrinet is preferred where available. Extend as languages are validated.
+# (Citrinet/Conformer/Parakeet, ONNX -> "nemo" backend, runs on onnxruntime
+# with no extra binary) and Coqui TFLite models ("coqui" backend, needs
+# stt_onlyprobs). NeMo CTC is preferred where available. Extend as languages are
+# validated.
 MODEL_NAMES = {
-    "en": {"citrinet": "stt_en_citrinet_512", "coqui": "en_US-coqui"},
-    "de": {"citrinet": "stt_de_citrinet_1024", "coqui": "de_DE-coqui"},
+    "en": {
+        "nemo": "stt_en_parakeet_tdt_ctc_110m",
+        "coqui": "en_US-coqui",
+    },
+    "de": {"nemo": "stt_de_citrinet_1024", "coqui": "de_DE-coqui"},
     # Spanish is Citrinet-only on purpose: es_ES-coqui does not load at all
     # ("Expected [T, 30] probs, got (T, 36)" -- its alphabet has 36 symbols and
     # the stt_onlyprobs decode path expects 30). Listing it only gave anyone who
     # set backend=coqui a model that downloads and then refuses to run.
-    "es": {"citrinet": "stt_es_citrinet_512"},
+    "es": {"nemo": "stt_es_citrinet_512"},
     # French uses the Conformer, not stt_fr_citrinet_1024_gamma_0_25: that model
     # cannot resolve the "verrouille"/"déverrouille" prefix, decoding "unlock the
     # front door" as "lock the front door" at 0.73 -- confidently, so the score
     # gate does not catch it. Choosing a different lock verb only moves the error
     # to the more dangerous direction. The Conformer decodes both correctly
     # (0.17/0.23) and takes the language from 55/56 to 56/56 commands resolved.
-    "fr": {"citrinet": "stt_fr_conformer_ctc_large", "coqui": "fr_FR-rhasspy"},
-    "it": {"citrinet": "stt_it_conformer_ctc_large", "coqui": "it_IT-coqui"},
-    "zh": {"citrinet": "stt_zh_citrinet_512"},
-    "ru": {"citrinet": "stt_ru_conformer_ctc_large"},
-    "hr": {"citrinet": "stt_hr_conformer_ctc_large"},
-    "hi": {"citrinet": "stt_hi_conformer_ctc_medium"},
-    "ca": {"citrinet": "stt_ca_conformer_ctc_large", "coqui": "ca_ES-coqui"},
+    "fr": {"nemo": "stt_fr_conformer_ctc_large", "coqui": "fr_FR-rhasspy"},
+    "it": {"nemo": "stt_it_conformer_ctc_large", "coqui": "it_IT-coqui"},
+    "zh": {"nemo": "stt_zh_citrinet_512"},
+    "ru": {"nemo": "stt_ru_conformer_ctc_large"},
+    "hr": {"nemo": "stt_hr_conformer_ctc_large"},
+    "hi": {"nemo": "stt_hi_conformer_ctc_medium"},
+    "ca": {"nemo": "stt_ca_conformer_ctc_large", "coqui": "ca_ES-coqui"},
     # Dutch prefers Citrinet: nl_NL-coqui misrecognises below the score gate
     # ("doe de lichten uit" decoding as "...aan"), so it acts on the wrong
     # command instead of deferring to the cloud. The Citrinet model does not
     # have that failure.
-    "nl": {"citrinet": "stt_nl_citrinet_256", "coqui": "nl_NL-coqui"},
+    "nl": {"nemo": "stt_nl_citrinet_256", "coqui": "nl_NL-coqui"},
     "cs": {"coqui": "cs_CZ-coqui"},
     "sl": {"coqui": "sl_SL-coqui"},
 }
@@ -141,7 +152,7 @@ def model_name_for(language: str, backend: str) -> Optional[str]:
 
     Deliberately does not substitute another backend's model. It used to fall
     back to whatever the language had, which meant ``language: cs`` with
-    ``backend: citrinet`` downloaded the Coqui model and then died loading it
+    ``backend: nemo`` downloaded the Coqui model and then died loading it
     (``FileNotFoundError: cs_CZ-coqui/tokens.txt``) on every start. A missing
     model is a configuration answer -- None -- not a different model.
     ``resolve_backend`` is what picks a backend that exists.
@@ -156,18 +167,18 @@ def backends_for(language: str) -> List[str]:
 
 def resolve_backend(language: str, requested: str) -> str:
     """Turn ``backend="auto"`` into a concrete backend that actually has a model
-    for ``language``. Citrinet is preferred (no extra binary, subword scale);
+    for ``language``. NeMo CTC is preferred (no extra binary, subword scale);
     Coqui is used for languages that ship only a Coqui model (``cs``; Dutch
-    moved to Citrinet). Non-auto values pass through unchanged -- and if that
+    moved to NeMo CTC). Non-auto values pass through unchanged -- and if that
     pairing has no model, ``resolve`` says so rather than substituting one."""
     if requested != "auto":
         return requested
     by_backend = MODEL_NAMES.get(language, {})
-    if "citrinet" in by_backend:
-        return "citrinet"
+    if "nemo" in by_backend:
+        return "nemo"
     if "coqui" in by_backend:
         return "coqui"
-    return "citrinet"
+    return "nemo"
 
 
 def _extract_safely(tf: tarfile.TarFile, dest: Path) -> None:

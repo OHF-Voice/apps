@@ -112,13 +112,15 @@ phrase as a custom command.
 
 ## Options
 
-There are two. Everything else is configured in the web UI, per language, where
+There are four. Everything else is configured in the web UI, per language, where
 the grammar-size meter shows what each choice costs.
 
 | Option | Description |
 |---|---|
 | `language` | The language to recognize: `ca`, `cs`, `de`, `en`, `es`, `fr`, `it`, `nl`. Defaults to `en`. This is also the language the web UI edits — one recognizer runs, so there is nothing to pick there. Change it here and reload the page; a page left open from before the change refuses to save and says so. |
 | `debug_logging` | Verbose logs, including a line per utterance with its score and how long recognition took (whether or not **Debug mode** is on). |
+| `vad_enabled` | Use pySilero VAD to detect the end of a spoken command and return the transcript without waiting for the Wyoming client to send `AudioStop`. Off by default, preserving client-controlled endpointing. |
+| `vad_silence_seconds` | Detected non-speech required after a command when `vad_enabled` is on. Defaults to `0.7` seconds. At least 0.3 seconds of speech must first arm the detector, and a command is kept open for at least 1 second, so initial silence and short noises do not end the stream. |
 
 The rest is chosen for you:
 

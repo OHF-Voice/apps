@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name        = "speech_to_phrase"
-version     = "2.0.0"
+version     = "2.2.0"
 license     = {text = "Apache-2.0"}
 description = "Constrained CTC speech-to-text over sentence templates (NeMo/Coqui + OpenFST)"
 authors     = [

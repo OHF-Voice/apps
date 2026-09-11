@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.0
+
+- Added optional server-side command endpointing with pySilero VAD. When
+  enabled, sustained speech arms the detector and the transcript is returned
+  after a configurable period of detected non-speech, without waiting for the
+  Wyoming client to send `AudioStop`. Client-controlled endpointing remains the
+  default.
+
 ## 2.1.0
 
 - English now defaults to the Parakeet TDT-CTC 110M model, which is bundled in

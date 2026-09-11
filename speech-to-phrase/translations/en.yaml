@@ -6,3 +6,14 @@ configuration:
   debug_logging:
     name: Debug logging
     description: Enable verbose debug logging.
+  vad_enabled:
+    name: Server-side voice activity detection
+    description: >-
+      Use pySilero VAD to return a transcript after the command ends instead of
+      waiting for the client to send AudioStop.
+  vad_silence_seconds:
+    name: End-of-command silence
+    description: >-
+      Seconds of detected non-speech after a command before returning its
+      transcript. Only used when server-side voice activity detection is
+      enabled.

@@ -23,7 +23,7 @@ import urllib.request
 from pathlib import Path
 from typing import List, Optional
 
-from speech_to_phrase.defaults import (
+from speech_to_phrase.defaults import (  # pylint: disable=no-name-in-module
     DEFAULT_MAX_SCORE,
     DEFAULT_TOKEN_BONUS,
     ENGLISH_MODEL,
@@ -34,6 +34,17 @@ from speech_to_phrase.defaults import (
     default_token_bonus,
     normalize_backend,
 )
+
+__all__ = [
+    "DEFAULT_MAX_SCORE",
+    "DEFAULT_TOKEN_BONUS",
+    "ENGLISH_MODEL",
+    "ENGLISH_MODEL_ALIASES",
+    "LEGACY_ENGLISH_MODELS",
+    "MODEL_MAX_SCORE",
+    "default_max_score",
+    "default_token_bonus",
+]
 
 _LOGGER = logging.getLogger("speech-to-phrase.models")
 

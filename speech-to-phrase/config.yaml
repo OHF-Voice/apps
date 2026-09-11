@@ -1,5 +1,5 @@
 ---
-version: 2.1.0
+version: 2.2.0
 slug: speech-to-phrase
 name: Speech-to-Phrase
 description: Constrained Wyoming speech-to-text for Home Assistant
@@ -18,8 +18,12 @@ ports:
 options:
   language: "en"
   debug_logging: false
+  vad_enabled: false
+  vad_silence_seconds: 0.7
 schema:
   # The languages home-assistant-intents ships Speech-to-Phrase templates for.
   language: "list(ca|cs|de|en|es|fr|it|nl)"
   debug_logging: bool
+  vad_enabled: bool
+  vad_silence_seconds: "float(0.1,5)"
 homeassistant: 2026.3.0

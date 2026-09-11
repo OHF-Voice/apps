@@ -66,8 +66,11 @@ class CapturingHandler(ws.S2PEventHandler):
         # Skip AsyncEventHandler.__init__ (it wants a reader/writer pair).
         self._holder = holder
         self._info = None
+        self._vad_silence_seconds = None
+        self._endpoint_detector = None
         self._buf = bytearray()
         self._rate, self._width, self._channels = 16000, 2, 1
+        self._finished = False
         self.written = []
 
     async def write_event(self, event):

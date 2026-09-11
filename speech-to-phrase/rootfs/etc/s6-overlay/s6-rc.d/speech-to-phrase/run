@@ -6,6 +6,8 @@
 # ==============================================================================
 flags=()
 bashio::config.true 'debug_logging' && flags+=('--debug')
+bashio::config.true 'vad_enabled' \
+    && flags+=('--vad-silence-seconds' "$(bashio::config 'vad_silence_seconds')")
 
 cd /usr/src || exit 1
 

@@ -50,6 +50,7 @@ import debug_log
 import models
 import settings
 from audio_frontend import prepare_audio
+from endpointing import SileroEndpointDetector
 
 _LOGGER = logging.getLogger("wyoming-speech-to-phrase")
 NAME = "speech-to-phrase"
@@ -171,15 +172,79 @@ class S2PEventHandler(AsyncEventHandler):
         *,
         holder: GrammarHolder,
         info: Info,
+        vad_silence_seconds: Optional[float] = None,
     ) -> None:
         super().__init__(reader, writer)
         self._holder = holder
         self._info = info
+        if vad_silence_seconds is not None and vad_silence_seconds <= 0:
+            raise ValueError("vad_silence_seconds must be greater than zero")
+        self._vad_silence_seconds = vad_silence_seconds
+        self._endpoint_detector: Optional[SileroEndpointDetector] = None
         self._buf = bytearray()
         self._rate = SAMPLE_RATE
         self._width = 2
         self._channels = 1
         self._full = False  # hit MAX_UTTERANCE_SECONDS; warned once already
+        self._finished = False
+
+    async def _finish_utterance(self) -> None:
+        """Decode and answer the current stream exactly once."""
+        if self._finished:
+            return
+
+        self._finished = True
+        text = ""
+        if self._holder.ready and self._buf:
+            # Everything from here to the transcript is what Home Assistant
+            # waits on: the audio has stopped, so this is dead air in the
+            # conversation. Timed as one number (conversion, front-end and
+            # decode) because that is the latency a user perceives, and
+            # surfaced in debug mode -- a slow decode and a mis-decode look
+            # the same from the outside otherwise.
+            started = time.monotonic()
+            samples = _pcm_to_float(
+                bytes(self._buf), self._rate, self._width, self._channels
+            )
+            samples = prepare_audio(samples)
+            result = await self._holder.transcribe(samples)
+            processing = time.monotonic() - started
+            accepted = (
+                result.score <= self._holder.max_score and result.score != math.inf
+            )
+            if accepted:
+                text = result.text
+                _LOGGER.debug(
+                    "matched (score=%.3f, %.2fs): %r",
+                    result.score,
+                    processing,
+                    result.text,
+                )
+            else:
+                _LOGGER.debug(
+                    "gated (score=%.3f, %.2fs): %r",
+                    result.score,
+                    processing,
+                    result.text,
+                )
+            if self._holder.debug_mode:
+                debug_log.record(
+                    language=self._holder.language,
+                    text=result.text,
+                    score=result.score,
+                    margin=result.margin,
+                    accepted=accepted,
+                    max_score=self._holder.max_score,
+                    duration=len(samples) / SAMPLE_RATE,
+                    processing=processing,
+                )
+                # Debug mode observes; it does not act. Handing HA a
+                # transcript here would run the command being diagnosed.
+                text = ""
+        self._buf = bytearray()
+        await self.write_event(
+            Transcript(text=text, language=self._holder.language).event()
+        )
 
     async def handle_event(self, event: Event) -> bool:
         if Describe.is_type(event.type):
@@ -193,15 +258,28 @@ class S2PEventHandler(AsyncEventHandler):
             start = AudioStart.from_event(event)
             self._buf = bytearray()
             self._full = False
+            self._finished = False
             self._rate, self._width, self._channels = (
                 start.rate,
                 start.width,
                 start.channels,
             )
+            if (
+                self._endpoint_detector is None
+                and self._vad_silence_seconds is not None
+            ):
+                self._endpoint_detector = SileroEndpointDetector(
+                    self._vad_silence_seconds
+                )
+            if self._endpoint_detector is not None:
+                self._endpoint_detector.reset(self._rate, self._width, self._channels)
             await self._holder.maybe_reload()
             return True
 
         if AudioChunk.is_type(event.type):
+            if self._finished:
+                return True
+
             chunk = AudioChunk.from_event(event)
             self._rate, self._width, self._channels = (
                 chunk.rate,
@@ -220,65 +298,26 @@ class S2PEventHandler(AsyncEventHandler):
                     )
                 return True
             self._buf += chunk.audio
+            if (
+                self._endpoint_detector is not None
+                and not self._endpoint_detector.process(
+                    chunk.audio, chunk.rate, chunk.width, chunk.channels
+                )
+            ):
+                _LOGGER.debug("Voice command ended after configured VAD silence")
+                await self._finish_utterance()
             return True
 
         if AudioStop.is_type(event.type):
-            text = ""
-            if self._holder.ready and self._buf:
-                # Everything from here to the transcript is what Home Assistant
-                # waits on: the audio has stopped, so this is dead air in the
-                # conversation. Timed as one number (conversion, front-end and
-                # decode) because that is the latency a user perceives, and
-                # surfaced in debug mode -- a slow decode and a mis-decode look
-                # the same from the outside otherwise.
-                started = time.monotonic()
-                samples = _pcm_to_float(
-                    bytes(self._buf), self._rate, self._width, self._channels
-                )
-                samples = prepare_audio(samples)
-                result = await self._holder.transcribe(samples)
-                processing = time.monotonic() - started
-                accepted = (
-                    result.score <= self._holder.max_score and result.score != math.inf
-                )
-                if accepted:
-                    text = result.text
-                    _LOGGER.debug(
-                        "matched (score=%.3f, %.2fs): %r",
-                        result.score,
-                        processing,
-                        result.text,
-                    )
-                else:
-                    _LOGGER.debug(
-                        "gated (score=%.3f, %.2fs): %r",
-                        result.score,
-                        processing,
-                        result.text,
-                    )
-                if self._holder.debug_mode:
-                    debug_log.record(
-                        language=self._holder.language,
-                        text=result.text,
-                        score=result.score,
-                        margin=result.margin,
-                        accepted=accepted,
-                        max_score=self._holder.max_score,
-                        duration=len(samples) / SAMPLE_RATE,
-                        processing=processing,
-                    )
-                    # Debug mode observes; it does not act. Handing HA a
-                    # transcript here would run the command being diagnosed.
-                    text = ""
-            await self.write_event(
-                Transcript(text=text, language=self._holder.language).event()
-            )
+            await self._finish_utterance()
             return True
 
         return True
 
 
-def build_info(language: str, model_name: str) -> Info:
+def build_info(
+    language: str, model_name: str, *, requires_external_vad: bool = True
+) -> Info:
     version = addon_version()
     return Info(
         asr=[
@@ -300,6 +339,7 @@ def build_info(language: str, model_name: str) -> Info:
                         languages=[language],
                     )
                 ],
+                requires_external_vad=requires_external_vad,
                 prefers_auto_gain_enabled=True,
                 prefers_noise_reduction_enabled=False,
             )
@@ -315,6 +355,7 @@ async def serve(
     grammar_path: Union[str, Path],
     max_score: float,
     token_bonus: float = 0.0,
+    vad_silence_seconds: Optional[float] = None,
 ) -> None:
     """Run the Wyoming server against an already-resolved model directory."""
     model_dir = Path(model_dir)
@@ -327,18 +368,30 @@ async def serve(
         token_bonus=token_bonus,
     )
     await holder.maybe_reload()
-    info = build_info(language, model_dir.name)
+    info = build_info(
+        language,
+        model_dir.name,
+        requires_external_vad=vad_silence_seconds is None,
+    )
     server = AsyncServer.from_uri(uri)
     _LOGGER.info(
         "Wyoming server ready on %s (grammar=%s, ready=%s, max_score=%s, "
-        "token_bonus=%s)",
+        "token_bonus=%s, vad_silence_seconds=%s)",
         uri,
         grammar_path,
         holder.ready,
         holder.max_score,
         token_bonus,
+        vad_silence_seconds,
     )
-    await server.run(partial(S2PEventHandler, holder=holder, info=info))
+    await server.run(
+        partial(
+            S2PEventHandler,
+            holder=holder,
+            info=info,
+            vad_silence_seconds=vad_silence_seconds,
+        )
+    )
 
 
 def start_background(
@@ -349,6 +402,7 @@ def start_background(
     grammar_path: Union[str, Path],
     max_score: float,
     token_bonus: float = 0.0,
+    vad_silence_seconds: Optional[float] = None,
 ) -> "threading.Thread":
     """Run serve() in a daemon thread with its own asyncio loop, so it can sit
     alongside a blocking server (e.g. Flask) in the same process."""
@@ -356,7 +410,14 @@ def start_background(
     def _runner() -> None:
         asyncio.run(
             serve(
-                uri, backend, model_dir, language, grammar_path, max_score, token_bonus
+                uri,
+                backend,
+                model_dir,
+                language,
+                grammar_path,
+                max_score,
+                token_bonus,
+                vad_silence_seconds,
             )
         )
 
@@ -379,6 +440,7 @@ async def run(cfg: argparse.Namespace) -> None:
         cfg.grammar,
         cfg.max_score,
         cfg.token_bonus,
+        cfg.vad_silence_seconds,
     )
 
 
@@ -411,6 +473,13 @@ def main() -> None:
         "(nemo 2.0, coqui 0.0). Counters the CTC length "
         "bias that lets a short parse win over a longer, "
         "better-fitting one",
+    )
+    ap.add_argument(
+        "--vad-silence-seconds",
+        type=float,
+        default=None,
+        help="enable pySilero endpointing and transcribe after this much "
+        "post-command silence; default waits for audio-stop",
     )
     ap.add_argument("--debug", action="store_true")
     cfg = ap.parse_args()

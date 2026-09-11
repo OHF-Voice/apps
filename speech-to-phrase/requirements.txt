@@ -4,6 +4,7 @@ flask
 aiohttp
 pyyaml
 numpy
+pysilero-vad==3.4.0
 soundfile
 hassil
 home-assistant-intents>=2026.8.28

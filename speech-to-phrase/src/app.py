@@ -1161,6 +1161,13 @@ def main() -> None:
         "(nemo 2.0, coqui 0.0)",
     )
     ap.add_argument(
+        "--vad-silence-seconds",
+        type=float,
+        default=None,
+        help="enable pySilero endpointing and transcribe after this much "
+        "post-command silence; default waits for audio-stop",
+    )
+    ap.add_argument(
         "--no-wyoming", action="store_true", help="UI only (don't serve Wyoming STT)"
     )
     # Off by default: the add-on ships as speech-to-text only, and Home Assistant
@@ -1189,6 +1196,7 @@ def main() -> None:
             grammar,
             cfg.max_score,
             cfg.token_bonus,
+            cfg.vad_silence_seconds,
         )
     elif cfg.no_wyoming:
         _LOGGER.info("Wyoming server disabled (--no-wyoming)")

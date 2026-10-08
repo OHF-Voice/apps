@@ -21,6 +21,7 @@ options:
   wake_word: "okay_nabu"
   stop_word: "stop"
   refractory_seconds: 2.0
+  continue_conversation_delay: 0.5
   enable_thinking_sound: false
   wakeup_sound: "/usr/src/sounds/wake_word_triggered.flac"
   processing_sound: "/usr/src/sounds/processing.wav"
@@ -47,6 +48,7 @@ schema:
   wake_word: str
   stop_word: str
   refractory_seconds: float
+  continue_conversation_delay: float
   enable_thinking_sound: bool
   wakeup_sound: str
   processing_sound: str

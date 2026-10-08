@@ -81,6 +81,7 @@ exec python3 -m linux_voice_assistant \
     --wake-model "$(bashio::config 'wake_word')" \
     --stop-model "$(bashio::config 'stop_word')" \
     --refractory-seconds "$(bashio::config 'refractory_seconds')" \
+    --continue-conversation-delay "$(bashio::config 'continue_conversation_delay')" \
     --mic-volume "$(bashio::config 'mic_volume')" \
     --wake-word-dir /usr/src/wakewords \
     --wakeup-sound "$(bashio::config 'wakeup_sound')" \

@@ -538,6 +538,16 @@ _NUMBER_VARIANTS: Dict[str, Dict[int, Tuple[str, ...]]] = {
     "pl": {1: ("jeden", "jedna", "jedno"), 2: ("dwa", "dwie")},
     "hr": {1: ("jedan", "jedna", "jedno"), 2: ("dva", "dvije")},
     "sl": {1: ("en", "ena", "eno"), 2: ("dva", "dve")},
+    # Welsh: feminine forms of 2-4 ("dwy awr"), and the shortened forms of 5 and
+    # 6 used before a noun ("pum munud", "chwe awr"). Home Assistant's own number
+    # parser (unicode-rbnf) already accepts every one of these.
+    "cy": {
+        2: ("dau", "dwy"),
+        3: ("tri", "tair"),
+        4: ("pedwar", "pedair"),
+        5: ("pump", "pum"),
+        6: ("chwech", "chwe"),
+    },
 }
 
 

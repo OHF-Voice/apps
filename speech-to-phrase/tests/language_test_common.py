@@ -46,6 +46,7 @@ _EXAMPLE_OVERRIDES = {
     ("cy", "HassTimerStatus", "default"): "faint o amser sydd ar ôl ar yr amserydd",
     ("cy", "HassTurnOff", "area_domain"): "diffodd y golau yn y Gegin",
     ("cy", "HassTurnOff", "domain_only"): "troi'r golau i ffwrdd",
+    ("cy", "HassTurnOff", "name_area"): "troi'r Ffan Nenfwd i ffwrdd yn y Gegin",
     ("cy", "HassTurnOff", "name_only"): "troi'r Ffan Nenfwd i ffwrdd",
     ("cy", "HassTurnOn", "area_domain"): "troi'r golau ymlaen yn y Gegin",
     ("cy", "HassTurnOn", "domain_only"): "troi'r golau ymlaen",

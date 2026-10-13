@@ -203,6 +203,18 @@
   {
     "language": "cy",
     "intent": "HassTurnOff",
+    "combo": "name_area",
+    "text": "troi'r Ffan Nenfwd i ffwrdd yn y Gegin",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "name": "Ffan Nenfwd",
+      "area": "Gegin"
+    },
+    "wav": "HassTurnOff__name_area.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassTurnOff",
     "combo": "name_only",
     "text": "troi'r Ffan Nenfwd i ffwrdd",
     "expected_intent": "HassTurnOff",

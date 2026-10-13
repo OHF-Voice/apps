@@ -126,6 +126,18 @@
   {
     "language": "cy",
     "intent": "HassStartTimer",
+    "combo": "hours_minutes",
+    "text": "gosod amserydd am awr a hanner",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "hours": 1,
+      "minutes": 30
+    },
+    "wav": "HassStartTimer__hours_minutes.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassStartTimer",
     "combo": "hours_only",
     "text": "gosod amserydd am 2 awr",
     "expected_intent": "HassStartTimer",

@@ -22,7 +22,7 @@ options:
   vad_silence_seconds: 0.7
 schema:
   # The languages home-assistant-intents ships Speech-to-Phrase templates for.
-  language: "list(ca|cs|de|en|es|fr|it|nl)"
+  language: "list(ca|cs|cy|de|en|es|fr|it|nl)"
   debug_logging: bool
   vad_enabled: bool
   vad_silence_seconds: "float(0.1,5)"

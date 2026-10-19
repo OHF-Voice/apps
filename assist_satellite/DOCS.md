@@ -69,6 +69,10 @@ ID of the stop word model (default: `stop`).
 Minimum seconds between wake word activations to prevent double-triggers
 (default: `2.0`).
 
+### Option: `continue_conversation_delay`
+
+Delay seconds before mic opens for continued conversation (default: `0.5`).
+
 ### Option: `wakeup_sound`
 
 Sound file played when wake word is detected (default: `sounds/wake_word_triggered.flac`).

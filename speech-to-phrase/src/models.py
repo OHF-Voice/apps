@@ -127,6 +127,7 @@ MODEL_NAMES = {
     # have that failure.
     "nl": {"nemo": "stt_nl_citrinet_256", "coqui": "nl_NL-coqui"},
     "cs": {"coqui": "cs_CZ-coqui"},
+    "cy": {"nemo": "stt_cy_parakeet_tdt_ctc_110m"},
     "sl": {"coqui": "sl_SL-coqui"},
 }
 

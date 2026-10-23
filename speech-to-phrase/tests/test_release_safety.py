@@ -43,6 +43,14 @@ def test_default_english_model_is_bundled_parakeet():
     assert f"ARG BUNDLE_MODEL={model_name}" in dockerfile
 
 
+def test_welsh_model_and_gate():
+    model_name = models.model_name_for("cy", "nemo")
+
+    assert model_name == "stt_cy_parakeet_tdt_ctc_110m"
+    assert models.resolve_backend("cy", "auto") == "nemo"
+    assert models.default_max_score("nemo", model_name) == 4.0
+
+
 def test_legacy_english_default_gate_is_migrated(tmp_path):
     settings.set_max_score(tmp_path, "en", 5.0)
 

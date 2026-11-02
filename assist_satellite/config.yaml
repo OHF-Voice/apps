@@ -41,9 +41,10 @@ options:
   enable_colored_debug: false
   mute_sound: "/usr/src/sounds/mute_switch_on.flac"
   unmute_sound: "/usr/src/sounds/mute_switch_off.flac"
-  button_double_press-sound: "sounds/button_double_press.flac"
-  button_triple_press-sound: "sounds/button_triple_press.flac"
-  button_long_press-sound: "sounds/button_long_press.flac"  
+  button_double_press_sound: "sounds/button_double_press.flac"
+  button_triple_press_sound: "sounds/button_triple_press.flac"
+  button_long_press_sound: "sounds/button_long_press.flac"  
+  pipeline_ended_sound: "sounds/pipeline_ended_low.flac"
   preferences_file: "/share/assist_satellite/preferences.json"
   download_dir: "/share/assist_satellite/local"
 schema:
@@ -74,9 +75,10 @@ schema:
   listen_during_wake_word: bool
   mute_sound: str
   unmute_sound: str
-  button_double_press-sound: str
-  button_triple_press-sound: str
-  button_long_press-sound: str
+  button_double_press_sound: str
+  button_triple_press_sound: str
+  button_long_press_sound: str
+  pipeline_ended_sound: str
   preferences_file: str
   download_dir: str
 audio: true

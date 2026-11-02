@@ -101,6 +101,10 @@ Sound played on button triple press (default: `sounds/button_triple_press.flac`)
 
 Sound played on button long press (default: `sounds/button_long_press.flac`).
 
+### Option: `pipeline_ended_sound`
+
+Sound played when the voice pipeline ends without a response (e.g. no speech detected).
+
 ### Option: `enable_thinking_sound`
 
 Play a short sound while the assistant processes a request (default: `false`).

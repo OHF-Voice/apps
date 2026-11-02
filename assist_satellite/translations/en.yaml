@@ -112,6 +112,10 @@ configuration:
     description: >-
       Path to a custom sound file to play when the microphone is unmuted. The
       default is included with linux voice assistant.
+  pipeline_ended_soundL:
+    name: Pipeline ended sound
+    description: >
+      Sound played when the voice pipeline ends without a response (e.g. no speech detected).
   preferences_file:
     name: Preferences file
     description: >-

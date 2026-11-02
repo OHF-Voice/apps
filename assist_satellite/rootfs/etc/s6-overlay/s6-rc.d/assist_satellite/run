@@ -103,7 +103,7 @@ exec python3 -m linux_voice_assistant \
     --button-double-press-sound "$(bashio::config 'button_double_press_sound')" \
     --button-triple-press-sound "$(bashio::config 'button_triple_press_sound')" \
     --button-long-press-sound "$(bashio::config 'button_long_press_sound')" \
-    --pipeline-ended-sound "$bashio::config `pipeline_ended_sound`)"\
+    --pipeline-ended-sound "$bashio::config 'pipeline_ended_sound')"\
     --preferences-file "$(bashio::config 'preferences_file')" \
     --download-dir "$(bashio::config 'download_dir')" \
     --timer-max-ring-seconds "$(bashio::config 'timer_max_ring_seconds')" \

@@ -17,7 +17,7 @@ following button:
 
 [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=esphome)
 
-Then, enter the device IP address `127.0.0.1` with port 6053.
+Then, enter the device IP address (`127.0.0.1`, and `localhost` not working with the app yet. See [#24](https://github.com/OHF-Voice/linux-voice-assistant/issues/24#issuecomment-4320725122) ) with port 6053.
 
 Once connected, the satellite exposes the following controls on its Home
 Assistant device page:
@@ -50,6 +50,10 @@ this if you run multiple satellites on the same host.
 Soundcard name or index for microphone input. Leave empty to use the system
 default. Enable `debug_logging` to list available devices in the log.
 
+### Option: `audio_input_block_size`
+
+Audio input block size in samples (default: `1024`).
+
 ### Option: `audio_output_device`
 
 mpv audio device name for sound output. Leave empty to use the system default.
@@ -77,11 +81,6 @@ Delay seconds before mic opens for continued conversation (default: `0.5`).
 
 Sound file played when wake word is detected (default: `sounds/wake_word_triggered.flac`).
 
-### Option: `enable_thinking_sound`
-
-Play a short sound while the assistant processes a request (default: `false`).
-Can be toggled at runtime from the Home Assistant device page.
-
 ### Option: `processing_sound`
 
 Sound played while assistant is processing (default: `sounds/processing.wav`).
@@ -90,13 +89,58 @@ Sound played while assistant is processing (default: `sounds/processing.wav`).
 
 Sound file played when timer finishes (default: `sounds/timer_finished.flac`).
 
+### Option: `button_double_press_sound`
+
+Sound played on button double press (default: `sounds/button_double_press.flac`).
+
+### Option: `button_triple_press_sound`
+
+Sound played on button triple press (default: `sounds/button_triple_press.flac`).
+
+### Option: `button_long_press_sound`
+
+Sound played on button long press (default: `sounds/button_long_press.flac`).
+
+### Option: `pipeline_ended_sound`
+
+Sound played when the voice pipeline ends without a response (e.g. no speech detected).
+
+### Option: `enable_thinking_sound`
+
+Play a short sound while the assistant processes a request (default: `false`).
+Can be toggled at runtime from the Home Assistant device page.
+
+### Option: `listen_during_wake_word`
+
+Start listening while the wake  is still playing. Disabled by default.
+
+### Option: `peripheral_host`
+
+Bind address for the peripheral WebSocket API (default: `0.0.0.0`).
+
+### Option: `peripheral_port`
+
+Port for the peripheral WebSocket API (default: `6055`).
+
+### Option: `peripheral_volume_step`
+
+Volume change per button press, 0.0–1.0 (default: `%(default)s`).
+
+### Option: `peripheral_startup_wait`
+
+Seconds to wait for peripherals to register entities (default: `2.0`)
+
+### Option: `disable_peripheral_api`
+
+Disable the peripheral WebSocket API entirely (default: `false`).
+
 ### Option: `timer_max_ring_seconds`
 
 Seconds after which the timer stops ringing (default: `900` which is 15 minutes).
 
 ### Option: `mic_volume`
 
-Control microphone volume by fixed value (default: `1.0` which is the maximum)
+Control microphone volume by fixed value (default: `1.0` which is the maximum).
 
 ### Option: `mic_noise_suppression`
 
@@ -109,6 +153,10 @@ Automatic volume boost for microphone (0 is disabled, 31 dbfs is max). Disabled 
 ### Option: `debug_logging`
 
 Enable verbose debug logging.
+
+### Option: `colored_debug`
+
+Print colored DEBUG messages to console. Disabled by default.
 
 ## Support
 

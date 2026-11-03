@@ -15,6 +15,10 @@ configuration:
       Soundcard name or index for the microphone input. Leave empty to use the
       system default microphone. Run with debug logging to list available
       devices.
+  audio_input_block_size:
+    name: Audio input block size
+    description: >-
+      Audio input block size in samples (default: `1024`).
   audio_output_device:
     name: Audio output device
     description: >-
@@ -78,6 +82,26 @@ configuration:
     description: >-
       Path to a custom sound file to play when the wake word is detected. The
       default is included with linux voice assistant.
+  processing_sound:
+    name: Processing sound
+    description: >-
+      Sound played while assistant is processing (default: `sounds/processing.wav`).
+  timer_sound:
+    name: Timer sound
+    description: >-
+      Sound file played when timer finishes (default: `sounds/timer_finished.flac`).
+  button_double_press_sound:
+    name: Button double press sound
+    description: >-
+      Sound played on button double press (default: `sounds/button_double_press.flac`).
+  button_triple_press_sound:
+    name: Button triple press sound
+    description: >-
+      Sound played on button triple press (default: `sounds/button_triple_press.flac`).
+  button_long_press_sound:
+    name: Button long press sound
+    description: >-
+      Sound played on button long press (default: `sounds/button_long_press.flac`).
   mute_sound:
     name: Mute sound
     description: >-
@@ -88,6 +112,10 @@ configuration:
     description: >-
       Path to a custom sound file to play when the microphone is unmuted. The
       default is included with linux voice assistant.
+  pipeline_ended_sound:
+    name: Pipeline ended sound
+    description: >
+      Sound played when the voice pipeline ends without a response (e.g. no speech detected).
   preferences_file:
     name: Preferences file
     description: >-
@@ -112,6 +140,14 @@ configuration:
     description: >-
       Volume change applied per peripheral button press, between 0.0 and 1.0
       (default: 0.05).
+  peripheral_startup_wait:
+    name: Peripheral startup wait
+    description: >-
+      Seconds to wait for peripherals to register entities (default: `2.0`)
+  listen_during_wake_word:
+    name: Listen during wake word
+    description: >-
+      Start listening while the wake  is still playing. Disabled by default.
   disable_peripheral_api:
     name: Disable peripheral API
     description: >-

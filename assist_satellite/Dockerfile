@@ -4,7 +4,7 @@ FROM ghcr.io/home-assistant/base-debian:bookworm
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 WORKDIR /usr/src
-ARG LINUX_VOICE_ASSISTANT_VERSION=1.1.15
+ARG LINUX_VOICE_ASSISTANT_VERSION=1.1.18
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 # Install system dependencies

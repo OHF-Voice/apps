@@ -1,0 +1,9 @@
+# Staged by script/stage_build: the Kaldi tools and the acoustic model.
+/local/*
+!/local/.keep
+# Built from decoderd/verify_decoderd.cc against the staged Kaldi tools.
+/voice/kaldi/decoderd/verify_decoderd
+/voice/kaldi/decoderd/.fst_shadow_include/
+__pycache__/
+.pytest_cache/
+/var/

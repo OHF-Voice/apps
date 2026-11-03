@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Stage what the image needs and no package index serves: the Kaldi/OpenFST
+# binaries and the acoustic model the verifier decodes with.
+#
+# The verifier's own code is not staged -- it is vendored in voice/kaldi/ and
+# lives in this repository. What stays out is only the 255 MB of binaries and
+# model data.
+#
+# Without this the image still builds and still runs; it just verifies
+# nothing, which is what a machine with no model should look like.
+#
+#   script/stage_build [path to a wyoming-wake-kaldi checkout]
+set -euo pipefail
+
+here="$(cd "$(dirname "$0")/.." && pwd)"
+source_dir="${1:-${here}/../../wyoming-wake-kaldi}"
+
+if [ ! -d "${source_dir}/local" ]; then
+    echo "No local/ tree at ${source_dir}" >&2
+    exit 1
+fi
+
+mkdir -p "${here}/local"
+rsync -a --delete "${source_dir}/local/tools/" "${here}/local/wake-kaldi-tools/"
+rsync -a --delete --exclude 'g2p.fst' \
+    "${source_dir}/local/models/" "${here}/local/wake-kaldi-models/"
+
+du -sh "${here}/local/"*

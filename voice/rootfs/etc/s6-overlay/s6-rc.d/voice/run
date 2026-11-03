@@ -1,0 +1,12 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Start the Voice app: wake word verification over HTTP/websocket on :10800.
+# ==============================================================================
+cd /usr/src/voice || exit 1
+
+exec python3 -m voice \
+    --host '0.0.0.0' \
+    --port 10800 \
+    --wake-config '/usr/src/voice/wake.yaml' \
+    --train-dir '/data/wake-train'

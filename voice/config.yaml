@@ -20,6 +20,11 @@ ports:
   "10800/tcp": null
 ports_description:
   "10800/tcp": Wake word verification (HTTP and websocket)
+# Each decode hands the decoder a window of audio as a file, because that is
+# what Kaldi reads. Without this it would be a write to the container's
+# overlay on every wake word a satellite hears; with it the file never
+# leaves memory. It is 45 kB at a time.
+tmpfs: true
 # Decoding graphs are built once per wake word and cached here, so an update
 # to the app does not rebuild them.
 options: {}

@@ -16,8 +16,10 @@
 // with the last three arguments repeated once per graph.
 //
 // Protocol (line oriented):
-//   stdin:  <wav-path>
-//   stdout: exactly one line per graph, in the order the graphs were given:
+//   stdin:  <wav-path>                     -- every graph
+//           <tag>,<tag>,...\t<wav-path>    -- only those graphs, in that order
+//   stdout: exactly one line per graph decoded, in the order they were asked
+//           for (the order they were given, when the whole line is a path):
 //             OK <tag> <total_best_path_cost> <n_output_frames> [wordid:beg:end ...]
 //             ERR <tag> <message>
 //   "READY" is printed once after loading. Word times are in OUTPUT frames
@@ -32,6 +34,13 @@
 //     requested out of order ("Frames must be accessed in order"), so letting
 //     any one decoder run ahead would leave the others asking for frames the
 //     cache has already passed.
+//
+//   * Selecting a subset is exactly equivalent to a process started with only
+//     those graphs: the acoustic pass is shared the same way, and silence
+//     weighting falls back to the first graph asked for when the one named by
+//     --silence-weighting-graph is not among them. That matters because the
+//     weighting drives the i-vector, so a different graph driving it moves
+//     every score.
 //
 //   * Each graph keeps its OWN decoder config. They share the acoustic model,
 //     not the search: --max-active must not apply to the confusable graph,
@@ -221,13 +230,58 @@ int main(int argc, char *argv[]) {
 
     std::cout << "READY" << std::endl;
 
-    std::string wav_path;
-    while (std::getline(std::cin, wav_path)) {
-      if (wav_path.empty()) {
+    std::string request;
+    while (std::getline(std::cin, request)) {
+      if (request.empty()) {
         continue;
       }
 
-      std::vector<std::string> lines(num_graphs);
+      // "<tags>\t<wav-path>" asks for a subset; a bare path asks for all.
+      std::string wav_path = request;
+      std::vector<int32> selected;
+      const std::string::size_type tab = request.find('\t');
+      if (tab == std::string::npos) {
+        for (int32 g = 0; g < num_graphs; g++) {
+          selected.push_back(g);
+        }
+      } else {
+        wav_path = request.substr(tab + 1);
+        bool unknown = false;
+        for (const std::string &tag : SplitCommas(request.substr(0, tab))) {
+          int32 found = -1;
+          for (int32 g = 0; g < num_graphs; g++) {
+            if (graphs[g].tag == tag) {
+              found = g;
+              break;
+            }
+          }
+          if (found < 0) {
+            std::cout << "ERR " << tag << " unknown graph" << std::endl;
+            unknown = true;
+            break;
+          }
+          selected.push_back(found);
+        }
+        if (unknown) {
+          continue;
+        }
+        if (selected.empty()) {
+          std::cout << "ERR - no graphs asked for" << std::endl;
+          continue;
+        }
+      }
+
+      // The weighting drives the i-vector, so it has to come from a graph
+      // that is actually being decoded; otherwise every score moves.
+      int32 weighting_index = selected[0];
+      for (int32 g : selected) {
+        if (g == silence_weighting_index) {
+          weighting_index = silence_weighting_index;
+          break;
+        }
+      }
+
+      std::vector<std::string> lines(selected.size());
       try {
         // NOTE: MFCC dither draws from the process-global rand() stream, so
         // consecutive requests see different dither than fresh subprocesses
@@ -248,7 +302,7 @@ int main(int argc, char *argv[]) {
             trans_model, decodable_info, feature_pipeline.InputFeature(),
             feature_pipeline.IvectorFeature());
 
-        for (int32 g = 0; g < num_graphs; g++) {
+        for (int32 g : selected) {
           // (fst, config): borrows the FST. The (config, FST*) overload
           // takes ownership, which would delete a graph we reuse every turn.
           graphs[g].decoder.reset(
@@ -278,7 +332,7 @@ int main(int argc, char *argv[]) {
           if (silence_weighting.Active() &&
               feature_pipeline.IvectorFeature() != nullptr) {
             silence_weighting.ComputeCurrentTraceback(
-                *graphs[silence_weighting_index].decoder);
+                *graphs[weighting_index].decoder);
             silence_weighting.GetDeltaWeights(
                 feature_pipeline.NumFramesReady(), &delta_weights);
             feature_pipeline.IvectorFeature()->UpdateFrameWeights(
@@ -287,20 +341,20 @@ int main(int argc, char *argv[]) {
           // Lockstep, one output frame at a time: the looped decodable caches
           // a chunk of log-posteriors and rejects frames requested before its
           // current offset, so no decoder may run ahead of the others.
-          while (graphs[0].decoder->NumFramesDecoded() <
+          while (graphs[selected[0]].decoder->NumFramesDecoded() <
                  decodable.NumFramesReady()) {
-            for (int32 g = 0; g < num_graphs; g++) {
+            for (int32 g : selected) {
               graphs[g].decoder->AdvanceDecoding(&decodable, 1);
             }
           }
         }
 
-        for (int32 g = 0; g < num_graphs; g++) {
-          Graph &graph = graphs[g];
+        for (size_t sel = 0; sel < selected.size(); sel++) {
+          Graph &graph = graphs[selected[sel]];
           graph.decoder->FinalizeDecoding();
 
           if (graph.decoder->NumFramesDecoded() == 0) {
-            lines[g] = "ERR " + graph.tag + " no frames decoded";
+            lines[sel] = "ERR " + graph.tag + " no frames decoded";
             continue;
           }
 
@@ -311,14 +365,14 @@ int main(int argc, char *argv[]) {
                                                graph.opts.lattice_beam, &clat,
                                                graph.opts.det_opts);
           if (clat.NumStates() == 0) {
-            lines[g] = "ERR " + graph.tag + " empty lattice";
+            lines[sel] = "ERR " + graph.tag + " empty lattice";
             continue;
           }
 
           CompactLattice best_path;
           CompactLatticeShortestPath(clat, &best_path);
           if (best_path.NumStates() == 0) {
-            lines[g] = "ERR " + graph.tag + " empty best path";
+            lines[sel] = "ERR " + graph.tag + " empty best path";
             continue;
           }
 
@@ -346,23 +400,23 @@ int main(int argc, char *argv[]) {
               }
             }
           }
-          lines[g] = out.str();
+          lines[sel] = out.str();
         }
       } catch (const std::exception &e) {
-        for (int32 g = 0; g < num_graphs; g++) {
-          if (lines[g].empty()) {
-            lines[g] = "ERR " + graphs[g].tag + " " + e.what();
+        for (size_t sel = 0; sel < selected.size(); sel++) {
+          if (lines[sel].empty()) {
+            lines[sel] = "ERR " + graphs[selected[sel]].tag + " " + e.what();
           }
         }
       }
 
-      // Always exactly one line per graph, so the client can read a fixed
-      // number of lines without a terminator.
-      for (int32 g = 0; g < num_graphs; g++) {
-        if (lines[g].empty()) {
-          lines[g] = "ERR " + graphs[g].tag + " no result";
+      // Always exactly one line per graph asked for, so the client can read a
+      // fixed number of lines without a terminator.
+      for (size_t sel = 0; sel < selected.size(); sel++) {
+        if (lines[sel].empty()) {
+          lines[sel] = "ERR " + graphs[selected[sel]].tag + " no result";
         }
-        std::cout << lines[g] << "\n";
+        std::cout << lines[sel] << "\n";
       }
       std::cout << std::flush;
     }

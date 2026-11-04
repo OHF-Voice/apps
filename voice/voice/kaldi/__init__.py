@@ -29,7 +29,12 @@ are staged into ``local/`` -- see the README. Nothing here downloads them.
 from .config import ConfigError, ServiceConfig, WakeWordConfig, load_config
 from .kaldi import SpeechTools
 from .model import PreparedModel, prepare_model
-from .pool import ResidentDecoder, maybe_start_decoder
+from .pool import (
+    ResidentDecoder,
+    SharedDecoder,
+    maybe_start_decoder,
+    maybe_start_shared_decoder,
+)
 from .train import train_wake_word
 from .verify import Verifier, VerifyResult
 
@@ -43,7 +48,9 @@ __all__ = [
     "Verifier",
     "WakeWordConfig",
     "load_config",
+    "SharedDecoder",
     "maybe_start_decoder",
+    "maybe_start_shared_decoder",
     "prepare_model",
     "train_wake_word",
 ]

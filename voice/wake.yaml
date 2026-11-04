@@ -79,6 +79,13 @@ decoder:
   #
   # Every graph must appear exactly once. On a machine with more cores than
   # this, one graph per process is faster.
+  #
+  # This only applies when the one decoder for every wake word cannot be
+  # started, which is the usual arrangement: that one holds every wake
+  # word's graphs and decodes the four its request names, so the acoustic
+  # model -- nearly all of what a decoder costs resident -- is held once
+  # rather than once per wake word per group. Measured here on three wake
+  # words: 142 MB against 572 MB, 119 ms against 82 ms.
   groups:
     - [kw, bg]
     - [prefix, kwc]

@@ -39,11 +39,13 @@ from pathlib import Path
 from .kaldi import (
     ResidentDecoder,
     ServiceConfig,
+    SharedDecoder,
     SpeechTools,
     Verifier as KaldiDecode,
     VerifyResult,
     load_config,
     maybe_start_decoder,
+    maybe_start_shared_decoder,
     prepare_model,
     train_wake_word,
 )
@@ -93,6 +95,7 @@ class KaldiVerifier(Verifier):
             self.config.train_dir = Path(train_dir)
         self._decodes: dict[str, KaldiDecode] = {}
         self._pools: list[ResidentDecoder] = []
+        self._shared: list[SharedDecoder] = []
 
     @property
     def wake_words(self) -> list[WakeWordInfo]:
@@ -111,13 +114,38 @@ class KaldiVerifier(Verifier):
             for model_id, model_config in self.config.models.items()
         }
 
+        graph_dirs: dict[str, Path] = {}
+        for wake_id, wake_word in self.config.wake_words.items():
+            graph_dirs[wake_id] = await train_wake_word(
+                wake_word, models[wake_word.model], self.config.train_dir, tools
+            )
+
+        # One decoder for every wake word, where the models allow it: the
+        # acoustic model is nearly all of what a decoder costs resident, and
+        # it is the same one for all of them. Wake words from different
+        # models keep their own, since the model is what is being shared.
+        shared: dict[str, SharedDecoder] = {}
+        if self.config.resident_decoders:
+            by_model: dict[str, dict[str, Path]] = {}
+            for wake_id, wake_word in self.config.wake_words.items():
+                by_model.setdefault(wake_word.model, {})[wake_id] = graph_dirs[
+                    wake_id
+                ]
+            for model_id, dirs in by_model.items():
+                pool = await maybe_start_shared_decoder(
+                    None, models[model_id], dirs, tools, self.config.decoder
+                )
+                if pool is not None:
+                    self._shared.append(pool)
+                    shared.update(dict.fromkeys(dirs, pool))
+
         for wake_id, wake_word in self.config.wake_words.items():
             model = models[wake_word.model]
-            graph_dir = await train_wake_word(
-                wake_word, model, self.config.train_dir, tools
-            )
-            pool = None
-            if self.config.resident_decoders:
+            graph_dir = graph_dirs[wake_id]
+            pool: object | None = None
+            if wake_id in shared:
+                pool = shared[wake_id].view(wake_id)
+            elif self.config.resident_decoders:
                 # Without the daemon every decode spawns a Kaldi process
                 # instead, which works and is slower: on one window of
                 # "okay nabu", 42 ms against roughly 200 ms.
@@ -133,8 +161,11 @@ class KaldiVerifier(Verifier):
 
     async def stop(self) -> None:
         pools, self._pools = self._pools, []
+        shared, self._shared = self._shared, []
         self._decodes = {}
-        await asyncio.gather(*(pool.stop() for pool in pools), return_exceptions=True)
+        await asyncio.gather(
+            *(pool.stop() for pool in (*pools, *shared)), return_exceptions=True
+        )
 
     async def verify(
         self, request: VerifyRequest, pcm: bytes, final: bool

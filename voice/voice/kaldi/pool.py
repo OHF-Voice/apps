@@ -47,17 +47,21 @@ class _DecoderProcess:
         self,
         daemon_bin: Path,
         model: PreparedModel,
-        graph_dir: Path,
         tools: SpeechTools,
         decoder: DecoderConfig,
-        tags: tuple[str, ...],
+        entries: tuple[tuple[str, str, Path], ...],
     ) -> None:
+        """``entries`` is (name the daemon knows it by, graph tag, graph dir).
+
+        The two names differ only when one process holds more than one wake
+        word's graphs, where every tag has to be unique across them.
+        """
         self.daemon_bin = Path(daemon_bin)
         self.model = model
-        self.graph_dir = Path(graph_dir)
         self.tools = tools
         self.decoder = decoder
-        self.tags = tags
+        self.entries = entries
+        self.tags = tuple(name for name, _, _ in entries)
         self.proc: asyncio.subprocess.Process | None = None
         self._id_to_word: dict[str, dict[str, str]] = {}
         self._lock = asyncio.Lock()
@@ -75,20 +79,30 @@ class _DecoderProcess:
             # the Python side does.
             *self.decoder.args(GRAPH_TAGS[0]),
             "--frame-subsampling-factor=3",
-            "--uncapped-graphs=" + ",".join(sorted(UNCAPPED_GRAPHS)),
+            # By the names the daemon knows them by: it matches these against
+            # the tags it was given, and a confusable graph it fails to
+            # recognize here is capped, which silently accepts false wakes.
+            "--uncapped-graphs="
+            + ",".join(
+                sorted(
+                    name
+                    for name, tag, _ in self.entries
+                    if tag in UNCAPPED_GRAPHS
+                )
+            ),
             str(self.model.final_mdl),
         ]
-        for tag in self.tags:
-            graph_dir = self.graph_dir / f"graph_{tag}"
-            lang_dir = self.graph_dir / "data" / f"lang_{tag}"
+        for name, tag, root in self.entries:
+            graph_dir = root / f"graph_{tag}"
+            lang_dir = root / "data" / f"lang_{tag}"
             want_ctm = tag in CTM_TAGS
             args += [
-                tag,
+                name,
                 str(graph_dir / "HCLG.fst"),
                 str(lang_dir / "phones" / "word_boundary.int") if want_ctm else "-",
             ]
             if want_ctm:
-                self._id_to_word[tag] = read_words_txt(graph_dir / "words.txt")
+                self._id_to_word[name] = read_words_txt(graph_dir / "words.txt")
 
         proc = await asyncio.create_subprocess_exec(
             str(self.daemon_bin),
@@ -121,19 +135,30 @@ class _DecoderProcess:
 
         self.proc = proc
 
-    async def decode(self, wav_path: Path) -> dict[str, DecodeResult]:
-        """Decode this group's graphs; the acoustic model runs once for them."""
+    async def decode(
+        self, wav_path: Path, tags: tuple[str, ...] | None = None
+    ) -> dict[str, DecodeResult]:
+        """Decode these graphs; the acoustic model runs once for them.
+
+        ``tags`` names the daemon's own tags, and leaving it out asks for
+        every graph this process holds. Asking for a subset costs what a
+        process holding only those graphs would: the ones left out are never
+        started, so they take no acoustic pass and no search.
+        """
         if self.proc is None or self.proc.stdin is None or self.proc.stdout is None:
             raise RuntimeError("decoder is not running")
 
+        wanted = self.tags if tags is None else tags
+        request = str(wav_path) if tags is None else ",".join(tags) + f"\t{wav_path}"
+
         async with self._lock:
-            self.proc.stdin.write(f"{wav_path}\n".encode())
+            self.proc.stdin.write(f"{request}\n".encode())
             await self.proc.stdin.drain()
             lines = [
                 await asyncio.wait_for(
                     self.proc.stdout.readline(), timeout=_DECODE_TIMEOUT
                 )
-                for _ in self.tags
+                for _ in wanted
             ]
 
         results: dict[str, DecodeResult] = {}
@@ -160,7 +185,7 @@ class _DecoderProcess:
                 )
             results[tag] = (cost, words)
 
-        missing = set(self.tags) - set(results)
+        missing = set(wanted) - set(results)
         if missing:
             raise RuntimeError(f"decoder did not answer for {sorted(missing)}")
         return results
@@ -176,6 +201,99 @@ class _DecoderProcess:
             except (asyncio.TimeoutError, ProcessLookupError, OSError):
                 self.proc.kill()
         self.proc = None
+
+
+class SharedView:
+    """One wake word's four graphs inside a process that holds more."""
+
+    def __init__(self, process: "_DecoderProcess", wake_id: str) -> None:
+        self._process = process
+        self._wake_id = wake_id
+        self._names = tuple(f"{wake_id}_{tag}" for tag in GRAPH_TAGS)
+
+    @property
+    def running(self) -> bool:
+        return self._process.running
+
+    async def decode_all(self, wav_path: Path) -> dict[str, DecodeResult]:
+        """Decode this wake word's graphs, and nobody else's."""
+        results = await self._process.decode(wav_path, self._names)
+        prefix = len(self._wake_id) + 1
+        return {name[prefix:]: value for name, value in results.items()}
+
+    async def stop(self) -> None:
+        """Nothing: the process is shared, and its owner stops it."""
+
+
+class SharedDecoder:
+    """One process holding every wake word's graphs.
+
+    The acoustic model is what costs memory, and it is identical for every
+    wake word, so holding one copy instead of one per wake word is most of
+    the app's resident size. A verification still decodes only its own four
+    graphs, which the daemon selects per request.
+    """
+
+    def __init__(self, process: "_DecoderProcess") -> None:
+        self.process = process
+
+    @property
+    def running(self) -> bool:
+        return self.process.running
+
+    def view(self, wake_id: str) -> SharedView:
+        """This wake word's handle on the shared process."""
+        return SharedView(self.process, wake_id)
+
+    async def stop(self) -> None:
+        await self.process.stop()
+
+
+async def maybe_start_shared_decoder(
+    daemon_bin: Path | None,
+    model: PreparedModel,
+    graph_dirs: dict[str, Path],
+    tools: SpeechTools,
+    decoder: DecoderConfig | None = None,
+) -> SharedDecoder | None:
+    """Start one decoder for every wake word, or None when unavailable."""
+    daemon_bin = Path(daemon_bin) if daemon_bin else DEFAULT_DAEMON_BIN
+    decoder = decoder or DecoderConfig()
+    if not daemon_bin.is_file():
+        _LOGGER.info(
+            "Resident decoder daemon not built (%s); using subprocess decodes. "
+            "Build it with decoderd/build.sh for lower latency.",
+            daemon_bin,
+        )
+        return None
+
+    started = time.monotonic()
+    entries = tuple(
+        (f"{wake_id}_{tag}", tag, graph_dir)
+        for wake_id, graph_dir in graph_dirs.items()
+        for tag in GRAPH_TAGS
+    )
+    process = _DecoderProcess(daemon_bin, model, tools, decoder, entries)
+    try:
+        await process.start()
+    except Exception:
+        _LOGGER.exception(
+            "Shared resident decoder failed to start; falling back per wake word"
+        )
+        await process.stop()
+        return None
+
+    _LOGGER.info(
+        "One resident decoder for %s (%d graphs; beam=%s max-active=%d "
+        "except %s; %.1f s)",
+        ", ".join(graph_dirs),
+        len(entries),
+        decoder.beam,
+        decoder.max_active,
+        "/".join(sorted(UNCAPPED_GRAPHS)),
+        time.monotonic() - started,
+    )
+    return SharedDecoder(process)
 
 
 class ResidentDecoder:
@@ -225,7 +343,13 @@ async def maybe_start_decoder(
 
     started = time.monotonic()
     processes = [
-        _DecoderProcess(daemon_bin, model, graph_dir, tools, decoder, tags)
+        _DecoderProcess(
+            daemon_bin,
+            model,
+            tools,
+            decoder,
+            tuple((tag, tag, graph_dir) for tag in tags),
+        )
         for tags in decoder.groups
     ]
     try:

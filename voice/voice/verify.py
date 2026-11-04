@@ -25,7 +25,7 @@ from .protocol import (
     Verdict,
     VerifyRequest,
     WakeWordInfo,
-    normalize_wake_word_id,
+    normalize_wake_word,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -44,9 +44,14 @@ class Verifier(ABC):
         """Audio from after the detection this wants added to the window."""
         return 0
 
-    def knows(self, wake_word_id: str) -> bool:
-        wanted = normalize_wake_word_id(wake_word_id)
-        return any(normalize_wake_word_id(w.id) == wanted for w in self.wake_words)
+    def knows(self, wake_word: str) -> bool:
+        """Whether this verifier has a model for this wake word.
+
+        Home Assistant names it by the phrase said; the configuration names
+        it by an id. Both spellings resolve to the same wake word.
+        """
+        wanted = normalize_wake_word(wake_word)
+        return any(normalize_wake_word(w.id) == wanted for w in self.wake_words)
 
     async def start(self) -> None:
         """Load whatever has to be resident. Raises to refuse to run."""
@@ -60,8 +65,8 @@ class Verifier(ABC):
     ) -> Verdict | MoreAudio:
         """Judge one window of 16 kHz 16-bit mono PCM.
 
-        The detection sits ``request.preroll_ms`` into the window; anything
-        after that is command audio Home Assistant was asked for.
+        The detection sits ``request.wake_word_audio_ms`` into the window;
+        anything after that is command audio Home Assistant was asked for.
 
         Returning ``MoreAudio`` asks for the window to be extended and the
         whole of it offered again. ``final`` means there will be no more,

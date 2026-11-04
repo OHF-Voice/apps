@@ -17,7 +17,7 @@ from voice.protocol import (  # noqa: E402
     Verdict,
     VerifyRequest,
     WakeWordInfo,
-    normalize_wake_word_id,
+    normalize_wake_word,
 )
 from voice.server import build_app  # noqa: E402
 from voice.verify import Verifier  # noqa: E402
@@ -56,7 +56,7 @@ async def _exchange(verifier, chunks=(AUDIO,), request=None, rounds=1):
         async with ClientSession() as session:
             async with session.ws_connect(server.make_url("/verify")) as websocket:
                 verify = request or VerifyRequest(
-                    wake_word_id="okay_nabu", preroll_ms=1000
+                    wake_word_phrase="okay nabu", wake_word_audio_ms=1000
                 )
                 await websocket.send_json(verify.to_json())
                 for chunk in chunks:
@@ -92,14 +92,14 @@ def test_info():
 
 
 def test_accepted_carries_the_split():
-    verifier = FakeVerifier([Verdict(accepted=True, split_ms=940)])
+    verifier = FakeVerifier([Verdict(accepted=True, wake_word_audio_ms=940)])
     answer = run(_exchange(verifier))
     assert answer["accepted"] is True
-    assert answer["split_ms"] == 940
+    assert answer["wake_word_audio_ms"] == 940
 
     request, num_bytes, final = verifier.seen[0]
-    assert request.wake_word_id == "okay_nabu"
-    assert request.preroll_ms == 1000
+    assert request.wake_word_phrase == "okay nabu"
+    assert request.wake_word_audio_ms == 1000
     assert num_bytes == len(AUDIO)
     assert final is False
 
@@ -157,7 +157,7 @@ def test_audio_without_a_request_accepts():
     "spelling", ["okay_nabu", "okay nabu", "Okay-Nabu", "OKAY_NABU"]
 )
 def test_one_wake_word_many_spellings(spelling):
-    assert normalize_wake_word_id(spelling) == "okay_nabu"
+    assert normalize_wake_word(spelling) == "okay_nabu"
 
 
 def test_knows_only_what_it_has():

@@ -12,7 +12,7 @@ init: false
 # starts a config flow in the integration of the same name. There is nothing
 # for anyone to fill in: installing the app is the whole setup.
 discovery:
-  - voice_app
+  - voice_support
 # Home Assistant reaches the app by its container hostname on the Supervisor
 # network, so the port is here only to be reachable for debugging, and is not
 # published on the host.

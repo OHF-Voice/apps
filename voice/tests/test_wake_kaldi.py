@@ -24,7 +24,7 @@ from voice.wake_kaldi import TAIL_MS, KaldiVerifier  # noqa: E402
 PREROLL_MS = 1000
 PREROLL = ms_to_bytes(PREROLL_MS)
 TAIL = ms_to_bytes(TAIL_MS)
-REQUEST = VerifyRequest(wake_word_id="okay_nabu", preroll_ms=PREROLL_MS)
+REQUEST = VerifyRequest(wake_word_phrase="okay nabu", wake_word_audio_ms=PREROLL_MS)
 
 
 def result(accepted, split=None, rejected_by=None):
@@ -69,7 +69,7 @@ async def test_accepted_at_once():
     answer = await verify(verifier, PREROLL_MS)
     assert isinstance(answer, Verdict)
     assert answer.accepted
-    assert answer.split_ms == 500
+    assert answer.wake_word_audio_ms == 500
     assert verifier.windows == [PREROLL]
 
 
@@ -111,7 +111,7 @@ async def test_the_window_slides_once_the_audio_is_there():
     assert answer.accepted
     # Same length of window, started a tail later, and the split with it
     assert verifier.windows == [PREROLL, PREROLL]
-    assert answer.split_ms == 800 + TAIL_MS
+    assert answer.wake_word_audio_ms == 800 + TAIL_MS
     assert answer.detail["offset_ms"] == TAIL_MS
 
 
@@ -143,7 +143,7 @@ async def test_audio_that_is_not_coming_is_not_waited_for():
 async def test_the_window_is_capped_and_ends_at_the_detection():
     verifier = Verifier([result(True, split=1.2)])
     answer = await verifier.verify(
-        VerifyRequest(wake_word_id="okay_nabu", preroll_ms=3000),
+        VerifyRequest(wake_word_phrase="okay nabu", wake_word_audio_ms=3000),
         # Count the samples, so the window's position shows in them.
         b"".join(i.to_bytes(2, "little") for i in range(ms_to_bytes(3000) // 2)),
         False,
@@ -154,7 +154,7 @@ async def test_the_window_is_capped_and_ends_at_the_detection():
     assert verifier.decoded[0][:2] == (ms_to_bytes(1600) // 2).to_bytes(2, "little")
     # ...and the split it reports is still measured from the audio's start
     assert isinstance(answer, Verdict)
-    assert answer.split_ms == 1200 + 1600
+    assert answer.wake_word_audio_ms == 1200 + 1600
 
 
 @pytest.mark.asyncio

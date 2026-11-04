@@ -20,7 +20,7 @@ it isn't:
 * the satellite sends the audio it buffered before the detection — on ESPHome
   devices, wake word audio;
 * the app has a model for that wake word (`GET /info` says which);
-* the `voice_app` integration is set up, which the Supervisor arranges when
+* the `voice_support` integration is set up, which the Supervisor arranges when
   the app starts.
 
 Otherwise the detection stands exactly as the device reported it.
@@ -28,10 +28,10 @@ Otherwise the detection stands exactly as the device reported it.
 ## How a verification goes
 
 ```
-HA  -> text    {"type": "verify", "wake_word_id": "okay_nabu", "preroll_ms": 1000, ...}
+HA  -> text    {"type": "verify", "wake_word_phrase": "okay nabu", "wake_word_audio_ms": 1000, ...}
 HA  -> binary  16 kHz 16-bit mono PCM
 HA  -> text    {"type": "audio-end", "final": false}
-app -> text    {"type": "verdict", "accepted": true, "split_ms": 940, ...}
+app -> text    {"type": "verdict", "accepted": true, "wake_word_audio_ms": 940, ...}
 ```
 
 One websocket per detection, on `/verify`. An app may answer `audio-end` with
@@ -40,7 +40,7 @@ sends more of what the satellite is streaming. That exists because the useful
 amount of audio *after* the detection is not a constant — see "The retry"
 below.
 
-`split_ms` is where the wake phrase ends. Home Assistant starts speech-to-text
+`wake_word_audio_ms` is where the wake phrase really ends. Home Assistant starts speech-to-text
 there instead of at the detection, which is only where a threshold happened to
 be crossed.
 

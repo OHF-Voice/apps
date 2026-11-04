@@ -134,7 +134,7 @@ class KaldiVerifier(Verifier):
         self, request: VerifyRequest, pcm: bytes, final: bool
     ) -> Verdict | MoreAudio:
         assert self._decodes, "start() first"
-        wake = self.config.resolve(request.wake_word_id)
+        wake = self.config.resolve(request.wake_word_phrase)
         if wake is None:
             # Home Assistant asked about a wake word /info never offered.
             return Verdict(accepted=True, reason="unknown_wake_word")
@@ -172,7 +172,9 @@ class KaldiVerifier(Verifier):
         from a long pre-roll is its oldest audio, not the wake word.
         """
         end = min(
-            ms_to_bytes(request.preroll_ms) if request.preroll_ms > 0 else available,
+            ms_to_bytes(request.wake_word_audio_ms)
+            if request.wake_word_audio_ms > 0
+            else available,
             available,
         )
         return max(0, end - ms_to_bytes(self.config.max_window_seconds * 1000)), end
@@ -210,6 +212,6 @@ class KaldiVerifier(Verifier):
         return Verdict(
             accepted=result.accepted,
             reason=result.rejected_by,
-            split_ms=split_ms if result.accepted else None,
+            wake_word_audio_ms=split_ms if result.accepted else None,
             detail=detail,
         )

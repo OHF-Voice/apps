@@ -123,20 +123,24 @@ class AppInfo:
 class VerifyRequest:
     """The text frame that opens a verification."""
 
-    wake_word_id: str
-    """The id the satellite's detector reported."""
+    wake_word_phrase: str
+    """What the pipeline calls the wake word: the phrase said.
 
-    wake_word_phrase: str | None = None
-    """The pipeline's normalized phrase, when it has one."""
+    It is matched against the configured wake words loosely, so "okay nabu"
+    and "okay_nabu" are the same wake word.
+    """
 
     satellite_id: str | None = None
     """The satellite entity that heard it. Nothing uses it yet; it is what
     lets this app answer "several satellites heard one utterance, which one
     takes it" without Home Assistant having to model that."""
 
-    preroll_ms: int = 0
-    """Where the detection sits in the window: the audio before this is what
-    the detector fired on, and anything after it is ``tail_ms`` of command."""
+    wake_word_audio_ms: int = 0
+    """How much of the window the satellite called the wake word.
+
+    The detection sits at the end of it; anything after that is command
+    audio Home Assistant was asked for.
+    """
 
     rate: int = SAMPLE_RATE
     width: int = SAMPLE_WIDTH
@@ -145,10 +149,9 @@ class VerifyRequest:
     @staticmethod
     def from_json(data: dict[str, Any]) -> "VerifyRequest":
         return VerifyRequest(
-            wake_word_id=str(data["wake_word_id"]),
-            wake_word_phrase=_optional_str(data.get("wake_word_phrase")),
+            wake_word_phrase=str(data["wake_word_phrase"]),
             satellite_id=_optional_str(data.get("satellite_id")),
-            preroll_ms=int(data.get("preroll_ms") or 0),
+            wake_word_audio_ms=int(data.get("wake_word_audio_ms") or 0),
             rate=int(data.get("rate") or SAMPLE_RATE),
             width=int(data.get("width") or SAMPLE_WIDTH),
             channels=int(data.get("channels") or SAMPLE_CHANNELS),
@@ -157,10 +160,9 @@ class VerifyRequest:
     def to_json(self) -> dict[str, Any]:
         return {
             "type": "verify",
-            "wake_word_id": self.wake_word_id,
             "wake_word_phrase": self.wake_word_phrase,
             "satellite_id": self.satellite_id,
-            "preroll_ms": self.preroll_ms,
+            "wake_word_audio_ms": self.wake_word_audio_ms,
             "rate": self.rate,
             "width": self.width,
             "channels": self.channels,
@@ -206,12 +208,11 @@ class Verdict:
     "last", "confusable"), or "error" when the verifier itself failed.
     Nothing in Home Assistant branches on it."""
 
-    split_ms: int | None = None
-    """Where the wake phrase ends in the window, when the verifier aligned it.
+    wake_word_audio_ms: int | None = None
+    """Where the wake phrase really ends, when the verifier aligned it.
 
-    Home Assistant starts speech-to-text here instead of at the detection,
-    which is the more honest boundary: the detection is where a classifier
-    crossed a threshold, and that is early for some speakers and late for
+    It replaces the length the satellite reported, which is where a
+    classifier crossed a threshold -- early for some speakers and late for
     others. None leaves the boundary where it was.
     """
 
@@ -220,11 +221,11 @@ class Verdict:
 
     @staticmethod
     def from_json(data: dict[str, Any]) -> "Verdict":
-        split = data.get("split_ms")
+        split = data.get("wake_word_audio_ms")
         return Verdict(
             accepted=bool(data.get("accepted")),
             reason=_optional_str(data.get("reason")),
-            split_ms=None if split is None else int(split),
+            wake_word_audio_ms=None if split is None else int(split),
             detail=dict(data.get("detail") or {}),
         )
 
@@ -233,19 +234,19 @@ class Verdict:
             "type": "verdict",
             "accepted": self.accepted,
             "reason": self.reason,
-            "split_ms": self.split_ms,
+            "wake_word_audio_ms": self.wake_word_audio_ms,
             "detail": self.detail,
         }
 
 
-def normalize_wake_word_id(wake_word_id: str) -> str:
+def normalize_wake_word(wake_word: str) -> str:
     """Treat "Okay Nabu", "okay-nabu" and "okay_nabu" as one wake word.
 
-    Detectors, manifests and pipelines each spell it their own way, and the
-    difference has never meant anything.
+    Pipelines name a wake word by the phrase said and detectors by an id,
+    and the difference between the two spellings has never meant anything.
     """
     return "".join(
-        c for c in wake_word_id.lower().replace("-", "_").replace(" ", "_") if c.isalnum() or c == "_"
+        c for c in wake_word.lower().replace("-", "_").replace(" ", "_") if c.isalnum() or c == "_"
     )
 
 

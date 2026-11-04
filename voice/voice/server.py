@@ -147,7 +147,7 @@ async def _verify(request: web.Request) -> web.WebSocketResponse:
 
         _LOGGER.info(
             "%s: %s%s (%d ms of audio, %.0f ms)",
-            verify_request.wake_word_id,
+            verify_request.wake_word_phrase,
             "accepted" if answer.accepted else "rejected",
             "" if answer.reason is None else f" ({answer.reason})",
             bytes_to_ms(len(audio)),

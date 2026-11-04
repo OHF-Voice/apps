@@ -19,6 +19,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from voice.protocol import MoreAudio, Verdict, VerifyRequest, ms_to_bytes  # noqa: E402
+from voice.verify import SPLIT_KALDI, SPLIT_NONE  # noqa: E402
 from voice.wake_kaldi import TAIL_MS, KaldiVerifier  # noqa: E402
 
 PREROLL_MS = 1000
@@ -41,8 +42,9 @@ def result(accepted, split=None, rejected_by=None):
 class Verifier(KaldiVerifier):
     """A KaldiVerifier whose decodes are scripted."""
 
-    def __init__(self, results):
+    def __init__(self, results, split=SPLIT_KALDI):
         self._results = list(results)
+        self.split = split
         self.windows = []
         self.decoded = []
         self._decodes = {"okay_nabu": None}
@@ -166,3 +168,27 @@ async def test_a_wake_word_it_was_never_offered():
     assert isinstance(answer, Verdict)
     assert answer.accepted
     assert answer.reason == "unknown_wake_word"
+
+
+@pytest.mark.asyncio
+async def test_the_split_is_not_offered_by_default():
+    """The alignment is reported, but the pipeline keeps its own boundary.
+
+    Kaldi's end of the wake phrase was measured landing a median 0.3-0.4 s
+    late, which is far enough to take the first word of the command.
+    """
+    verifier = Verifier([result(True, split=0.5)], split=SPLIT_NONE)
+    answer = await verify(verifier, PREROLL_MS)
+    assert answer.accepted
+    assert answer.wake_word_audio_ms is None
+    assert answer.detail["split_ms"] == 500
+
+
+@pytest.mark.asyncio
+async def test_a_refusal_never_offers_a_split():
+    """A wake word that was refused has no boundary worth sending."""
+    verifier = Verifier([result(False, split=0.5, rejected_by="last")], split=SPLIT_KALDI)
+    answer = await verify(verifier, PREROLL_MS)
+    assert not answer.accepted
+    assert answer.wake_word_audio_ms is None
+    assert answer.detail["split_ms"] == 500

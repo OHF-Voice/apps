@@ -94,7 +94,25 @@ class NoVerifier(Verifier):
         return Verdict(accepted=True, reason="no_verifier")
 
 
-def load_verifier(config_path: Path | None, train_dir: Path | None = None) -> Verifier:
+SPLIT_NONE = "none"
+SPLIT_KALDI = "kaldi"
+SPLITS = (SPLIT_NONE, SPLIT_KALDI)
+"""Which boundary a verdict carries back as ``wake_word_audio_ms``.
+
+``none`` keeps the satellite's own number, which is what Home Assistant
+cuts at today. ``kaldi`` sends where the decode aligned the end of the wake
+phrase; it is a real alignment, but the experimental app measured it landing
+a median 0.3-0.4 s late against a CTC placement of the same audio, late
+enough to take the first word of the command with it. There will be a
+better one to choose when this app recognizes commands itself.
+"""
+
+
+def load_verifier(
+    config_path: Path | None,
+    train_dir: Path | None = None,
+    split: str = SPLIT_NONE,
+) -> Verifier:
     """The verifier this install can run.
 
     Kaldi is the only backend today, and it needs a config naming its models
@@ -113,7 +131,7 @@ def load_verifier(config_path: Path | None, train_dir: Path | None = None) -> Ve
         return NoVerifier()
 
     try:
-        return KaldiVerifier(config_path, train_dir=train_dir)
+        return KaldiVerifier(config_path, train_dir=train_dir, split=split)
     except Exception:  # pylint: disable=broad-except
         _LOGGER.exception("Cannot load %s: nothing will be verified", config_path)
         return NoVerifier()

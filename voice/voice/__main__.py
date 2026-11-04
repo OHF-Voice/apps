@@ -15,7 +15,7 @@ from aiohttp import web
 
 from . import NAME, __version__
 from .server import build_app
-from .verify import load_verifier
+from .verify import SPLIT_NONE, SPLITS, load_verifier
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,6 +37,16 @@ def main() -> None:
         "--train-dir",
         help="Where wake word decoding graphs are built (default: beside the config)",
     )
+    parser.add_argument(
+        "--split",
+        choices=SPLITS,
+        default=SPLIT_NONE,
+        help=(
+            "Which boundary to send back for speech-to-text to start at: "
+            "none keeps the satellite's own (default), kaldi sends where the "
+            "decode aligned the end of the wake phrase"
+        ),
+    )
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
@@ -52,6 +62,7 @@ async def _run(args: argparse.Namespace) -> None:
     verifier = load_verifier(
         Path(args.wake_config) if args.wake_config else None,
         Path(args.train_dir) if args.train_dir else None,
+        split=args.split,
     )
     try:
         await verifier.start()

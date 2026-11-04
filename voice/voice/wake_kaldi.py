@@ -58,7 +58,7 @@ from .protocol import (
     bytes_to_ms,
     ms_to_bytes,
 )
-from .verify import Verifier
+from .verify import SPLIT_KALDI, SPLIT_NONE, Verifier
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -77,8 +77,14 @@ class KaldiVerifier(Verifier):
     day costs what the rest do, and ``/info`` is true as soon as it answers.
     """
 
-    def __init__(self, config_path: Path, train_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        config_path: Path,
+        train_dir: Path | None = None,
+        split: str = SPLIT_NONE,
+    ) -> None:
         self.config_path = Path(config_path)
+        self.split = split
         self.config: ServiceConfig = load_config(self.config_path)
         if train_dir is not None:
             # Graphs are cached build output, not configuration: in the app
@@ -200,8 +206,7 @@ class KaldiVerifier(Verifier):
             return False
         return result.split >= (window_bytes / (SAMPLE_RATE * SAMPLE_WIDTH)) - EDGE_SECONDS
 
-    @staticmethod
-    def _verdict(result: VerifyResult, offset: int) -> Verdict:
+    def _verdict(self, result: VerifyResult, offset: int) -> Verdict:
         """The library's result, with its times moved back to the window's start."""
         split_ms = result.split_ms
         if split_ms is not None:
@@ -209,9 +214,14 @@ class KaldiVerifier(Verifier):
         detail = result.to_dict()
         if offset:
             detail["offset_ms"] = bytes_to_ms(offset)
+        if split_ms is not None:
+            # Always reported, so the alignment can be compared against
+            # another placement without changing what the pipeline cuts at.
+            detail["split_ms"] = split_ms
+        offered = (self.split == SPLIT_KALDI) and result.accepted
         return Verdict(
             accepted=result.accepted,
             reason=result.rejected_by,
-            wake_word_audio_ms=split_ms if result.accepted else None,
+            wake_word_audio_ms=split_ms if offered else None,
             detail=detail,
         )

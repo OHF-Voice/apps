@@ -40,9 +40,16 @@ sends more of what the satellite is streaming. That exists because the useful
 amount of audio *after* the detection is not a constant — see "The retry"
 below.
 
-`wake_word_audio_ms` is where the wake phrase really ends. Home Assistant starts speech-to-text
-there instead of at the detection, which is only where a threshold happened to
-be crossed.
+`wake_word_audio_ms` is where the wake phrase really ends, and is sent only with
+`--split kaldi`. By default it is absent and Home Assistant keeps the boundary the
+satellite reported.
+
+The alignment is real, but it is not yet a better boundary to cut at: the
+experimental app measured Kaldi's end of the wake phrase landing a median
+0.3-0.4 s after a CTC placement of the same audio, which is far enough to take
+the first word of the command with it (76.2% of commands correct against 89.6%).
+It is always reported in `detail.split_ms`, so a placement can be compared
+against it without changing what the pipeline cuts at.
 
 ## The verifier
 

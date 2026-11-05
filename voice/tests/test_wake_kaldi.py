@@ -18,8 +18,14 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from voice.protocol import MoreAudio, Verdict, VerifyRequest, ms_to_bytes  # noqa: E402
-from voice.verify import SPLIT_KALDI, SPLIT_NONE  # noqa: E402
+from voice.protocol import ms_to_bytes  # noqa: E402
+from voice.verify import (  # noqa: E402
+    SPLIT_KALDI,
+    SPLIT_NONE,
+    MoreAudio,
+    Verdict,
+    VerifyRequest,
+)
 from voice.wake_kaldi import TAIL_MS, KaldiVerifier  # noqa: E402
 
 PREROLL_MS = 1000

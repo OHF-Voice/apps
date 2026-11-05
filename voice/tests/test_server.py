@@ -1,6 +1,7 @@
-"""The websocket exchange, including the ways it is allowed to go wrong."""
+"""One run over the websocket, including the ways it is allowed to go wrong."""
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -10,19 +11,23 @@ from aiohttp.test_utils import TestServer
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from voice import vad  # noqa: E402
 from voice.protocol import (  # noqa: E402
     API_VERSION,
-    AudioEnd,
-    MoreAudio,
-    Verdict,
-    VerifyRequest,
+    RunStart,
     WakeWordInfo,
+    ms_to_bytes,
     normalize_wake_word,
 )
 from voice.server import build_app  # noqa: E402
-from voice.verify import Verifier  # noqa: E402
+from voice.verify import MoreAudio, Verdict, Verifier  # noqa: E402
 
-AUDIO = b"\x00\x01" * 8000  # 1 s
+WAKE_MS = 1000
+"""How much of every run below the satellite calls the wake word."""
+
+
+def pcm(ms: int) -> bytes:
+    return b"\x00\x00" * (ms_to_bytes(ms) // 2)
 
 
 class FakeVerifier(Verifier):
@@ -36,125 +41,287 @@ class FakeVerifier(Verifier):
     def wake_words(self):
         return [WakeWordInfo(id="okay_nabu", phrase="okay nabu")]
 
-    async def verify(self, request, pcm, final):
-        self.seen.append((request, len(pcm), final))
+    async def verify(self, request, pcm_data, final):
+        self.seen.append((request, len(pcm_data), final))
         answer = self.answers.pop(0)
         if isinstance(answer, Exception):
             raise answer
         return answer
 
 
+class ScriptedDetector(vad.Detector):
+    """A voice activity detector that hears what the test wrote down.
+
+    10 ms a chunk, one probability each, the last one repeating. Silero on
+    synthetic audio would be an experiment, not a test.
+    """
+
+    chunk_bytes = 160 * 2
+
+    def __init__(self, probabilities):
+        self._probabilities = list(probabilities) or [0.0]
+        self.chunks = 0
+
+    def __call__(self, chunk):
+        index = min(self.chunks, len(self._probabilities) - 1)
+        self.chunks += 1
+        return self._probabilities[index]
+
+
+def hears(monkeypatch, probabilities):
+    """Make the endpointer hear this, whatever the audio actually is."""
+    monkeypatch.setattr(
+        vad, "make_detector", lambda gain=1.0: ScriptedDetector(probabilities)
+    )
+
+
 def run(coro):
     return asyncio.run(coro)
 
 
-async def _exchange(verifier, chunks=(AUDIO,), request=None, rounds=1):
-    """One verification, following up to ``rounds`` more-audio requests."""
+async def _run(verifier, start=None, command_ms=0, chunk_ms=100, pause=0.0):
+    """One whole run, returning every event the app sent.
+
+    The client does not close: the app does, when it has said everything it
+    has to say, which is also how a test knows the run is over.
+    """
+    if start is None:
+        start = RunStart(wake_word_phrase="okay nabu", wake_word_audio_ms=WAKE_MS)
+
     server = TestServer(build_app(verifier, "Voice", "0.1.0"))
     await server.start_server()
     try:
         async with ClientSession() as session:
-            async with session.ws_connect(server.make_url("/verify")) as websocket:
-                verify = request or VerifyRequest(
-                    wake_word_phrase="okay nabu", wake_word_audio_ms=1000
-                )
-                await websocket.send_json(verify.to_json())
-                for chunk in chunks:
-                    await websocket.send_bytes(chunk)
-                await websocket.send_json(AudioEnd(final=rounds == 0).to_json())
+            async with session.ws_connect(server.make_url("/run")) as websocket:
+                await websocket.send_json(start.to_json())
+                await websocket.send_bytes(pcm(start.wake_word_audio_ms))
+                if pause:
+                    # Let the app get as far as it can on the wake word alone
+                    await asyncio.sleep(pause)
+                for _ in range(command_ms // chunk_ms):
+                    await websocket.send_bytes(pcm(chunk_ms))
+                await websocket.send_json({"type": "audio-end"})
 
-                while True:
-                    answer = await websocket.receive_json()
-                    if answer["type"] != "more-audio":
-                        return answer
-                    rounds -= 1
-                    await websocket.send_bytes(AUDIO)
-                    await websocket.send_json(AudioEnd(final=rounds <= 0).to_json())
+                return [
+                    json.loads(message.data)
+                    async for message in websocket
+                    if message.type.name == "TEXT"
+                ]
     finally:
         await server.close()
 
 
-def test_info():
-    async def go():
-        server = TestServer(build_app(FakeVerifier([]), "Voice", "0.1.0"))
-        await server.start_server()
-        try:
-            async with ClientSession() as session:
-                async with session.get(server.make_url("/info")) as response:
-                    return await response.json()
-        finally:
-            await server.close()
+async def _info(verifier):
+    server = TestServer(build_app(verifier, "Voice", "0.1.0"))
+    await server.start_server()
+    try:
+        async with ClientSession() as session:
+            async with session.get(server.make_url("/info")) as response:
+                return await response.json()
+    finally:
+        await server.close()
 
-    info = run(go())
+
+# ----------------------------------------------------------------------
+# What the app says it can do
+
+
+def test_info():
+    info = run(_info(FakeVerifier([])))
     assert info["api_version"] == API_VERSION
-    assert info["name"] == "Voice"
     assert info["wake_words"] == [{"id": "okay_nabu", "phrase": "okay nabu"}]
+    # Home Assistant is told the ceiling rather than discovering it as silence
+    assert info["max_run_ms"] > 0
+
+
+# ----------------------------------------------------------------------
+# The wake word
 
 
 def test_accepted_carries_the_split():
     verifier = FakeVerifier([Verdict(accepted=True, wake_word_audio_ms=940)])
-    answer = run(_exchange(verifier))
-    assert answer["accepted"] is True
-    assert answer["wake_word_audio_ms"] == 940
+    events = run(_run(verifier, start=RunStart(wake_word_phrase="okay nabu", wake_word_audio_ms=WAKE_MS)))
 
-    request, num_bytes, final = verifier.seen[0]
-    assert request.wake_word_phrase == "okay nabu"
-    assert request.wake_word_audio_ms == 1000
-    assert num_bytes == len(AUDIO)
-    assert final is False
-
-
-def test_rejected_keeps_its_reason():
-    verifier = FakeVerifier([Verdict(accepted=False, reason="confusable")])
-    answer = run(_exchange(verifier))
-    assert answer["accepted"] is False
-    assert answer["reason"] == "confusable"
+    assert events == [
+        {
+            "type": "wake-word-end",
+            "wake_word_output": {
+                "wake_word_phrase": "okay nabu",
+                "wake_word_audio_ms": 940,
+            },
+        }
+    ]
 
 
-def test_more_audio_extends_the_window():
+def test_accepting_without_a_split_keeps_the_satellite_s():
+    verifier = FakeVerifier([Verdict(accepted=True)])
+    events = run(_run(verifier))
+
+    assert events[0]["wake_word_output"]["wake_word_audio_ms"] == WAKE_MS
+
+
+def test_rejected_keeps_its_reason_and_ends_the_run():
+    verifier = FakeVerifier([Verdict(accepted=False, reason="last")])
+    events = run(_run(verifier, command_ms=500))
+
+    assert events == [
+        {
+            "type": "wake-word-rejected",
+            "wake_word_output": {"wake_word_phrase": "okay nabu", "reason": "last"},
+        }
+    ]
+
+
+def test_more_audio_is_waited_for_rather_than_asked_for():
+    """The verifier can see further into the run; Home Assistant is not asked."""
     verifier = FakeVerifier([MoreAudio(ms=300), Verdict(accepted=True)])
-    answer = run(_exchange(verifier, rounds=1))
-    assert answer["accepted"] is True
+    events = run(_run(verifier, command_ms=500, pause=0.05))
 
-    # The whole window is offered again, not just the new audio.
-    assert [seen[1] for seen in verifier.seen] == [len(AUDIO), 2 * len(AUDIO)]
-    assert [seen[2] for seen in verifier.seen] == [False, True]
+    assert events[0]["type"] == "wake-word-end"
+    first, second = verifier.seen
+    assert first[1] == ms_to_bytes(WAKE_MS)
+    assert second[1] >= first[1] + ms_to_bytes(300)
+    # It was never told the run was over: the audio it wanted arrived
+    assert [seen[2] for seen in verifier.seen] == [False, False]
 
 
 def test_asking_for_audio_that_is_not_coming_accepts():
     verifier = FakeVerifier([MoreAudio(ms=300)])
-    answer = run(_exchange(verifier, rounds=0))
-    assert answer["accepted"] is True
-    assert answer["reason"] == "no_more_audio"
+    events = run(_run(verifier))
+
+    assert events[0]["type"] == "wake-word-end"
+    assert verifier.seen[-1][2] is True  # it was told there would be no more
 
 
 def test_a_verifier_that_raises_accepts():
-    verifier = FakeVerifier([RuntimeError("decoder died")])
-    answer = run(_exchange(verifier))
-    assert answer["accepted"] is True
-    assert answer["reason"] == "error"
+    verifier = FakeVerifier([RuntimeError("the decoder fell over")])
+    events = run(_run(verifier))
+
+    assert events[0]["type"] == "wake-word-end"
 
 
-def test_audio_without_a_request_accepts():
-    async def go():
-        server = TestServer(build_app(FakeVerifier([]), "Voice", "0.1.0"))
-        await server.start_server()
-        try:
-            async with ClientSession() as session:
-                async with session.ws_connect(server.make_url("/verify")) as websocket:
-                    await websocket.send_bytes(AUDIO)
-                    await websocket.send_json(AudioEnd(final=True).to_json())
-                    return await websocket.receive_json()
-        finally:
-            await server.close()
+def test_a_wake_word_it_does_not_know_is_answered_at_once():
+    """Rather than leaving Home Assistant to sit out its deadline."""
+    verifier = FakeVerifier([])
+    events = run(
+        _run(
+            verifier,
+            start=RunStart(wake_word_phrase="hey jarvis", wake_word_audio_ms=WAKE_MS),
+        )
+    )
 
-    answer = run(go())
-    assert answer["accepted"] is True
-    assert answer["reason"] == "no_request"
+    assert events[0] == {
+        "type": "wake-word-end",
+        "wake_word_output": {
+            "wake_word_phrase": "hey jarvis",
+            "wake_word_audio_ms": WAKE_MS,
+        },
+    }
+    assert not verifier.seen
+
+
+def test_a_run_with_no_wake_word_is_not_judged():
+    verifier = FakeVerifier([])
+    events = run(_run(verifier, start=RunStart()))
+
+    assert events == []
+    assert not verifier.seen
+
+
+# ----------------------------------------------------------------------
+# The end of the command
+
+
+def test_speech_and_silence_are_reported(monkeypatch):
+    # 0.3 s of speech, then silence: speech starts after 0.2 s of it, and
+    # 1.0 s of silence (0.7 asked for, plus this app's offset) ends it.
+    hears(monkeypatch, [1.0] * 30 + [0.0])
+    verifier = FakeVerifier([Verdict(accepted=True)])
+
+    events = run(
+        _run(
+            verifier,
+            start=RunStart(
+                wake_word_phrase="okay nabu",
+                wake_word_audio_ms=WAKE_MS,
+                silence_seconds=0.7,
+            ),
+            command_ms=2000,
+        )
+    )
+
+    assert [event["type"] for event in events] == [
+        "wake-word-end",
+        "stt-vad-start",
+        "stt-vad-end",
+    ]
+    # Timestamps are milliseconds from the first audio byte of the run, so
+    # they count the wake word too
+    assert events[1]["timestamp"] == WAKE_MS + 200
+    assert events[2]["timestamp"] == WAKE_MS + 1300
+
+
+def test_nothing_said_still_ends_the_command(monkeypatch):
+    hears(monkeypatch, [0.0])
+    verifier = FakeVerifier([Verdict(accepted=True)])
+
+    events = run(
+        _run(
+            verifier,
+            start=RunStart(
+                wake_word_phrase="okay nabu",
+                wake_word_audio_ms=WAKE_MS,
+                silence_seconds=0.7,
+            ),
+            command_ms=8500,
+            chunk_ms=500,
+        )
+    )
+
+    assert [event["type"] for event in events] == ["wake-word-end", "stt-vad-end"]
+    assert events[1]["timestamp"] == WAKE_MS + 8000
+
+
+def test_endpointing_can_be_switched_off(monkeypatch):
+    hears(monkeypatch, [1.0] * 30 + [0.0])
+    verifier = FakeVerifier([Verdict(accepted=True)])
+
+    events = run(
+        _run(
+            verifier,
+            start=RunStart(
+                wake_word_phrase="okay nabu",
+                wake_word_audio_ms=WAKE_MS,
+                silence_seconds=None,
+            ),
+            command_ms=2000,
+        )
+    )
+
+    assert [event["type"] for event in events] == ["wake-word-end"]
+
+
+def test_a_run_that_starts_at_speech_is_still_endpointed(monkeypatch):
+    hears(monkeypatch, [1.0] * 30 + [0.0])
+    verifier = FakeVerifier([])
+
+    events = run(
+        _run(
+            verifier,
+            start=RunStart(silence_seconds=0.7),
+            command_ms=2000,
+        )
+    )
+
+    assert [event["type"] for event in events] == ["stt-vad-start", "stt-vad-end"]
+    assert events[0]["timestamp"] == 200
+
+
+# ----------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    "spelling", ["okay_nabu", "okay nabu", "Okay-Nabu", "OKAY_NABU"]
+    "spelling", ["okay nabu", "Okay Nabu", "okay-nabu", "okay_nabu"]
 )
 def test_one_wake_word_many_spellings(spelling):
     assert normalize_wake_word(spelling) == "okay_nabu"
@@ -163,4 +330,4 @@ def test_one_wake_word_many_spellings(spelling):
 def test_knows_only_what_it_has():
     verifier = FakeVerifier([])
     assert verifier.knows("Okay Nabu")
-    assert not verifier.knows("hey_jarvis")
+    assert not verifier.knows("hey jarvis")

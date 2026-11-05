@@ -24,8 +24,8 @@ from after the detection. The experimental app measured this both ways
 across four speakers: sliding always cost two of them (-1.4 and -2.8 points)
 what it gained the one being truncated, while sliding only on a pinned split
 gained +3.8 and +0.7 and took nothing from anyone. So the window grows only
-when the alignment asks for it -- which, over the websocket, is a
-``more-audio`` message rather than a wait.
+when the alignment asks for it, and the app waits for that much more of the
+run to arrive rather than asking Home Assistant for it.
 """
 
 from __future__ import annotations
@@ -53,14 +53,18 @@ from .protocol import (
     SAMPLE_CHANNELS,
     SAMPLE_RATE,
     SAMPLE_WIDTH,
-    MoreAudio,
-    Verdict,
-    VerifyRequest,
     WakeWordInfo,
     bytes_to_ms,
     ms_to_bytes,
 )
-from .verify import SPLIT_KALDI, SPLIT_NONE, Verifier
+from .verify import (
+    SPLIT_KALDI,
+    SPLIT_NONE,
+    MoreAudio,
+    Verdict,
+    Verifier,
+    VerifyRequest,
+)
 
 _LOGGER = logging.getLogger(__name__)
 

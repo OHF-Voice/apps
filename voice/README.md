@@ -1,21 +1,24 @@
 # Voice
 
-A second opinion on the wake words your voice satellites hear.
+A second opinion on what your voice satellites hear.
 
 A satellite's wake word detector is a small classifier running on every frame
 of audio, on a microcontroller, tuned to fire cheaply — because a device that
 misses its name is worse than one that occasionally answers the television.
-This app is the other half of that trade: Home Assistant sends it the audio
-the detector fired on, and it says whether that was really the wake word
-before the command is acted on.
+Home Assistant's own end-of-command detection is a handful of thresholds over
+the same stream. Both are what fits where they run.
+
+This app is the other half of that trade. Home Assistant streams it a whole
+interaction's audio, and it answers three questions: was that really the wake
+word, where does the command begin, and where does it end.
 
 It has no interface and nothing to configure. Install it, and Home Assistant
 finds it.
 
 ## What it needs from Home Assistant
 
-Verification only happens when all of this is true, and nothing breaks when
-it isn't:
+The wake word is only second-guessed when all of this is true, and nothing
+breaks when it isn't:
 
 * the satellite sends the audio it buffered before the detection — on ESPHome
   devices, wake word audio;
@@ -23,33 +26,57 @@ it isn't:
 * the `voice_support` integration is set up, which the Supervisor arranges when
   the app starts.
 
-Otherwise the detection stands exactly as the device reported it.
+Otherwise the detection stands exactly as the device reported it. Finding the
+end of the command needs none of that, and happens for every run.
 
-## How a verification goes
+## How a run goes
 
 ```
-HA  -> text    {"type": "verify", "wake_word_phrase": "okay nabu", "wake_word_audio_ms": 1000, ...}
-HA  -> binary  16 kHz 16-bit mono PCM
-HA  -> text    {"type": "audio-end", "final": false}
-app -> text    {"type": "verdict", "accepted": true, "wake_word_audio_ms": 940, ...}
+HA  -> text    {"type": "run-start", "wake_word_phrase": "okay nabu", "wake_word_audio_ms": 1000, ...}
+HA  -> binary  16 kHz 16-bit mono PCM, continuously
+HA  -> text    {"type": "audio-end"}
+app -> text    {"type": "wake-word-end", "wake_word_output": {"wake_word_audio_ms": 1000}}
+app -> text    {"type": "stt-vad-start", "timestamp": 1840}
+app -> text    {"type": "stt-vad-end", "timestamp": 4120}
 ```
 
-One websocket per detection, on `/verify`. An app may answer `audio-end` with
-`{"type": "more-audio", "ms": 300}` instead of a verdict, and Home Assistant
-sends more of what the satellite is streaming. That exists because the useful
-amount of audio *after* the detection is not a constant — see "The retry"
-below.
+One websocket per run, on `/run`. [PROTOCOL.md](PROTOCOL.md) is the whole
+agreement: every message, and the rules that are not messages — reading audio
+separately from making sense of it, who gets to end the command, and what each
+failure falls back to.
 
-`wake_word_audio_ms` is where the wake phrase really ends, and is sent only with
-`--split kaldi`. By default it is absent and Home Assistant keeps the boundary the
-satellite reported.
+The events back are Home Assistant's own pipeline events, so nothing in
+between has to translate them. `wake_word_audio_ms` is where the wake phrase
+ends, which is already where speech-to-text starts.
 
-The alignment is real, but it is not yet a better boundary to cut at: the
-experimental app measured Kaldi's end of the wake phrase landing a median
-0.3-0.4 s after a CTC placement of the same audio, which is far enough to take
-the first word of the command with it (76.2% of commands correct against 89.6%).
-It is always reported in `detail.split_ms`, so a placement can be compared
-against it without changing what the pipeline cuts at.
+Today the app sends back the boundary the satellite reported. The Kaldi
+alignment is real, but not yet a better place to cut: the experimental app
+measured its end of the wake phrase landing a median 0.3-0.4 s after a CTC
+placement of the same audio, far enough to take the first word of the command
+with it (76.2% of commands correct against 89.6%). It is logged, so a better
+placement can be compared against it.
+
+## Where the command ends
+
+Silero VAD and microVAD run on the same audio and the louder of the two is
+believed, because each is deaf to things the other hears: a child's commands,
+loud and clear to speech-to-text, were 0.3 s of speech to Silero and left the
+command unstarted for 15 s, where microVAD heard a third of them as speech.
+microVAD in turn hears more of what is not speech.
+
+Two things come from the wake word audio, which the app has in hand because
+the whole run is streamed to it. Silero hears the command raised to a level it
+can work with when the wake word was quiet, and it hears the wake word first —
+started cold at the split it scored a command said straight after the wake
+word ~0.4, where it had heard speech all along ~0.8. Only the detector's copy
+is touched; the audio Home Assistant holds is as it came.
+
+Home Assistant sends the silence the person's voice activity sensitivity asks
+for, and the app adds a constant to it: that number is calibrated against Home
+Assistant's own segmenter, and against these two detectors the same wait is
+longer. The three choices keep their spacing, which is the part that has to
+survive — it is a promise about how long someone may pause, not a tuning of
+this detector.
 
 ## The verifier
 
@@ -84,7 +111,8 @@ after the detection.
 Only then. Measured across four speakers in the experimental app, sliding
 *always* cost two of them (-1.4 and -2.8 points) what it gained the one being
 truncated; sliding only on a pinned split gained +3.8 and +0.7 and took nothing
-from anyone.
+from anyone. Audio for the whole run is already arriving, so this is the app
+waiting rather than asking Home Assistant for anything.
 
 ## Failing open
 
@@ -92,6 +120,10 @@ Every failure path accepts the detection: an app that is down, slow, confused,
 or has no model for the wake word. Wrongly accepting costs one unwanted
 command; wrongly refusing costs a device that no longer answers its name. Only
 a verifier that ran and said no refuses.
+
+The same holds for the command's end. An app that stops answering mid-run
+leaves Home Assistant's own segmenter to find it, because one app going away
+must not leave a command that never ends.
 
 ## Building
 

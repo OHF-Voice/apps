@@ -110,7 +110,7 @@ Sound played when the voice pipeline ends without a response (e.g. no speech det
 Play a short sound while the assistant processes a request (default: `false`).
 Can be toggled at runtime from the Home Assistant device page.
 
-### Option: `listen_during_wake_word`
+### Option: `listen_during_wake_sound`
 
 Start listening while the wake  is still playing. Disabled by default.
 

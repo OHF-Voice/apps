@@ -24,7 +24,7 @@ options:
   refractory_seconds: 2.0
   continue_conversation_delay: 0.5
   enable_thinking_sound: false
-  listen_during_wake_word: false
+  listen_during_wake_sound: false
   wakeup_sound: "/usr/src/sounds/wake_word_triggered.flac"
   processing_sound: "/usr/src/sounds/processing.wav"
   timer_sound: "/usr/src/sounds/timer_finished.flac"
@@ -72,7 +72,7 @@ schema:
   disable_peripheral_api: bool
   debug_logging: bool
   enable_colored_debug: bool
-  listen_during_wake_word: bool
+  listen_during_wake_sound: bool
   mute_sound: str
   unmute_sound: str
   button_double_press_sound: str

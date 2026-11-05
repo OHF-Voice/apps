@@ -1,0 +1,361 @@
+# wyoming-wake-kaldi configuration.
+#
+# Only the wake words listed under `wake_words` are recognized, and only words
+# the model can actually pronounce may be used: a word must either be in the
+# model's lexicon (local/models/<model>/lexicon.db) or be given an explicit
+# pronunciation here. Nothing is ever guessed -- an unknown word is a startup
+# error naming the word.
+#
+# Pronunciations are written in the model's own phone set. For the bundled
+# en_US-rhasspy model that is IPA with stress marks; the full inventory is in
+# local/models/en_US-rhasspy/model/phones/nonsilence_phones.txt and example
+# words are in phoneme_examples.txt. A phoneme outside that inventory is a
+# startup error.
+#
+# A phrase may also carry an inline pronunciation for a single token, written
+# between slashes:
+#
+#     phrases:
+#       - okay /n ˈæ b u/
+#
+# which is equivalent to spelling that word out under `pronunciations`.
+
+# Where the Kaldi/OpenFST binaries live (kaldi/ and openfst/ subdirectories).
+tools_dir: local/wake-kaldi-tools
+
+# Where the per-wake-word decoding graphs are built and cached. Graphs are
+# rebuilt automatically when the phrases, confusables or pronunciations here
+# change.
+train_dir: var/wake-train
+
+# A `detect` stream is verified when `audio-stop` arrives, or as soon as this
+# much audio has been buffered -- whichever comes first. Audio beyond the cap
+# is never decoded.
+#
+# Decode time is roughly linear in window length (~390 ms per second of audio
+# on a Pi 4), so this is the single biggest latency knob.
+#
+# The floor is NOT just "long enough for the wake phrase". The window must
+# also be long enough for the longest CONFUSABLE to finish, because a
+# confusable that gets cut off can never win the kwc decode -- the margin
+# collapses and the false positive is accepted. Measured for "okay nabu"
+# with these confusables: 1.2 s is the cliff (below it both positives start
+# failing and "okay natalie" starts being accepted), 1.4 s is the safe
+# setting. Raise it if you add a longer confusable, or if your on-device
+# detector fires later relative to the wake word.
+max_window_seconds: 1.4
+
+# Keep one decoder process per graph resident between requests. Requires
+# decoderd/verify_decoderd (build it with `decoderd/build.sh local/tools`);
+# without it the service falls back to one-shot subprocess decodes.
+resident_decoders: true
+
+# Kaldi search width. These grammars are tiny and heavily constrained, so the
+# usual wide beam is mostly wasted work: the graph search, not the neural net,
+# dominates (on a Pi 4 the acoustic model costs ~95 ms, the four searches
+# 200-500 ms each). Narrowing the search is the second big latency knob.
+#
+# max_active is NOT applied to the confusable graph, whatever you set here --
+# capping it prunes the rival hypothesis that graph exists to find and
+# silently accepts false positives. See README "Performance".
+#
+# Set beam: 12.0 and max_active: 2147483647 to restore Kaldi's unnarrowed
+# search; it was measured to give identical costs, alignments, split points
+# and verdicts to these values, at ~1.3x the latency.
+decoder:
+  beam: 10.0
+  max_active: 700
+  lattice_beam: 1.0
+
+  # How the four graphs are shared out between resident decoder processes.
+  # Graphs in one process share that process's acoustic pass (identical for
+  # all of them); graphs in different processes run concurrently. So this
+  # trades duplicated neural-net work against parallelism, and neither
+  # extreme wins. Measured on a Pi 4 (4 cores, 1.4 s window):
+  #
+  #   [[kw, bg, prefix, kwc]]        473 ms    88 MB
+  #   [[kw], [bg], [prefix], [kwc]]  382 ms   350 MB
+  #   [[kw, bg], [prefix, kwc]]      359 ms   176 MB   <- default
+  #
+  # Every graph must appear exactly once. On a machine with more cores than
+  # this, one graph per process is faster.
+  #
+  # This only applies when the one decoder for every wake word cannot be
+  # started, which is the usual arrangement: that one holds every wake
+  # word's graphs and decodes the four its request names, so the acoustic
+  # model -- nearly all of what a decoder costs resident -- is held once
+  # rather than once per wake word per group. Measured here on three wake
+  # words: 142 MB against 572 MB, 119 ms against 82 ms.
+  groups:
+    - [kw, bg]
+    - [prefix, kwc]
+
+models:
+  en_US-rhasspy:
+    directory: local/wake-kaldi-models/en_US-rhasspy
+    language: en_US
+
+# Decision thresholds, applied to every wake word unless it overrides them.
+# These were calibrated on labeled far-field recordings of "okay nabu";
+# re-calibrate for a different wake word or microphone.
+#
+#   theta_prefix     reject when the phrase minus its last word is this much
+#                    worse than free background speech (per frame)
+#   theta_last       same, for the last word alone -- the word a confusable
+#                    usually replaces
+#   theta_competitor reject when the best confusable beats the wake phrase by
+#                    more than this (per frame)
+#
+# theta_competitor was lowered from the originally calibrated 0.13 because
+# 0.13 was badly placed in the gap: across the corpus here, true positives
+# score 0.0001-0.0217 and "okay natalie" false positives 0.149-0.865, so 0.13
+# sat 6.0x above the worst positive but only 1.15x below the worst false
+# positive -- nearly all its slack on the wrong side. 0.06 is near the middle
+# (2.8x above positives, 2.5x below the worst false positive).
+#
+# Then raised to theta_last 0.35 / theta_competitor 0.10 for speakers across
+# the room: that corpus was spoken close to the device. On VPE recordings from
+# a few metres away, true positives score up to ~0.16 on theta_competitor and
+# down to -1.6 on theta_last, and 0.25 / 0.06 rejected 30 of 123 far wakes;
+# 0.35 / 0.10 rejects 12. Every close wake (107) is still accepted and every
+# recorded false wake still rejected, the nearest at 0.18 ("okay naru"). But
+# those false wakes were all spoken close up, and the corpus above had one at
+# 0.149: record false wakes from across the room before raising these further.
+defaults:
+  theta_prefix: 0.85
+  theta_last: 0.35
+  theta_competitor: 0.10
+
+wake_words:
+  # The key is the canonical id, reported back in the `detection` message.
+  okay_nabu:
+    model: en_US-rhasspy
+    description: Okay Nabu (Home Assistant Voice)
+
+    # Every id that may appear in a Wyoming `detect` message for this entry.
+    # The key itself is always accepted, as is any name with spaces, dashes
+    # or underscores normalized (so "okay nabu" also matches).
+    names:
+      - ok_nabu
+      - okay nabu
+
+    # Accepted spoken forms. The first one names the wake word in `info`.
+    phrases:
+      - okay nabu
+
+    # Per-wake-word threshold overrides go here, e.g.
+    #   thresholds:
+    #     theta_competitor: 0.10
+    #
+    # These defaults are calibrated for a real voice at the device. Playing a
+    # recording through loudspeakers across a room is a doubly-degraded path
+    # and is mostly rejected as `confusable`; raise theta_competitor to ~0.6
+    # for that kind of bench test only.
+
+    # Pronunciations for words the model's lexicon does not have. Every word
+    # used below that is missing from lexicon.db must appear here.
+    pronunciations:
+      nabu: n ˈæ b u
+      dabu: d ˈæ b u
+      labu: l ɑ b ˈu
+      mabu: m ɑ b u
+      naba: n ˈɑ b ə
+      nabby: n ˈæ b i
+      nabo: n ˈɑ b oʊ
+      naboo: n ə b ˌu
+      nabou: n ə b ˈu
+      nadu: n ə d ˌu
+      nagu: n ɑ ɡ ˈu
+      nahbu: n ˈɑ b u
+      nalu: n ˈæ l u
+      namu: n ɑ m ˈu
+      nanu: n ˈɑ n u
+      napu: n ɑ p ˈu
+      naru: n ɑ ɹ u
+      naruto: n ɑ ɹ ˈu t oʊ
+      nasu: n ˈɑ s u
+      navu: n ˈɑ v ˌu
+      nia: n i ə
+      noor: n ˈʊ ɹ
+
+    # Phrases that must NOT be accepted as this wake word. Each is decoded as
+    # a competing alternative; the wake word is rejected when the best of them
+    # beats it by more than theta_competitor. These are generated confusables
+    # plus spoken hard negatives from live calibration sessions.
+    #
+    # "okay gabu" was removed: at a distance the n of "nabu" is weak. Gabu was
+    # the closest rival in 8 of 11 far-field VPE calls, beating the real wake
+    # word by more than theta_competitor in 5, and never the closest rival of
+    # a false wake.
+    #
+    # "okay no" was removed because the first stage already blocks it, so the
+    # entry could only ever cost recall. Fed straight to micro_wake_word with
+    # no room in between and the level swept, "okay nabu" peaks at 0.95 and
+    # "okay no" at 0.08 -- below the 0.13 the detector reaches on ordinary TV
+    # audio, against a cutoff of 0.50. It was also the only rival beating
+    # "okay nabu" for the adult woman in the corpus: all 17 of her confusable
+    # rejections on one VPE channel were this entry, and dropping it is worth
+    # 8 points of verification to her and nothing to anyone else.
+    #
+    # "okay now" is a different matter and stays: it fires at 0.59 on the same
+    # test, which is the one rival in this list that genuinely reaches the
+    # verifier.
+    confusables:
+      - okay about
+      - okay bamboo
+      - okay boo
+      - okay dabu
+      - okay knobby
+      - okay labu
+      - okay mabu
+      - okay maybe
+      - okay naba
+      - okay nabby
+      - okay nabil
+      - okay nabo
+      - okay naboo
+      - okay nabou
+      - okay nadia
+      - okay nadine
+      - okay nadu
+      - okay nagu
+      - okay nahbu
+      - okay nalu
+      - okay name
+      - okay namu
+      - okay nancy
+      - okay nanu
+      - okay naomi
+      - okay napkin
+      - okay napu
+      - okay naru
+      - okay naruto
+      - okay nasu
+      - okay natalie
+      - okay natasha
+      - okay nathan
+      - okay nature
+      - okay navu
+      - okay near
+      - okay nebula
+      - okay need
+      - okay neighbor
+      - okay neil
+      - okay nemo
+      - okay never
+      - okay new
+      - okay next
+      - okay nia
+      - okay nice
+      - okay night
+      - okay nina
+      - okay noah
+      - okay noble
+      - okay nobody
+      - okay noel
+      - okay nolan
+      - okay noodle
+      - okay noor
+      - okay nora
+      - okay north
+      - okay nothing
+      - okay nova
+      - okay now
+      - okay nozzle
+      - okay nugget
+      - okay number
+      - okay taboo
+
+  hey_jarvis:
+    model: en_US-rhasspy
+    description: Hey Jarvis
+    names:
+      - hey jarvis
+    phrases:
+      - hey jarvis
+    # Neighbours of "jarvis", plus what the detector fired on and Kaldi still
+    # accepted in synthetic speech (scripts/synth_wake_words.py, README "Wake
+    # words"): "janice", "jealous", "drivers", "darkness", "jockey", "jar",
+    # "jarred" and "guys".
+    confusables:
+      - hey artist
+      - hey avis
+      - hey car keys
+      - hey carpet
+      - hey carver
+      - hey charles
+      - hey charlie
+      - hey chavez
+      - hey darkness
+      - hey davis
+      - hey drivers
+      - hey garlic
+      - hey garvey
+      - hey guys
+      - hey harvest
+      - hey harvey
+      - hey jackson
+      - hey janice
+      - hey jar
+      - hey jarred
+      - hey jars
+      - hey jasmine
+      - hey jasper
+      - hey java
+      - hey jaws
+      - hey jealous
+      - hey jersey
+      - hey jockey
+      - hey lavish
+      - hey marvel
+      - hey marvin
+      - hey mavis
+      - hey nervous
+      - hey parsley
+      - hey service
+      - hey starving
+      - hey travel
+      - hey travis
+
+  hey_mycroft:
+    model: en_US-rhasspy
+    description: Hey Mycroft
+    names:
+      - hey mycroft
+    phrases:
+      - hey mycroft
+    # The lexicon's "mycroft" plus how it is mostly said: "my-craft" and, in
+    # the US, "my-croft" with the vowel of "cot".
+    pronunciations:
+      mycroft:
+        - m ˈaɪ k ɹ ɔ f t
+        - m ˈaɪ k ɹ æ f t
+        - m ˈaɪ k ɹ ɑ f t
+    # Measured on the Mycroft community recordings (README "Wake words"):
+    # "micro", "my crop", "my cough", "mike", "macro", "my car", "my cat",
+    # "my boss", "my raft", "my craft", "my clock" and "my crush" were each
+    # the closest rival of three or more times as many real wake words as of
+    # recorded false wakes, so they cost recall and caught almost nothing.
+    confusables:
+      - hey mickey
+      - hey microphone
+      - hey microsoft
+      - hey microwave
+      - hey mighty
+      - hey my aircraft
+      - hey my credit
+      - hey my crowd
+      - hey my draft
+      - hey my friend
+      - hey my gift
+      - hey my loft
+      - hey my shift
+      - hey my soft
+      - hey nike
+    # Real wake words often say "hey" quickly or under noise: a looser prefix
+    # test and confusable margin keep 88.7% of the recorded wake words the
+    # detector found, against 85.7% at the defaults, for 3.0% of recorded false
+    # wakes accepted against 2.9%.
+    thresholds:
+      theta_prefix: 1.2
+      theta_competitor: 0.15

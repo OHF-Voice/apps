@@ -325,3 +325,48 @@ def test_knows_only_what_it_has():
     verifier = FakeVerifier([])
     assert verifier.knows("Okay Nabu")
     assert not verifier.knows("hey jarvis")
+
+
+def test_the_gain_follows_the_command_as_well_as_the_wake_word(monkeypatch):
+    """A command quieter than the wake word is still heard.
+
+    One said into the microphone and the other from across the room left
+    the command 23 dB down, too quiet to be called speech -- and a command
+    that never starts is one that never ends.
+    """
+    seen: list[bytes] = []
+
+    def _loudness(pcm: bytes) -> float:
+        seen.append(pcm)
+        # Pretend the wake word is loud and the command is not
+        return 1.0 if len(seen) == 1 else 12.0
+
+    monkeypatch.setattr("voice.server.vad_gain", _loudness)
+    hears(monkeypatch, [1.0] * 30 + [0.0])
+
+    captured: list[float] = []
+    real = vad.Endpointer
+
+    def _remember(*args, **kwargs):
+        captured.append(kwargs["gain"])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr("voice.server.Endpointer", _remember)
+
+    run(
+        _run(
+            FakeVerifier([Verdict(accepted=True)]),
+            start=RunStart(
+                wake_word_phrase="okay nabu",
+                wake_word_audio_ms=WAKE_MS,
+                silence_seconds=0.7,
+            ),
+            command_ms=2000,
+        )
+    )
+
+    # Both windows are judged, and the louder of the two wins
+    assert len(seen) == 2
+    assert len(seen[0]) == ms_to_bytes(WAKE_MS)
+    assert len(seen[1]) == ms_to_bytes(vad.GAIN_WINDOW_MS)
+    assert captured == [12.0]

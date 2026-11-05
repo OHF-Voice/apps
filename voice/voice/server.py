@@ -35,7 +35,7 @@ from .protocol import (
     bytes_to_ms,
     ms_to_bytes,
 )
-from .vad import Endpointer, for_silence_seconds, vad_gain
+from .vad import GAIN_WINDOW_MS, Endpointer, for_silence_seconds, vad_gain
 from .verify import MoreAudio, Verdict, Verifier, VerifyRequest
 
 _LOGGER = logging.getLogger(__name__)
@@ -334,18 +334,28 @@ class _Run:
 
         split = ms_to_bytes(start.wake_word_audio_ms)
         split_ms = bytes_to_ms(split)
-        await self.audio.wait_for(split)
+        head = ms_to_bytes(GAIN_WINDOW_MS)
+        await self.audio.wait_for(split + head)
         wake = self.audio.data(0, split)
+
+        # The wake word and the command are not always at the same level --
+        # one said into the microphone and the other from across the room --
+        # and a command too quiet to be called speech is one that never ends.
+        wake_gain = vad_gain(wake)
+        command_gain = vad_gain(self.audio.data(split, split + head))
 
         endpointer = Endpointer(
             for_silence_seconds(start.silence_seconds),
-            gain=vad_gain(wake),
+            gain=max(wake_gain, command_gain),
             warm=wake,
         )
         _LOGGER.debug(
-            "Endpointing from %d ms (gain %.1f, %.2fs of silence ends it)",
+            "Endpointing from %d ms (gain %.1f, from wake %.1f and command"
+            " %.1f; %.2fs of silence ends it)",
             split_ms,
             endpointer.gain,
+            wake_gain,
+            command_gain,
             endpointer.settings.silence_seconds,
         )
 

@@ -13,11 +13,17 @@ The command begins after ``speech_seconds`` of speech and ends after
 resetting it.
 
 The wake word audio -- which the app has, because the whole run is streamed
--- does two things. It sets the gain Silero hears the command at, since
-Silero misses speech far below full scale and a capture without automatic
+-- does two things. It sets the gain the detectors hear the command at,
+since both miss speech far below full scale and a capture without automatic
 gain carries it there. And it warms Silero, which started cold at the split
 scored a command said straight after the wake word ~0.4 against ~0.8 having
 heard it all along.
+
+The gain is the louder of the wake word and the command's own first
+``GAIN_WINDOW_MS``, because the two are not always at the same level: a wake
+word said into the microphone and a command said from across the room left
+the command 23 dB down, too quiet for either detector to call speech, and a
+command that never starts is one that never ends.
 
 A subset of the Voice Labs endpointer, minus speaker identification. The
 numbers are its measurements.
@@ -38,6 +44,9 @@ VAD_LEVEL_DBFS = -30.0
 """Where Silero hears the wake word's loudest moment. Gain only ever raises."""
 
 MAX_VAD_GAIN = 16.0
+
+GAIN_WINDOW_MS = 500
+"""How much of the command to judge its level by, as well as the wake word."""
 
 SETTLE_SECONDS = 0.2
 """After a warm start, the chunks that count for nothing: what Silero
@@ -93,11 +102,11 @@ def for_silence_seconds(silence_seconds: float) -> EndOfSpeech:
 _FRAME = 512
 
 
-def vad_gain(wake: bytes) -> float:
-    """The loudest 32 ms of the audio before the split brought up to
-    ``VAD_LEVEL_DBFS``, at least 1 and at most ``MAX_VAD_GAIN``."""
-    usable = len(wake) // (_FRAME * SAMPLE_WIDTH) * _FRAME * SAMPLE_WIDTH
-    samples = np.frombuffer(wake[:usable], dtype="<i2")
+def vad_gain(pcm: bytes) -> float:
+    """The loudest 32 ms of ``pcm`` brought up to ``VAD_LEVEL_DBFS``, at
+    least 1 and at most ``MAX_VAD_GAIN``."""
+    usable = len(pcm) // (_FRAME * SAMPLE_WIDTH) * _FRAME * SAMPLE_WIDTH
+    samples = np.frombuffer(pcm[:usable], dtype="<i2")
     if not samples.size:
         return 1.0
     frames = samples.astype(np.float64).reshape(-1, _FRAME) / 32768.0
@@ -153,9 +162,13 @@ class MicroDetector(Detector):
 
 
 class BothDetector(Detector):
-    """The likelier of the two, in Silero's chunks: Silero raised by
-    ``gain``, microVAD as it came (its likeliest 10 ms within the chunk).
-    Until microVAD's window has filled, Silero alone."""
+    """The likelier of the two, in Silero's chunks: microVAD's likeliest
+    10 ms within the chunk against Silero's one answer for it. Until
+    microVAD's window has filled, Silero alone.
+
+    Both hear the audio raised by ``gain``. microVAD heard a command 23 dB
+    below the wake word as silence at its own level and as speech raised.
+    """
 
     chunk_bytes = SileroDetector.chunk_bytes
 
@@ -166,7 +179,9 @@ class BothDetector(Detector):
         self._leftover = b""
 
     def __call__(self, chunk: bytes) -> float | None:
-        silero = self.silero(_amplify(chunk, self.gain) if self.gain != 1.0 else chunk)
+        if self.gain != 1.0:
+            chunk = _amplify(chunk, self.gain)
+        silero = self.silero(chunk)
         self._leftover += chunk
         size, micro = self.micro.chunk_bytes, []
         while len(self._leftover) >= size:

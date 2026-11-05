@@ -50,11 +50,8 @@ class FakeVerifier(Verifier):
 
 
 class ScriptedDetector(vad.Detector):
-    """A voice activity detector that hears what the test wrote down.
-
-    10 ms a chunk, one probability each, the last one repeating. Silero on
-    synthetic audio would be an experiment, not a test.
-    """
+    """Hears what the test wrote down: 10 ms a chunk, one probability each,
+    the last repeating. Silero on synthetic audio would be an experiment."""
 
     chunk_bytes = 160 * 2
 
@@ -80,11 +77,8 @@ def run(coro):
 
 
 async def _run(verifier, start=None, command_ms=0, chunk_ms=100, pause=0.0):
-    """One whole run, returning every event the app sent.
-
-    The client does not close: the app does, when it has said everything it
-    has to say, which is also how a test knows the run is over.
-    """
+    """One whole run, returning every event the app sent. The app closes, not
+    the client, which is how a test knows the run is over."""
     if start is None:
         start = RunStart(wake_word_phrase="okay nabu", wake_word_audio_ms=WAKE_MS)
 
@@ -173,7 +167,7 @@ def test_rejected_keeps_its_reason_and_ends_the_run():
 
 
 def test_more_audio_is_waited_for_rather_than_asked_for():
-    """The verifier can see further into the run; Home Assistant is not asked."""
+    """The verifier hears further into the run without asking for it."""
     verifier = FakeVerifier([MoreAudio(ms=300), Verdict(accepted=True)])
     events = run(_run(verifier, command_ms=500, pause=0.05))
 

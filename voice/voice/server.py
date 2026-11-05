@@ -1,24 +1,14 @@
-"""The HTTP and websocket server Home Assistant talks to.
+"""The HTTP and websocket server Home Assistant talks to: ``/info``,
+``/run``, and ``/health`` for the container check. No page and no settings.
 
-Three endpoints and no page: this app has no interface of its own, and
-nothing about it is configured by hand.
+Reading the audio and making sense of it are separate tasks on purpose. A
+verification holds the decoder for roughly a tenth of a second while audio
+keeps arriving, so the handler does nothing but drain the socket and
+``_Run`` consumes the buffer behind it.
 
-``GET /info``    what can be verified here, and how much audio a run may hold
-``GET /run``     one websocket, one interaction, audio in and events out
-``GET /health``  for the container health check
-
-Reading the audio and making sense of it are separate tasks on purpose.
-Audio arrives for the whole run while a verification holds the decoder for
-roughly a tenth of a second, so the handler below does nothing but drain the
-socket into a buffer, and ``_Run`` consumes that buffer behind it. An app
-that read only as fast as it decoded would stall the socket and grow a queue
-inside Home Assistant.
-
-The other guiding rule is that an app which is broken, slow or confused must
-not make the assistant deaf. Every failure path -- an unparseable message, a
-decode that raises, a decode that overruns -- ends in *accepting* the
-detection, because the cost of wrongly accepting is one unwanted command and
-the cost of wrongly refusing is a device that no longer answers its name.
+Every failure path accepts the detection -- an unparseable message, a decode
+that raises or overruns -- because wrongly accepting costs one unwanted
+command and wrongly refusing costs a device that no longer answers its name.
 Only a verifier that ran and said no refuses.
 """
 
@@ -93,12 +83,9 @@ async def _info(request: web.Request) -> web.Response:
 
 
 class _Audio:
-    """The run's audio as it arrives, read by offset.
-
-    One writer (the socket) and one reader (the analysis). It is bounded:
-    past ``MAX_RUN_BYTES`` the audio is dropped rather than buffered, which
-    the reader sees as the run having run out.
-    """
+    """The run's audio as it arrives, read by offset: one writer (the
+    socket), one reader (the analysis). Past ``MAX_RUN_BYTES`` audio is
+    dropped, which the reader sees as the run having run out."""
 
     def __init__(self, max_bytes: int = MAX_RUN_BYTES) -> None:
         self._buffer = bytearray()
@@ -144,8 +131,8 @@ class _Audio:
             await self._changed.wait()
 
     async def wait_beyond(self, offset: int) -> bytes:
-        """Whatever has arrived past ``offset``, waiting for it. Empty at the
-        end of the run."""
+        """Whatever has arrived past ``offset``, waiting for it. Empty at
+        the end of the run."""
         if await self.wait_for(offset + 1):
             return self.data(offset)
         return b""
@@ -154,15 +141,12 @@ class _Audio:
 async def _run(request: web.Request) -> web.WebSocketResponse:
     """One interaction, from the satellite's first audio to its last.
 
-    The connection carries a single run and closes: audio frames have
-    nowhere to put a run id, so sharing one connection would mean tagging
-    every chunk of every satellite's audio, and a run that wedges then takes
-    nothing else with it.
+    One run per connection: audio frames have nowhere to put a run id, so
+    sharing one would mean tagging every chunk of every satellite's audio.
 
-    Reading and analysing are two tasks, and the first of them to finish
-    ends the run -- the analysis because it has said everything it has to
-    say, the reader because Home Assistant hung up and there is nobody left
-    to say it to.
+    Reading and analysing are two tasks, and the first to finish ends the
+    run -- the analysis because it has said everything, the reader because
+    Home Assistant hung up and there is nobody left to say it to.
     """
     websocket = web.WebSocketResponse()
     await websocket.prepare(request)
@@ -203,11 +187,8 @@ class _Run:
         self._started.set()
 
     async def drain(self) -> None:
-        """Read the socket into the buffer, and nothing else.
-
-        Whatever the analysis is busy with, audio keeps arriving, so this
-        task never waits on it.
-        """
+        """Read the socket into the buffer and nothing else: whatever the
+        analysis is busy with, audio keeps arriving."""
         async for message in self.websocket:
             if message.type == WSMsgType.BINARY:
                 self.audio.feed(message.data)
@@ -235,8 +216,8 @@ class _Run:
     def give_up(self) -> None:
         """The socket is gone; stop waiting for a run that never started.
 
-        A run that did start is left to finish what it was saying: the audio
-        is closed behind it, so nothing it is waiting on can hang.
+        One that did start is left to finish what it was saying, with the
+        audio closed behind it so nothing it waits on can hang.
         """
         if self.start is None:
             self._abandoned = True
@@ -271,9 +252,8 @@ class _Run:
             return True
 
         if not self.verifier.knows(phrase):
-            # Nothing to say about it, said immediately: Home Assistant would
-            # otherwise sit out its deadline before falling back to exactly
-            # this.
+            # Said at once, rather than leaving Home Assistant to sit out its
+            # deadline before falling back to exactly this.
             await self.send(WakeWordEnd(phrase, start.wake_word_audio_ms))
             return True
 
@@ -312,14 +292,13 @@ class _Run:
     async def _judge(self, request: VerifyRequest) -> Verdict:
         """Run the verifier over as much of the run as it asks to see.
 
-        A verifier that raises or hangs is a broken verifier, not evidence
-        about the audio: refusing on its behalf would silence the satellite.
+        One that raises or hangs is a broken verifier, not evidence about
+        the audio: refusing on its behalf would silence the satellite.
         """
         wanted = ms_to_bytes(request.wake_word_audio_ms)
         if wanted <= 0:
-            # A detection that did not say how long it was. The window is
-            # then everything there is, so there is nothing to judge until
-            # the run is over.
+            # A detection that did not say how long it was: the window is
+            # everything there is, so wait for the run to end.
             wanted = MAX_RUN_BYTES
         final = not await self.audio.wait_for(wanted)
 
@@ -340,13 +319,11 @@ class _Run:
             if isinstance(answer, Verdict):
                 return answer
             if final:
-                # It asked for audio that is not coming. Its last word was
-                # the verdict it already had and chose not to send; take the
-                # safe reading of that rather than inventing a refusal.
+                # It asked for audio that is not coming; take the safe
+                # reading rather than inventing a refusal.
                 return Verdict(accepted=True, reason="no_more_audio")
 
-            # It wants to see further into the run, so wait for that much
-            # more of it to arrive.
+            # It wants to hear further into the run: wait for that much more.
             wanted = len(pcm) + ms_to_bytes(answer.ms)
             final = not await self.audio.wait_for(wanted)
 
@@ -399,8 +376,8 @@ class _Run:
                 return
 
         if self.audio.overflowed:
-            # The ceiling is the app's, so Home Assistant is told where the
-            # boundary is and the reason is written down here.
+            # The ceiling is the app's: Home Assistant is told where the
+            # boundary is, and why is written down here.
             _LOGGER.info(
                 "Run reached max_run_ms (%d ms); ending the command there",
                 bytes_to_ms(MAX_RUN_BYTES),

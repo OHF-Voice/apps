@@ -1,39 +1,26 @@
 """Finding the end of a command: a voice activity detector's probabilities,
 with hysteresis.
 
-Silero VAD (pysilero-vad) and microVAD (pymicro-vad) run on the same audio
-and the louder of the two is believed, because each one is deaf to things
-the other hears. Silero misses some voices: a child's commands, loud and
-clear to speech-to-text, were 0.3 s of speech to it and left the command
-unstarted for 15 s, where microVAD heard a third of them as speech. microVAD
-in turn hears more of what is not speech.
+Silero and microVAD run on the same audio and the louder of the two is
+believed, because each is deaf to things the other hears: a child's commands
+were 0.3 s of speech to Silero and a third speech to microVAD.
 
-Each chunk of audio is speech or silence. Speech begins at
-``speech_threshold`` and lasts until the probability falls below
-``silence_threshold``; between the two, a chunk is whatever the one before
-it was. The command has begun after ``speech_seconds`` of speech -- until
-then, silence ends nothing -- and ends after ``silence_seconds`` of silence.
-Speech during that silence starts it over only after ``resume_seconds`` in a
-row, so a cough or a click pauses the count rather than resetting it. With no
-speech at all ``no_speech_seconds`` after the wake word, nothing was said.
+A chunk is speech at ``speech_threshold`` and stays so until it falls below
+``silence_threshold``; between the two it is whatever the chunk before was.
+The command begins after ``speech_seconds`` of speech and ends after
+``silence_seconds`` of silence, which speech restarts only after
+``resume_seconds`` in a row, so a cough pauses the count rather than
+resetting it.
 
-Two things come from the wake word audio, which this app has in hand because
-Home Assistant streams the whole run:
+The wake word audio -- which the app has, because the whole run is streamed
+-- does two things. It sets the gain Silero hears the command at, since
+Silero misses speech far below full scale and a capture without automatic
+gain carries it there. And it warms Silero, which started cold at the split
+scored a command said straight after the wake word ~0.4 against ~0.8 having
+heard it all along.
 
-Silero hears the command louder when the wake word was quiet (``gain``). It
-misses speech far below full scale, as a capture without automatic gain
-carries it, and leaves the command unstarted. Only the detector's copy is
-raised; the audio Home Assistant holds is untouched.
-
-Silero also hears the wake word first (``warm``). Started cold at the split,
-it scored a command said straight after the wake word ~0.4, where it had
-heard speech all along ~0.8, and the command waited for a second try to
-begin. What it carries over lasts ~0.15 s, so its first ``SETTLE_SECONDS``
-after the split count for nothing, lest a pause after the wake word end a
-command not yet said.
-
-This is a subset of the endpointer in the experimental Voice Labs app, with
-the speaker-identification parts left out. The numbers are its measurements.
+A subset of the Voice Labs endpointer, minus speaker identification. The
+numbers are its measurements.
 """
 
 from __future__ import annotations
@@ -53,20 +40,16 @@ VAD_LEVEL_DBFS = -30.0
 MAX_VAD_GAIN = 16.0
 
 SETTLE_SECONDS = 0.2
-"""After a warm start, the detector's chunks that count for nothing."""
+"""After a warm start, the chunks that count for nothing: what Silero
+carries over from the wake word lasts ~0.15 s, and a pause after the wake
+word must not end a command not yet said."""
 
 SILENCE_SECONDS_OFFSET = 0.3
-"""Added to the silence Home Assistant asks for.
-
-Home Assistant's number is calibrated against its own segmenter, which reads
-the Speex-enhanced audio's speech probabilities, and 0.7 s is what it calls
-default. Against Silero and microVAD together the same wait is 1.0 s: their
-probabilities are smoother and fall about half a second after the speech
-does, so the same number cuts people off mid-sentence. The user's three
-choices keep their spacing -- aggressive stays as far below default as it
-was -- which is the part that has to survive, since the number is a promise
-about how long someone may pause and not a tuning of this detector.
-"""
+"""Added to the silence Home Assistant asks for. Its 0.7 s default is
+calibrated against its own segmenter; against these two detectors, whose
+probabilities fall about half a second after the speech does, the same wait
+is 1.0 s. The three choices keep their spacing, which is what matters: the
+number is a promise about how long someone may pause."""
 
 MIN_SILENCE_SECONDS = 0.3
 MAX_SILENCE_SECONDS = 5.0
@@ -75,15 +58,11 @@ MAX_SILENCE_SECONDS = 5.0
 @dataclass(frozen=True)
 class EndOfSpeech:
     """How the end of a command is found. Nothing here is user-facing: the
-    one number a person chose is their voice activity sensitivity, which
-    arrives as ``silence_seconds``."""
+    one number a person chose arrives as ``silence_seconds``."""
 
     speech_threshold: float = 0.5
-    """A chunk this likely to be speech, or more, is speech."""
-
     silence_threshold: float = 0.35
-    """Below this, silence; between the two, whatever the chunk before was.
-    Silero's own default (its threshold less 0.15)."""
+    """Silero's own default (its threshold less 0.15)."""
 
     speech_seconds: float = 0.2
     """Speech before the command has begun."""
@@ -95,8 +74,7 @@ class EndOfSpeech:
     """Speech in a row that starts the silence over."""
 
     max_seconds: float = 15.0
-    """The longest a command may be, from the wake word. The same ceiling
-    Home Assistant's own segmenter uses."""
+    """The longest a command may be, matching Home Assistant's segmenter."""
 
     no_speech_seconds: float = 8.0
     """With no speech by then, nothing was said."""
@@ -116,11 +94,8 @@ _FRAME = 512
 
 
 def vad_gain(wake: bytes) -> float:
-    """The gain Silero hears the command at.
-
-    The loudest 32 ms of ``wake`` -- the audio before the split -- brought up
-    to ``VAD_LEVEL_DBFS``, at least 1 and at most ``MAX_VAD_GAIN``.
-    """
+    """The loudest 32 ms of the audio before the split brought up to
+    ``VAD_LEVEL_DBFS``, at least 1 and at most ``MAX_VAD_GAIN``."""
     usable = len(wake) // (_FRAME * SAMPLE_WIDTH) * _FRAME * SAMPLE_WIDTH
     samples = np.frombuffer(wake[:usable], dtype="<i2")
     if not samples.size:
@@ -138,8 +113,8 @@ def _amplify(chunk: bytes, gain: float) -> bytes:
 
 
 class Detector:
-    """A voice activity detector over fixed-size chunks: each one's
-    probability of speech, or None while it has nothing to say yet."""
+    """Each chunk's probability of speech, or None while it has nothing to
+    say yet."""
 
     chunk_bytes: int
 
@@ -162,10 +137,8 @@ class SileroDetector(Detector):
 
 
 class MicroDetector(Detector):
-    """pymicro-vad (microWakeWord's VAD): 160 samples (10 ms) a chunk.
-
-    It says nothing for its first 0.76 s, while its window fills.
-    """
+    """pymicro-vad: 160 samples (10 ms) a chunk, and nothing at all for its
+    first 0.76 s while its window fills."""
 
     chunk_bytes = 160 * SAMPLE_WIDTH
 
@@ -180,12 +153,9 @@ class MicroDetector(Detector):
 
 
 class BothDetector(Detector):
-    """Silero and microVAD on the same audio, in Silero's chunks: the likelier
-    of the two (microVAD's likeliest 10 ms within the chunk).
-
-    Silero hears it raised by ``gain``, microVAD as it came. Until microVAD's
-    window has filled, Silero alone.
-    """
+    """The likelier of the two, in Silero's chunks: Silero raised by
+    ``gain``, microVAD as it came (its likeliest 10 ms within the chunk).
+    Until microVAD's window has filled, Silero alone."""
 
     chunk_bytes = SileroDetector.chunk_bytes
 
@@ -228,8 +198,8 @@ class Endpointer:
         warm: bytes = b"",
         detector: Detector | None = None,
     ) -> None:
-        """``warm`` is the audio before the split, and ``gain`` what Silero
-        hears the command raised by -- both of them the wake word's."""
+        """``warm`` is the audio before the split and ``gain`` what Silero
+        hears the command raised by: both the wake word's."""
         self.settings = settings or EndOfSpeech()
         self._detector = detector if detector is not None else make_detector(gain)
         self.gain = gain
@@ -262,13 +232,12 @@ class Endpointer:
         return self.ended_at is not None
 
     def _warm(self, pcm: bytes) -> None:
-        """Silero's state from the audio before the split.
+        """Silero's state from the audio before the split, whose chunks
+        count for nothing.
 
-        What it says of that audio, and of the first ``SETTLE_SECONDS``
-        after, counts for nothing. With both detectors only Silero hears it:
-        microVAD carried the wake word on for over a second, so a pause after
-        it was speech that ended, and a command not yet said was over before
-        it began. microVAD starts as it does alone, its own window filling.
+        Only Silero hears it: microVAD carried the wake word on for over a
+        second, so a pause after it was speech that ended, and a command not
+        yet said was over before it began.
         """
         both = self._detector if isinstance(self._detector, BothDetector) else None
         silero = both.silero if both is not None else self._detector

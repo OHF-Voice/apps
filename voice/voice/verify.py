@@ -29,20 +29,15 @@ _LOGGER = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class VerifyRequest:
-    """One detection, as the verifier is asked about it.
-
-    None of this is on the wire: the app assembles it from the run.
-    """
+    """One detection, as the verifier is asked about it. None of this is on
+    the wire: the app assembles it from the run."""
 
     wake_word_phrase: str
-    """What the pipeline calls the wake word: the phrase said. Matched
-    against the configured wake words loosely, so "okay nabu" and
-    "okay_nabu" are the same wake word."""
+    """Matched loosely, so "okay nabu" and "okay_nabu" are the same."""
 
     satellite_id: str | None = None
     wake_word_audio_ms: int = 0
-    """How much of the window the satellite called the wake word. The
-    detection sits at the end of it."""
+    """The detection sits at the end of this much of the window."""
 
 
 @dataclass(frozen=True)
@@ -52,24 +47,20 @@ class Verdict:
     accepted: bool
 
     reason: str | None = None
-    """Why it was refused, in the verifier's own vocabulary ("prefix",
-    "last", "confusable"), for logs."""
+    """The verifier's own vocabulary ("prefix", "last", "confusable")."""
 
     wake_word_audio_ms: int | None = None
-    """Where the wake phrase really ends, when the verifier aligned it.
+    """Where the wake phrase really ends, when the verifier aligned it;
     None leaves the boundary where the satellite put it."""
 
     detail: dict[str, Any] = field(default_factory=dict)
-    """Scores and timings, for the app's own log. Nothing branches on it."""
+    """Scores and timings for the log. Nothing branches on it."""
 
 
 @dataclass(frozen=True)
 class MoreAudio:
-    """The verifier asking to see further into the run.
-
-    It never reaches Home Assistant. Audio arrives for the whole run, so the
-    app waits for this much more of it and asks again.
-    """
+    """The verifier asking to hear further into the run. It never reaches
+    Home Assistant: audio is already arriving, so the app waits."""
 
     ms: int
 
@@ -106,10 +97,9 @@ class Verifier(ABC):
         The detection sits ``request.wake_word_audio_ms`` into the window;
         anything after that is command audio Home Assistant was asked for.
 
-        Returning ``MoreAudio`` asks to be shown further into the run and
-        offered the whole window again. ``final`` means there is no more
-        coming -- the satellite stopped streaming, or the run hit its
-        ceiling -- so a verdict must come back.
+        ``MoreAudio`` asks to be shown further into the run and offered the
+        whole window again. ``final`` means none is coming, so a verdict
+        must come back.
         """
 
 

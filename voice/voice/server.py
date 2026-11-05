@@ -35,7 +35,13 @@ from .protocol import (
     bytes_to_ms,
     ms_to_bytes,
 )
-from .vad import GAIN_WINDOW_MS, Endpointer, for_silence_seconds, vad_gain
+from .vad import (
+    GAIN_WINDOW_MS,
+    WAKE_SECONDS,
+    Endpointer,
+    for_silence_seconds,
+    vad_gain,
+)
 from .verify import MoreAudio, Verdict, Verifier, VerifyRequest
 
 _LOGGER = logging.getLogger(__name__)
@@ -336,7 +342,9 @@ class _Run:
         split_ms = bytes_to_ms(split)
         head = ms_to_bytes(GAIN_WINDOW_MS)
         await self.audio.wait_for(split + head)
-        wake = self.audio.data(0, split)
+        # The wake word, not the whole pre-roll: what is further back than
+        # this sets neither the level nor what Silero carries over.
+        wake = self.audio.data(max(0, split - ms_to_bytes(WAKE_SECONDS * 1000)), split)
 
         # The wake word and the command are not always at the same level --
         # one said into the microphone and the other from across the room --

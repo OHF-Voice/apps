@@ -370,3 +370,30 @@ def test_the_gain_follows_the_command_as_well_as_the_wake_word(monkeypatch):
     assert len(seen[0]) == ms_to_bytes(WAKE_MS)
     assert len(seen[1]) == ms_to_bytes(vad.GAIN_WINDOW_MS)
     assert captured == [12.0]
+
+
+def test_a_long_preroll_does_not_set_the_level(monkeypatch):
+    """Only the wake word is judged, not everything before it.
+
+    ``vad_gain`` takes the loudest 32 ms it is given, so a door slam two
+    seconds before anyone spoke would otherwise set the gain.
+    """
+    seen: list[int] = []
+    monkeypatch.setattr(
+        "voice.server.vad_gain", lambda pcm: seen.append(len(pcm)) or 1.0
+    )
+    hears(monkeypatch, [1.0] * 30 + [0.0])
+
+    run(
+        _run(
+            FakeVerifier([Verdict(accepted=True)]),
+            start=RunStart(
+                wake_word_phrase="okay nabu",
+                wake_word_audio_ms=2500,
+                silence_seconds=0.7,
+            ),
+            command_ms=2000,
+        )
+    )
+
+    assert seen[0] == ms_to_bytes(vad.WAKE_SECONDS * 1000)

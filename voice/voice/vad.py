@@ -19,11 +19,11 @@ gain carries it there. And it warms Silero, which started cold at the split
 scored a command said straight after the wake word ~0.4 against ~0.8 having
 heard it all along.
 
-The gain is the louder of the wake word and the command's own first
-``GAIN_WINDOW_MS``, because the two are not always at the same level: a wake
-word said into the microphone and a command said from across the room left
-the command 23 dB down, too quiet for either detector to call speech, and a
-command that never starts is one that never ends.
+The gain is the louder of the wake word's last ``WAKE_SECONDS`` and the
+command's own first ``GAIN_WINDOW_MS``, because the two are not always at
+the same level: a wake word said into the microphone and a command said from
+across the room left the command 23 dB down, too quiet for either detector
+to call speech, and a command that never starts is one that never ends.
 
 A subset of the Voice Labs endpointer, minus speaker identification. The
 numbers are its measurements.
@@ -44,6 +44,14 @@ VAD_LEVEL_DBFS = -30.0
 """Where Silero hears the wake word's loudest moment. Gain only ever raises."""
 
 MAX_VAD_GAIN = 16.0
+
+WAKE_SECONDS = 1.2
+"""How much audio before the split holds the wake word.
+
+Both the level and the warm start come from this much rather than from the
+whole pre-roll: ``vad_gain`` takes the loudest 32 ms it is given, and a door
+slam two seconds before anyone spoke would otherwise set the gain.
+"""
 
 GAIN_WINDOW_MS = 500
 """How much of the command to judge its level by, as well as the wake word."""

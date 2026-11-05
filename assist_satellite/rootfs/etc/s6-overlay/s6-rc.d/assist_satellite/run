@@ -21,9 +21,9 @@ if bashio::config.true 'enable_thinking_sound'; then
     extra_args+=('--enable-thinking-sound')
 fi
 
-# Listen during wake word (Start listening while the wake sound is still playing)
-if bashio::config.true '--listen-during-wake-word'; then
-    extra_args+=('--listen-during-wake-word')
+# Listen during wake sound (Start listening while the wake sound is still playing)
+if bashio::config.true '--listen-during-wake-sound'; then
+    extra_args+=('--listen-during-wake-sound')
 fi
 
 # Optional friendly name (auto-generated from MAC if empty)

@@ -139,10 +139,27 @@ class GrammarHolder:
                 return
             mtime = self._grammar_path.stat().st_mtime
             if mtime != self._mtime:
-                await asyncio.get_event_loop().run_in_executor(
-                    None, self._rec.load, self._grammar_path
-                )
+                # Recorded before the load so a file that will not load is
+                # tried once per change, not once per utterance.
                 self._mtime = mtime
+                try:
+                    await asyncio.get_event_loop().run_in_executor(
+                        None, self._rec.load, self._grammar_path
+                    )
+                except Exception:  # noqa: BLE001
+                    # Raised from here, this would end the connection at
+                    # audio-start; the previous grammar, if any, is still loaded
+                    # and better than nothing.
+                    _LOGGER.exception(
+                        "Could not load grammar %s; %s",
+                        self._grammar_path,
+                        (
+                            "keeping the previous one"
+                            if self.ready
+                            else "transcripts stay empty until it is retrained"
+                        ),
+                    )
+                    return
                 _LOGGER.info("Loaded grammar %s", self._grammar_path)
 
     async def transcribe(self, samples: NDArray[np.float32]) -> Result:
@@ -194,6 +211,21 @@ class S2PEventHandler(AsyncEventHandler):
             return
 
         self._finished = True
+        try:
+            text = await self._decode_buffer()
+        except Exception:  # noqa: BLE001
+            # Home Assistant waits on this reply. An exception that escaped
+            # would close the stream with no transcript at all; an empty one
+            # tells HA straight away that nothing was recognized.
+            _LOGGER.exception("Transcription failed; returning an empty transcript")
+            text = ""
+        self._buf = bytearray()
+        await self.write_event(
+            Transcript(text=text, language=self._holder.language).event()
+        )
+
+    async def _decode_buffer(self) -> str:
+        """The transcript for the buffered audio, or "" if none is accepted."""
         text = ""
         if self._holder.ready and self._buf:
             # Everything from here to the transcript is what Home Assistant
@@ -241,10 +273,7 @@ class S2PEventHandler(AsyncEventHandler):
                 # Debug mode observes; it does not act. Handing HA a
                 # transcript here would run the command being diagnosed.
                 text = ""
-        self._buf = bytearray()
-        await self.write_event(
-            Transcript(text=text, language=self._holder.language).event()
-        )
+        return text
 
     async def handle_event(self, event: Event) -> bool:
         if Describe.is_type(event.type):

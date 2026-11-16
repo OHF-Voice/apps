@@ -25,6 +25,7 @@ fixture file (--entities-file) or the built-in DEV defaults below.
 """
 
 import logging
+import os
 import re
 import unicodedata
 from pathlib import Path
@@ -65,8 +66,50 @@ def _norm_value(s: str) -> str:
     return " ".join(unicodedata.normalize("NFC", s).lower().split())
 
 
+def _speakable(value: str) -> bool:
+    """Whether a normalized name can be said, and so belongs in the grammar.
+
+    Home Assistant accepts names no one can say: a lone NUL byte, a control
+    character, punctuation or emoji only (OHF-Voice/apps#39). The acoustic
+    vocabulary has none of these, so each becomes ``<unk>`` or a bare symbol
+    path. That adds nothing recognizable, and a decode through it would hand HA
+    a transcript carrying the raw byte. Skipped rather than cleaned: a cleaned
+    name ("kit\\0chen" -> "kitchen") is not the name HA knows, so the command it
+    produced still would not resolve.
+
+    Deliberately looser than ``s2p_intents._speakable_value``, which screens the
+    package's own list values and rejects digits and punctuation outright: a
+    user's "Lamp 2" or "Bob's room" is a real name.
+    """
+    if any(unicodedata.category(ch) == "Cc" for ch in value):
+        return False
+    return any(ch.isalnum() for ch in value)
+
+
+# Unspeakable names already reported. The registry is re-read every refresh
+# interval, so without this the same warning would repeat for as long as the
+# name exists.
+_REPORTED_UNSPEAKABLE: Set[str] = set()
+
+
 def _norm_values(values: Sequence[str]) -> List[str]:
-    return list(dict.fromkeys(v for v in (_norm_value(x) for x in values) if v))
+    out: Dict[str, None] = {}
+    for raw in values:
+        value = _norm_value(raw)
+        if not value:
+            continue
+        if not _speakable(value):
+            if raw not in _REPORTED_UNSPEAKABLE:
+                _REPORTED_UNSPEAKABLE.add(raw)
+                _LOGGER.warning(
+                    "Skipping name %r: it has no letters or digits, or contains "
+                    "control characters, so it cannot be spoken. Rename it in "
+                    "Home Assistant to use it with voice commands.",
+                    raw,
+                )
+            continue
+        out[value] = None
+    return list(out)
 
 
 # Local-dev fallbacks. The container replaces these with the live HA registry +
@@ -803,5 +846,45 @@ def train(
     rec = load_recognizer(backend, model_dir, language=lang, beam=beam)
     rec.train(templates, list_values=list_values)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    rec.save(out_path)
+    _save_atomically(rec, out_path)
     return len(templates)
+
+
+def _save_atomically(rec: Any, out_path: Path) -> None:
+    """Save the grammar under a temporary name, then rename it into place.
+
+    The Wyoming server reloads whenever the file's mtime changes, so writing in
+    place could hand it a half-written grammar, and a failed save would replace
+    a working one with a truncated file.
+
+    The library also writes sidecars next to the grammar (``<path>.tokens``,
+    the token set decode pruning needs) and loads without them if they are
+    missing, which quietly degrades decoding. Every sidecar is moved with the
+    grammar, and before it: the server reloads on the grammar's own mtime, so by
+    the time that changes the sidecars already match.
+    """
+    import tempfile
+
+    fd, tmp_name = tempfile.mkstemp(
+        dir=out_path.parent, prefix=f".{out_path.name}.", suffix=".tmp"
+    )
+    os.close(fd)
+    tmp_path = Path(tmp_name)
+
+    def sidecars() -> List[Path]:
+        return [
+            p
+            for p in out_path.parent.iterdir()
+            if p.name.startswith(tmp_path.name + ".")
+        ]
+
+    try:
+        rec.save(tmp_path)
+        for sidecar in sidecars():
+            sidecar.replace(
+                out_path.with_name(out_path.name + sidecar.name[len(tmp_path.name) :])
+            )
+        tmp_path.replace(out_path)
+    finally:
+        for leftover in [tmp_path, *sidecars()]:
+            leftover.unlink(missing_ok=True)

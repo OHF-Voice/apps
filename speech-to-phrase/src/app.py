@@ -203,14 +203,29 @@ def create_app(cfg: argparse.Namespace) -> Flask:
                 "grammar until the next successful refresh"
             )
         else:
-            _ensure_trained(
-                cfg,
-                cfg.language,
-                meta,
-                records,
-                slot_lists,
-                data_dir,
-            )
+            try:
+                _ensure_trained(
+                    cfg,
+                    cfg.language,
+                    meta,
+                    records,
+                    slot_lists,
+                    data_dir,
+                )
+            except Exception:  # noqa: BLE001
+                # A crash here is a restart loop with no STT at all. Carrying on
+                # serves the previous grammar (or empty transcripts, so HA fails
+                # fast), keeps the web UI up to fix the cause, and the watch
+                # loop retries on the next refresh.
+                _LOGGER.exception(
+                    "Training '%s' failed; %s",
+                    cfg.language,
+                    (
+                        "serving the previous grammar"
+                        if (data_dir / cfg.language / "grammar.fst").exists()
+                        else "speech will not be recognized until it succeeds"
+                    ),
+                )
         _start_watch(cfg, meta, data_dir)
 
     # ---- per-language persistence -------------------------------------------

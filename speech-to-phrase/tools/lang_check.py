@@ -60,6 +60,7 @@ SAMPLE_RATE = 16000
 TTS_LANGUAGE = {
     "ca": "ca-ES",
     "cs": "cs-CZ",
+    "cy": "cy-GB",
     "de": "de-DE",
     "en": "en-US",
     "es": "es-ES",

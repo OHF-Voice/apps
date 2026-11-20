@@ -2,6 +2,8 @@
 
 **Goal:** support (at least) every language Home Assistant ships translations/UI for.
 **Date:** 2026-08-25
+**Updated:** 2026-10-22: Welsh (`cy`) added, with the model `stt_cy_parakeet_tdt_ctc_110m`
+and its sentence templates from OHF-Voice/intents#4286.
 
 A language needs *two* things to be usable: an **acoustic model**, and a set of
 **Speech-to-Phrase sentence templates** in `home-assistant-intents`. Either
@@ -22,9 +24,9 @@ Three parts:
 ## 1. Coverage gap
 
 Home Assistant ships **66** translation/UI languages (top-level entries in
-`intent-sentences/languages.yaml`). Speech-to-Phrase maps a model for **13 base
-languages** (`src/models.py:MODEL_NAMES`) but can only *serve* the **8** that
-also have sentence templates, covering **9** of the 66 HA codes (regional
+`intent-sentences/languages.yaml`). Speech-to-Phrase maps a model for **14 base
+languages** (`src/models.py:MODEL_NAMES`) but can only *serve* the **9** that
+also have sentence templates, covering **10** of the 66 HA codes (regional
 variants share a base model):
 
 | Base lang | NeMo CTC model | Coqui model | Templates? | Covers HA codes |
@@ -37,6 +39,7 @@ variants share a base model):
 | nl | `stt_nl_citrinet_256` | `nl_NL-coqui` | ✅ | nl (NL/BE) |
 | ca | `stt_ca_conformer_ctc_large` | `ca_ES-coqui` | ✅ | ca |
 | cs | — | `cs_CZ-coqui` | ✅ | cs |
+| cy | `stt_cy_parakeet_tdt_ctc_110m` | — | ✅ | cy |
 | zh | `stt_zh_citrinet_512` | — | ❌ | zh-CN, zh-HK, zh-TW |
 | ru | `stt_ru_conformer_ctc_large` | — | ❌ | ru |
 | hr | `stt_hr_conformer_ctc_large` | — | ❌ | hr |
@@ -56,7 +59,7 @@ not be changed without re-testing:
 
 ### Three distinct gaps
 
-The 66 HA codes split **9 served + 7 model-but-no-sentences + 50 no model**.
+The 66 HA codes split **10 served + 7 model-but-no-sentences + 49 no model**.
 
 **Gap A — a model but no sentences: `zh`, `ru`, `hr`, `hi`, `sl` (7 HA codes).**
 The cheapest coverage win by far, and *not* a modelling problem: the acoustic
@@ -70,7 +73,7 @@ but is not upstream and needs rebasing onto the current block shape.
 Czech works, but on the character-level Coqui backend, which needs the
 `stt_onlyprobs` binary and runs on its own score scale.
 
-**Gap C — no model at all: 50 HA languages.** Prioritized by HA's own support signals:
+**Gap C — no model at all: 49 HA languages.** Prioritized by HA's own support signals:
 
 - **Tier 1 — HA already offers Whisper STT (proven demand), 7 langs:**
   `bg` Bulgarian, `da` Danish, `pl` Polish, `pt` Portuguese, `pt-BR`
@@ -78,8 +81,8 @@ Czech works, but on the character-level Coqui backend, which needs the
 - **Tier 2 — HA offers Piper TTS but no Whisper, 15 langs:**
   `ar`, `el`, `fa`, `fi`, `hu`, `is`, `ka`, `lb`, `lv`, `ne`, `ro`, `sr`,
   `sv`, `tr`, `vi`.
-- **Tier 3 — translations only, no HA STT/TTS backend yet, 28 langs:**
-  `af, bn, cy, et, eu, ga, gl, gu, he, hy, id, ja, kn, ko, kw, lt, ml, mn, mr,
+- **Tier 3 — translations only, no HA STT/TTS backend yet, 27 langs:**
+  `af, bn, et, eu, ga, gl, gu, he, hy, id, ja, kn, ko, kw, lt, ml, mn, mr,
   ms, nb, pa, sr-Latn, sw, ta, te, th, ur`.
 
 Note `sk` (Slovak) is a special case: it is closely related to `cs` (Czech),

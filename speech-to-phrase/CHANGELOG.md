@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.3.0
+
+- Added Welsh (`cy`) with `stt_cy_parakeet_tdt_ctc_110m`, a Parakeet TDT-CTC 110M
+  model fine-tuned for Welsh by techiaith, Bangor University, released under the
+  Apache License 2.0. The archive's `NOTICE` retains NVIDIA's CC-BY-4.0 attribution
+  for the base model and the attributions for the training data. Its score gate is
+  calibrated at `4.0`. Welsh sentence templates come from `home-assistant-intents`.
+- Welsh numbers accept their feminine and short forms (`dwy`, `tair`, `pedair`,
+  `pum`, `chwe`) as variants of the masculine and full forms.
+
 ## 2.2.0
 
 - Added optional server-side command endpointing with pySilero VAD. When

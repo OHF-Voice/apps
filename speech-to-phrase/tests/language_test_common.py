@@ -35,12 +35,41 @@ MODELS_DIR = APP_ROOT / "local/models"
 TOOLS_DIR = APP_ROOT / "local/tools"
 WAV_ROOT = TESTS_DIR / "wav"
 _EXAMPLE_OVERRIDES = {
+    ("cy", "HassCancelTimer", "default"): "canslo'r amserydd",
+    ("cy", "HassClimateGetTemperature", "area_only"): "beth yw'r tymheredd yn y Gegin",
+    ("cy", "HassGetCurrentDate", "default"): "beth yw'r dyddiad heddiw",
+    ("cy", "HassGetCurrentTime", "default"): "faint o'r gloch yw hi",
+    ("cy", "HassGetWeather", "default"): "beth yw'r tywydd",
+    ("cy", "HassMediaPause", "default"): "oedi'r gerddoriaeth",
+    ("cy", "HassMediaUnpause", "default"): "ailddechrau'r gerddoriaeth",
+    ("cy", "HassPauseTimer", "default"): "oedi'r amserydd",
+    ("cy", "HassStartTimer", "hours_minutes"): "gosod amserydd am awr a hanner",
+    ("cy", "HassTimerStatus", "default"): "faint o amser sydd ar ôl ar yr amserydd",
+    ("cy", "HassTurnOff", "area_domain"): "diffodd y golau yn y Gegin",
+    ("cy", "HassTurnOff", "domain_only"): "troi'r golau i ffwrdd",
+    ("cy", "HassTurnOff", "name_area"): "troi'r Ffan Nenfwd i ffwrdd yn y Gegin",
+    ("cy", "HassTurnOff", "name_only"): "troi'r Ffan Nenfwd i ffwrdd",
+    ("cy", "HassTurnOn", "area_domain"): "troi'r golau ymlaen yn y Gegin",
+    ("cy", "HassTurnOn", "domain_only"): "troi'r golau ymlaen",
+    ("cy", "HassTurnOn", "floor_domain"): "troi'r golau ymlaen ar y Llawr Cyntaf",
+    ("cy", "HassTurnOn", "name_area"): "troi'r Ffan Nenfwd ymlaen yn y Gegin",
+    ("cy", "HassTurnOn", "name_only"): "troi'r Ffan Nenfwd ymlaen",
+    ("cy", "HassUnpauseTimer", "default"): "ailddechrau'r amserydd",
     ("en", "HassUnpauseTimer", "default"): "continue the timer",
     ("nl", "HassTurnOff", "name_only"): "doe het Slaapkamerlampje uit",
 }
 _SYNTHESIS_OVERRIDES = {
     ("ca", "HassTurnOff", "name_only"): "apaga Interruptor A",
     ("ca", "HassTurnOn", "name_area"): "engega Interruptor A a la Cuina",
+    (
+        "cy",
+        "HassLightSet",
+        "name_brightness",
+    ): "gosod disgleirdeb y Golau Uwchben i hanner cant y cant",
+    ("cy", "HassNevermind", "default"): "dim ots,",
+    ("cy", "HassStartTimer", "hours_only"): "gosod amserydd am ddwy awr",
+    ("cy", "HassStartTimer", "minutes_only"): "gosod amserydd am bum munud",
+    ("cy", "HassStartTimer", "seconds_only"): "gosod amserydd am dri deg eiliad",
     ("en", "HassMediaUnpause", "default"): "un pause the music",
     ("fr", "HassTurnOn", "name_only"): "allume les enceintes",
 }

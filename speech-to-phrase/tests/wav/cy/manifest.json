@@ -1,0 +1,305 @@
+[
+  {
+    "language": "cy",
+    "intent": "HassCancelTimer",
+    "combo": "default",
+    "text": "canslo'r amserydd",
+    "expected_intent": "HassCancelTimer",
+    "expected_slots": {},
+    "wav": "HassCancelTimer__default.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassClimateGetTemperature",
+    "combo": "area_only",
+    "text": "beth yw'r tymheredd yn y Gegin",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "area": "Gegin"
+    },
+    "wav": "HassClimateGetTemperature__area_only.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassClimateGetTemperature",
+    "combo": "default",
+    "text": "beth yw'r tymheredd",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {},
+    "wav": "HassClimateGetTemperature__default.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassClimateGetTemperature",
+    "combo": "name_only",
+    "text": "beth yw tymheredd y Thermostat",
+    "expected_intent": "HassClimateGetTemperature",
+    "expected_slots": {
+      "name": "Thermostat"
+    },
+    "wav": "HassClimateGetTemperature__name_only.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassGetCurrentDate",
+    "combo": "default",
+    "text": "beth yw'r dyddiad heddiw",
+    "expected_intent": "HassGetCurrentDate",
+    "expected_slots": {},
+    "wav": "HassGetCurrentDate__default.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassGetCurrentTime",
+    "combo": "default",
+    "text": "faint o'r gloch yw hi",
+    "expected_intent": "HassGetCurrentTime",
+    "expected_slots": {},
+    "wav": "HassGetCurrentTime__default.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassGetWeather",
+    "combo": "default",
+    "text": "beth yw'r tywydd",
+    "expected_intent": "HassGetWeather",
+    "expected_slots": {},
+    "wav": "HassGetWeather__default.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassLightSet",
+    "combo": "name_brightness",
+    "text": "gosod disgleirdeb y Golau Uwchben i 50 y cant",
+    "expected_intent": "HassLightSet",
+    "expected_slots": {
+      "name": "Golau Uwchben",
+      "brightness": 50.0
+    },
+    "wav": "HassLightSet__name_brightness.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassMediaNext",
+    "combo": "default",
+    "text": "y trac nesaf",
+    "expected_intent": "HassMediaNext",
+    "expected_slots": {},
+    "wav": "HassMediaNext__default.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassMediaPause",
+    "combo": "default",
+    "text": "oedi'r gerddoriaeth",
+    "expected_intent": "HassMediaPause",
+    "expected_slots": {},
+    "wav": "HassMediaPause__default.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassMediaUnpause",
+    "combo": "default",
+    "text": "ailddechrau'r gerddoriaeth",
+    "expected_intent": "HassMediaUnpause",
+    "expected_slots": {},
+    "wav": "HassMediaUnpause__default.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassNevermind",
+    "combo": "default",
+    "text": "dim ots",
+    "expected_intent": "HassNevermind",
+    "expected_slots": {},
+    "wav": "HassNevermind__default.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassPauseTimer",
+    "combo": "default",
+    "text": "oedi'r amserydd",
+    "expected_intent": "HassPauseTimer",
+    "expected_slots": {},
+    "wav": "HassPauseTimer__default.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassStartTimer",
+    "combo": "hours_minutes",
+    "text": "gosod amserydd am awr a hanner",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "hours": 1,
+      "minutes": 30
+    },
+    "wav": "HassStartTimer__hours_minutes.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassStartTimer",
+    "combo": "hours_only",
+    "text": "gosod amserydd am 2 awr",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "hours": 2.0
+    },
+    "wav": "HassStartTimer__hours_only.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassStartTimer",
+    "combo": "minutes_only",
+    "text": "gosod amserydd am 5 munud",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "minutes": 5.0
+    },
+    "wav": "HassStartTimer__minutes_only.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassStartTimer",
+    "combo": "seconds_only",
+    "text": "gosod amserydd am 30 eiliad",
+    "expected_intent": "HassStartTimer",
+    "expected_slots": {
+      "seconds": 30.0
+    },
+    "wav": "HassStartTimer__seconds_only.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassTimerStatus",
+    "combo": "default",
+    "text": "faint o amser sydd ar ôl ar yr amserydd",
+    "expected_intent": "HassTimerStatus",
+    "expected_slots": {},
+    "wav": "HassTimerStatus__default.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassTurnOff",
+    "combo": "area_domain",
+    "text": "diffodd y golau yn y Gegin",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "area": "Gegin",
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__area_domain.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassTurnOff",
+    "combo": "domain_only",
+    "text": "troi'r golau i ffwrdd",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__domain_only.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassTurnOff",
+    "combo": "floor_domain",
+    "text": "diffodd y golau ar y Llawr Cyntaf",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "floor": "Llawr Cyntaf",
+      "domain": "light"
+    },
+    "wav": "HassTurnOff__floor_domain.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassTurnOff",
+    "combo": "name_area",
+    "text": "troi'r Ffan Nenfwd i ffwrdd yn y Gegin",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "name": "Ffan Nenfwd",
+      "area": "Gegin"
+    },
+    "wav": "HassTurnOff__name_area.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassTurnOff",
+    "combo": "name_only",
+    "text": "troi'r Ffan Nenfwd i ffwrdd",
+    "expected_intent": "HassTurnOff",
+    "expected_slots": {
+      "name": "Ffan Nenfwd"
+    },
+    "wav": "HassTurnOff__name_only.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassTurnOn",
+    "combo": "area_domain",
+    "text": "troi'r golau ymlaen yn y Gegin",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "area": "Gegin",
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__area_domain.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassTurnOn",
+    "combo": "domain_only",
+    "text": "troi'r golau ymlaen",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__domain_only.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassTurnOn",
+    "combo": "floor_domain",
+    "text": "troi'r golau ymlaen ar y Llawr Cyntaf",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "floor": "Llawr Cyntaf",
+      "domain": "light"
+    },
+    "wav": "HassTurnOn__floor_domain.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassTurnOn",
+    "combo": "name_area",
+    "text": "troi'r Ffan Nenfwd ymlaen yn y Gegin",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "Ffan Nenfwd",
+      "area": "Gegin"
+    },
+    "wav": "HassTurnOn__name_area.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassTurnOn",
+    "combo": "name_only",
+    "text": "troi'r Ffan Nenfwd ymlaen",
+    "expected_intent": "HassTurnOn",
+    "expected_slots": {
+      "name": "Ffan Nenfwd"
+    },
+    "wav": "HassTurnOn__name_only.flac"
+  },
+  {
+    "language": "cy",
+    "intent": "HassUnpauseTimer",
+    "combo": "default",
+    "text": "ailddechrau'r amserydd",
+    "expected_intent": "HassUnpauseTimer",
+    "expected_slots": {},
+    "wav": "HassUnpauseTimer__default.flac"
+  }
+]

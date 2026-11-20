@@ -16,6 +16,9 @@ LEGACY_ENGLISH_MODELS = {
 # calibrated character-token scale.
 DEFAULT_MAX_SCORE = {"nemo": 5.0, "coqui": 2.0}
 MODEL_MAX_SCORE = {model_name: 3.8 for model_name in ENGLISH_MODEL_ALIASES}
+# Welsh: fitted on synthetic commands under reverb and noise (95th percentile 3.09)
+# against out-of-grammar speech (lowest 4.19). The nemo default of 5.0 admits non-commands.
+MODEL_MAX_SCORE["stt_cy_parakeet_tdt_ctc_110m"] = 4.0
 
 # CTC's blank bias favors shorter grammar paths. This reward is used only to
 # generate a competing candidate; final selection still uses acoustic penalty.
